@@ -4,6 +4,7 @@ const morgan = require("morgan");
 const pinoHttp = require("pino-http");
 const cors = require("cors");
 const swaggerUi = require("swagger-ui-express");
+const path = require("path");
 
 // file imports
 const swaggerSpec = require("./config/swagger.config");
@@ -19,10 +20,10 @@ app.use(cors());
 app.use(express.json());
 
 app.use(pinoHttp({
-    logger: logger.logger, customLogLevel: function (res,err) {
+    logger: logger.logger, customLogLevel: function (res, err) {
         //   console.log('customLogLevel called:', { statusCode: res.statusCode, err: !!err });
         // console.log(err);
-        if (res.statusCode >= 500 ) return "error"
+        if (res.statusCode >= 500) return "error"
         if (res.statusCode >= 400) return "warn"
         if (res.statusCode >= 200) return "info"
         return "info"
@@ -31,14 +32,14 @@ app.use(pinoHttp({
 
 // Serve Swagger docs
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
 
 app.get("/", (req, res) => {
     logger.info("Root endpoint hit", { route: '/' })
-    res.send({message:"Hello World"});
+    res.send({ message: "Hello World" });
 });
 
-app.use('/api/v1',globalRoutes)
+app.use('/api/v1', globalRoutes)
 
 // Handle 404
 app.use((req, res, next) => {
