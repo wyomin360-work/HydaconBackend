@@ -4,6 +4,9 @@ module.exports = {
     auth: {
         login: '/auth/login',
         register: '/auth/register',
-        logout: '/auth/logout'
+        logout: '/auth/logout',
+        verifyEmail: '/auth/verify-email',
+        verifyOtp: '/auth/verify-otp',
+        resetPassword: '/auth/reset-password'
     }
 }
