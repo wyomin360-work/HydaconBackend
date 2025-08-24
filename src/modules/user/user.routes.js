@@ -27,4 +27,19 @@ router.post(
     handleError(controller.logout)
 )
 
+router.post(
+    userPaths.auth.verifyEmail,
+    handleError(controller.verifyEmail)
+)
+
+router.post(
+    userPaths.auth.verifyOtp,
+    handleError(controller.verifyOtp)
+)
+
+router.patch(
+    userPaths.auth.resetPassword,
+    handleError(controller.resetPassword)
+)
+
 module.exports = router

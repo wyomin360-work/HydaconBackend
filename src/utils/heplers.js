@@ -1,4 +1,5 @@
-const bcrypt = require('bcrypt')
+const bcrypt = require('bcrypt');
+const { randomBytes } = require('crypto');
 const jwt = require('jsonwebtoken')
 
 const JWT_SECRET = process.env.JWT_SECRET
@@ -9,28 +10,22 @@ const handleError = (fn) => (req, res, next) => {
 
 
 // BCRYPT
-const hashData = (rawData, salt = 10) => {
-    return new Promise((resolve, reject) => {
-        bcrypt.hash(rawData, salt, (err, hash) => {
-            if (err) {
-                reject(err);
-            } else {
-                resolve(hash);
-            }
-        });
-    });
+const hashData = async (rawData, salt = 10) => {
+    try {
+        return await bcrypt.hash(rawData, salt);
+    } catch (error) {
+        console.error('Error  hashing data', error);
+        return false;
+    }
 };
 
-const compareHash = (rawData, hashData) => {
-    return new Promise((resolve, reject) => {
-        bcrypt.compare(rawData, hashData, (err, result) => {
-            if (err) {
-                reject(err);
-            } else {
-                resolve(result);
-            }
-        });
-    });
+const compareHash = async (rawData, hashedData) => {
+    try {
+        return await bcrypt.compare(rawData, hashedData);
+    } catch (error) {
+        console.error('Error comparing hash:', error);
+        return false;
+    }
 };
 
 // JWT
@@ -46,6 +41,22 @@ const verifyToken = (token) => {
 // Generate a random 4-character hex string
 const randomHex = () => Math.floor(Math.random() * 0xFFFF).toString(16).padStart(4, '0');
 
+const generateBufferToken = (count = 32) => {
+    const buffer = randomBytes(count);
+    return buffer.toString('hex');
+}
+
+function attachId(doc) {
+    if (Array.isArray(doc)) {
+        return doc.map(d => ({ ...d, id: d._id }));
+    }
+    return { ...doc, id: doc._id };
+}
+
+const generateOtp = (length) => {
+    return Array(length).fill(0).map(() => Math.floor(Math.random() * 10)).join('');
+}
+
 
 module.exports = {
     handleError,
@@ -53,5 +64,8 @@ module.exports = {
     verifyToken,
     generateToken,
     compareHash,
-    randomHex
+    randomHex,
+    attachId,
+    generateOtp,
+    generateBufferToken
 }
