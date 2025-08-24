@@ -19,3 +19,21 @@ exports.logout = async (req, res, next) => {
     const response = await userService.logout(userId)
     return sendResponse(res, response)
 }
+
+exports.verifyEmail = async (req, res, next) => {
+    let body = req?.body
+    const response = await userService.verifyEmail(body)
+    return sendResponse(res, response)
+}
+
+exports.verifyOtp = async (req, res, next) => {
+    let body = req?.body
+    const response = await userService.verifyOtp(body)
+    return sendResponse(res, response)
+}
+
+exports.resetPassword = async (req, res, next) => {
+    let body = req?.body
+    const response = await userService.updatePassword(body)
+    return sendResponse(res, response)
+}
