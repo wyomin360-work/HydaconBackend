@@ -1,5 +1,5 @@
 module.exports = {
-  "/admin/register": {
+  "/admin/auth/register": {
     post: {
       summary: "Register a new admin",
       tags: ["Admin"],
@@ -48,7 +48,7 @@ module.exports = {
     }
   },
 
-  "/admin/login": {
+  "/admin/auth/login": {
     post: {
       summary: "Login admin",
       tags: ["Admin"],
@@ -96,7 +96,7 @@ module.exports = {
     }
   },
 
-  "/admin/logout": {
+  "/admin/auth/logout": {
     post: {
       summary: "Logout admin",
       tags: ["Admin"],
