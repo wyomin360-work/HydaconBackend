@@ -124,7 +124,6 @@ async function verifyEmail(data) {
 // ----------------------
 // verify Otp
 // ----------------------
-
 async function verifyOtp(data) {
     const { otp, token } = data
 
