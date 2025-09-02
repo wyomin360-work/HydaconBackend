@@ -100,7 +100,7 @@ module.exports = {
       }
     }
   },
-  "/products/{productId}": {
+  "/products/details/{productId}": {
     get: {
       summary: "Get product by ID",
       tags: ["Products"],
