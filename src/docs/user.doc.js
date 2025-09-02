@@ -263,7 +263,7 @@ module.exports = {
   "/user/auth/external-provider": {
     post: {
       summary: "Authenticate with External Provider (e.g., Google)",
-      tags: ["Auth"],
+      tags: ["User"],
       requestBody: {
         required: true,
         content: {
