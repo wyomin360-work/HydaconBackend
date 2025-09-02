@@ -6,6 +6,7 @@ const rewardsDoc = require("../docs/rewards.doc");
 const redeemsDoc = require("../docs/redeems.doc");
 const transactionsDoc = require("../docs/transactions.doc");
 const appDoc = require("../docs/app.doc");
+const commonDoc = require("../docs/common.doc");
 
 const options = {
   definition: {
@@ -25,6 +26,7 @@ const options = {
       ...rewardsDoc,
       ...redeemsDoc,
       ...transactionsDoc,
+      ...commonDoc,
       ...appDoc
     }
   },
