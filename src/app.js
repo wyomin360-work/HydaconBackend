@@ -15,8 +15,6 @@ const AppError = require("./utils/appError");
 
 const app = express();
 
-const allowedOrigins = ['http://localhost:8082'];
-
 app.use(cors({
   origin: 'http://localhost:8082',
   credentials: true,
