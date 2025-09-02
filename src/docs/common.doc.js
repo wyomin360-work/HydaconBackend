@@ -53,7 +53,7 @@ module.exports = {
   "/service/auth/renew-token": {
     post: {
       summary: "Renew Access & Refresh Token",
-      tags: ["Auth"],
+      tags: ["Service"],
       requestBody: {
         required: true,
         content: {
