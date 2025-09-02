@@ -4,6 +4,8 @@ const adminDoc = require("../docs/admin.doc");
 const userDoc = require("../docs/user.doc");
 const rewardsDoc = require("../docs/rewards.doc");
 const redeemsDoc = require("../docs/redeems.doc");
+const transactionsDoc = require("../docs/transactions.doc");
+const appDoc = require("../docs/app.doc");
 
 const options = {
   definition: {
@@ -21,7 +23,9 @@ const options = {
       ...userDoc,
       ...productsDoc,
       ...rewardsDoc,
-      ...redeemsDoc
+      ...redeemsDoc,
+      ...transactionsDoc,
+      ...appDoc
     }
   },
   apis: [],
