@@ -1,5 +1,6 @@
 const { default: mongoose } = require("mongoose");
 const { hashData } = require("../utils/heplers");
+const { AuthTypes } = require("../constants/user");
 
 
 const userSchema = new mongoose.Schema({
@@ -8,6 +9,22 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   totalPoints: { type: Number, default: 0 },
   totalWithdraw: { type: Number, default: 0 },
+  authKey: { type: String, required: false },
+  authType: {
+    type: String,
+    enum: Object.values(AuthTypes),
+    required: true,
+    default: AuthTypes.EMAIL
+  },
+  bankDetails: {
+    accountNumber: { type: String },
+    userName: { type: String },
+    ifscCode: { type: String },
+    bankName: { type: String },
+    branchName: { type: String },
+    accountIv: { type: String },
+    ifscIv: { type: String },
+  },
 }, {
   timestamps: true,
   toJSON: {

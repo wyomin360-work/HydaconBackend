@@ -24,6 +24,7 @@ const redeemSchema = new mongoose.Schema({
         required: true,
         enum: Object.values(REDEEM_STATUS),
     },
+    cardBg:{ type: String }
 }, { timestamps: true })
 
 redeemSchema.virtual('reward', {

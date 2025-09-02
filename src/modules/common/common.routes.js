@@ -13,4 +13,9 @@ router.post(
     handleError(commonController.uploadImage)
 )
 
+router.post(
+    commonPaths.renewToken,
+    handleError(commonController.renewToken)
+)
+
 module.exports = router
