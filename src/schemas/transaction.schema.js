@@ -1,6 +1,8 @@
 const { default: mongoose } = require("mongoose");
 const { PAYMENT_STATUS, PAYMENT_METHODS } = require("../constants/transactions");
 
+
+
 const transactionSchema = new mongoose.Schema({
     userId: { type: mongoose.Types.ObjectId, required: true },
     rewardId: { type: mongoose.Types.ObjectId, required: true },

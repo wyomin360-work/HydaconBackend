@@ -34,9 +34,31 @@ const generateToken = (payload, expiresIn = '1d') => {
 }
 
 const verifyToken = (token) => {
-    return jwt.verify(token, JWT_SECRET)
+    try {
+        const verified = jwt.verify(token, JWT_SECRET)
+        return verified
+    } catch (err) {
+        return false
+    }
 }
 
+
+const generateRandomPassword=(length)=>  {
+  const upperCaseChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const lowerCaseChars = 'abcdefghijklmnopqrstuvwxyz';
+  const numberChars = '0123456789';
+  const specialChars = '!@#$%^&*()_-+=<>?';
+
+  const allChars = upperCaseChars + lowerCaseChars + numberChars + specialChars;
+  let password = '';
+
+  for (let i = 0; i < length; i++) {
+    const randomIndex = Math.floor(Math.random() * allChars.length);
+    password += allChars[randomIndex];
+  }
+
+  return password;
+}
 
 // Generate a random 4-character hex string
 const randomHex = () => Math.floor(Math.random() * 0xFFFF).toString(16).padStart(4, '0');
@@ -67,5 +89,6 @@ module.exports = {
     randomHex,
     attachId,
     generateOtp,
-    generateBufferToken
+    generateBufferToken,
+    generateRandomPassword
 }

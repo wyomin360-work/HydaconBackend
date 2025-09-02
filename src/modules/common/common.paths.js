@@ -1,4 +1,5 @@
 module.exports = {
     root: '/service',
-    imageUpload: '/upload-image'
+    imageUpload: '/upload-image',
+    renewToken:'/auth/renew-token'
 }

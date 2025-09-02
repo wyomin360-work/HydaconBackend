@@ -1,3 +1,5 @@
+const { patch } = require("../modules/user/user.routes");
+
 module.exports = {
   "/user/auth/register": {
     post: {
@@ -13,7 +15,7 @@ module.exports = {
               properties: {
                 name: { type: "string", example: "Jane Doe" },
                 email: { type: "string", format: "email", example: "user@example.com" },
-                password: { type: "string", format: "password", example: "UserPassword123" }
+                password: { type: "string", format: "password", example: "UserPassword123" },
               }
             }
           }
@@ -216,7 +218,7 @@ module.exports = {
   },
 
   "/user/auth/reset-password": {
-    post: {
+    patch: {
       summary: "Reset Password",
       tags: ["User"],
       requestBody: {
@@ -258,5 +260,253 @@ module.exports = {
       }
     }
   },
+  "/user/auth/external-provider": {
+    post: {
+      summary: "Authenticate with External Provider (e.g., Google)",
+      tags: ["Auth"],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["idToken", "provider"],
+              properties: {
+                idToken: {
+                  type: "string",
+                  example: "eyJhbGciOiJSUzI1NiIsImtpZCI6IjM4YmY..."
+                },
+                provider: {
+                  type: "string",
+                  enum: ["GOOGLE", "APPLE", "EMAIL"],
+                  example: "GOOGLE"
+                }
+              }
+            }
+          }
+        }
+      },
+      responses: {
+        200: {
+          description: "Success",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  message: {
+                    type: "string",
+                    example: "Logged in successfully"
+                  },
+                  data: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string", example: "64f7c4d0f1f3c9a431c5d172" },
+                      name: { type: "string", example: "John Doe" },
+                      email: { type: "string", example: "john@example.com" },
+                      accessToken: { type: "string", example: "eyJhbGciOiJIUzI1NiIsInR..." },
+                      refreshToken: { type: "string", example: "dghjkuytrewqasdfghjkl..." }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        400: {
+          description: "Invalid provider data or token"
+        },
+        403: {
+          description: "Account registered with different provider"
+        }
+      }
+    }
+  },
 
-};
+  // ----------------------------------------------------------------------
+  // User Details
+  "user/details": {
+    get: {
+      summary: "Get User Details",
+      tags: ['User'],
+      responses: {
+        200: {
+          description: "User details retrieved successfully",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  id: { type: "string", example: "64f7c4d0f1f3c9a431c5d172" },
+                  name: { type: "string", example: "John Doe" },
+                  email: { type: "string", example: "john@example.com" },
+                  accessToken: { type: "string", example: "eyJhbGciOiJIUzI1NiIsInR..." },
+                  refreshToken: { type: "string", example: "dghjkuytrewqasdfghjkl..." }
+                }
+              }
+            }
+          },
+          404: {
+            description: "User not found "
+          }
+        }
+      }
+    }
+  },
+
+  // -----------------------------------------------------------------------
+  // Bank Details
+  "/user/bank-details": {
+    get: {
+      summary: "Get User Bank Details",
+      tags: ["Bank"],
+      responses: {
+        200: {
+          description: "Bank details retrieved successfully",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  userName: { type: "string", example: "John Doe" },
+                  accountNumber: { type: "string", example: "123456789012" },
+                  ifscCode: { type: "string", example: "SBIN0001234" },
+                  bankName: { type: "string", example: "State Bank of India" },
+                  branchName: { type: "string", example: "PBB KANKARBAGH" }
+                }
+              }
+            }
+          }
+        },
+        404: {
+          description: "User not found or bank details not added"
+        }
+      }
+    }
+  },
+
+  "/user/bank-details/create": {
+    post: {
+      summary: "Add User Bank Details",
+      tags: ["Bank"],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["userName", "accountNumber", "ifscCode"],
+              properties: {
+                userName: { type: "string", example: "John Doe" },
+                accountNumber: { type: "string", example: "123456789012" },
+                ifscCode: { type: "string", example: "SBIN0001234" }
+              }
+            }
+          }
+        }
+      },
+      responses: {
+        200: {
+          description: "Bank details added successfully",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  message: { type: "string", example: "Bank details been added successfully" },
+                  data: {
+                    type: "object",
+                    properties: {
+                      addedBankDetails: { type: "boolean", example: true }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        400: {
+          description: "Invalid request or bank details already exist"
+        }
+      }
+    }
+  },
+
+  "/user/bank-details/update": {
+    patch: {
+      summary: "Update User Bank Details",
+      tags: ["Bank"],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["userName", "accountNumber", "ifscCode"],
+              properties: {
+                userName: { type: "string", example: "John Doe" },
+                accountNumber: { type: "string", example: "098765432101" },
+                ifscCode: { type: "string", example: "SBIN0005678" }
+              }
+            }
+          }
+        }
+      },
+      responses: {
+        200: {
+          description: "Bank details updated successfully",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  message: { type: "string", example: "Bank details been updated successfully" },
+                  data: {
+                    type: "object",
+                    properties: {
+                      updatedBankDetails: { type: "boolean", example: true }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        404: {
+          description: "User or bank details not found"
+        }
+      }
+    }
+  },
+
+  "/user/bank-details/delete": {
+    delete: {
+      summary: "Delete User Bank Details",
+      tags: ["Bank"],
+      responses: {
+        200: {
+          description: "Bank details deleted successfully",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  message: { type: "string", example: "Bank details been deleted successfully" },
+                  data: {
+                    type: "object",
+                    properties: {
+                      deletedBankDetails: { type: "boolean", example: true }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        404: {
+          description: "User or bank details not found"
+        }
+      }
+    }
+  }
+}
