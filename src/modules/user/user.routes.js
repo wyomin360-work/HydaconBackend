@@ -3,7 +3,7 @@ const { handleError } = require("../../utils/heplers");
 const controller = require('./user.controller');
 const userPaths = require("./user.paths");
 const verification = require("../../middlewares/jwtVerification");
-const { userLoginRequestType, userRegisterRequestType } = require("../../validations/user.validations");
+const { userLoginRequestType, userRegisterRequestType, userBankDetailsRequestType } = require("../../validations/user.validations");
 const validateRequest = require("../../middlewares/validator");
 
 const router = express.Router()
@@ -19,6 +19,11 @@ router.post(
     userPaths.auth.register,
     validateRequest(userRegisterRequestType),
     handleError(controller.register)
+)
+
+router.post(
+    userPaths.auth.authenticateWithProvider,
+    handleError(controller.providerAuth)
 )
 
 router.post(
@@ -40,6 +45,42 @@ router.post(
 router.patch(
     userPaths.auth.resetPassword,
     handleError(controller.resetPassword)
+)
+
+// ---------------------------------------------
+// User details
+router.get(
+    userPaths.details,
+    verification.verifyUser,
+    handleError(controller.userDetails)
+)
+
+// ---------------------------------------------
+// Bank details
+router.get(
+    userPaths.bank.details,
+    verification.verifyUser,
+    handleError(controller.userBankDetails)
+)
+
+router.post(
+    userPaths.bank.create,
+    verification.verifyUser,
+    validateRequest(userBankDetailsRequestType),
+    handleError(controller.addBankDetails)
+)
+
+router.patch(
+    userPaths.bank.update,
+    verification.verifyUser,
+    validateRequest(userBankDetailsRequestType),
+    handleError(controller.updateBankDetails)
+)
+
+router.delete(
+    userPaths.bank.delete,
+    verification.verifyUser,
+    handleError(controller.deleteBankDetails)
 )
 
 module.exports = router

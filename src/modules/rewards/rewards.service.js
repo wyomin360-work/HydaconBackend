@@ -1,6 +1,6 @@
 const Product = require('../../schemas/product.schema')
 const Reward = require('../../schemas/reward.schema')
-const { randomHex } = require('../../utils/heplers')
+const { randomHex, attachId } = require('../../utils/heplers')
 const { sendFailResponse } = require('../../utils/responseHandlers')
 
 async function listRewards(data) {
@@ -13,10 +13,11 @@ async function listRewards(data) {
     }
 
     const rewards = await Reward.find(query).skip(skip).limit(limit).lean()
+    const rewardsWithId = attachId(rewards)    
     const totalDocuments = await Reward.countDocuments()
     return {
         data: {
-            rewards,
+            rewards: rewardsWithId,
             page,
             limit,
             totalPages: Math.ceil(totalDocuments / limit),
@@ -59,8 +60,8 @@ async function createRewards(rewardData) {
     return { message: `Created ${count} rewards`, data: { rewardsAdded: true } }
 }
 
-async function updateReward(rewardData,rewardId) {
-    const { expiresAt, rewardPoints, active} = rewardData
+async function updateReward(rewardData, rewardId) {
+    const { expiresAt, rewardPoints, active } = rewardData
     await Reward.findByIdAndUpdate(rewardId, {
         expiresAt,
         point: rewardPoints,

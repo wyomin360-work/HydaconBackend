@@ -1,10 +1,12 @@
 const Ajv = require('ajv')
 const addFormats = require('ajv-formats')
+const ajvErrors = require('ajv-errors')
 const AppError = require('../utils/appError')
 
-const ajv = new Ajv({ allErrors: true })
+const ajv = new Ajv({ allErrors: true , strict:false})
 
 addFormats(ajv)
+ajvErrors(ajv);
 
 const validateRequest = (schema, property='body') => {
     const validate = ajv.compile(schema)
