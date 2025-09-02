@@ -3,10 +3,10 @@ const userRegisterRequestType = {
     type: 'object',
     properties: {
         email: { type: 'string', format: 'email' },
-        name: { type: 'string'},
+        name: { type: 'string' },
         password: { type: 'string', format: 'password' },
     },
-    required: ['email', 'password','name'],
+    required: ['email', 'password', 'name'],
     additionalProperties: false
 }
 
@@ -20,7 +20,42 @@ const userLoginRequestType = {
     additionalProperties: false
 }
 
+const userBankDetailsRequestType = {
+    type: "object",
+    properties: {
+        userName: {
+            type: "string",
+            minLength: 2
+        },
+        accountNumber: {
+            type: "string",
+            pattern: "^[0-9]{9,18}$"
+        },
+        ifscCode: {
+            type: "string",
+            pattern: "^[A-Z]{4}0[A-Z0-9]{6}$"
+        }
+    },
+    required: ["userName", "accountNumber", "ifscCode"],
+    additionalProperties: false,
+    errorMessage: {
+        required: {
+            userName: "User name is required",
+            accountNumber: "Account number is required",
+            ifscCode: "IFSC code is required"
+        },
+        properties: {
+            userName: "User name must be at least 2 characters long",
+            accountNumber: "Account number must be between 9 and 18 digits",
+            ifscCode: "IFSC code must be 11 characters, e.g., SBIN0001234"
+        },
+        additionalProperties: "No extra properties are allowed"
+    }
+};
+
+
 module.exports = {
     userLoginRequestType,
-    userRegisterRequestType
+    userRegisterRequestType,
+    userBankDetailsRequestType
 }

@@ -14,6 +14,12 @@ exports.login = async (req, res, next) => {
     return sendResponse(res, response)
 }
 
+exports.providerAuth = async (req, res, next) => {
+    let data = req?.body
+    const response = await userService.providerAuth(data)
+    return sendResponse(res, response)
+}
+
 exports.logout = async (req, res, next) => {
     let userId = req?.userId
     const response = await userService.logout(userId)
@@ -35,5 +41,39 @@ exports.verifyOtp = async (req, res, next) => {
 exports.resetPassword = async (req, res, next) => {
     let body = req?.body
     const response = await userService.updatePassword(body)
+    return sendResponse(res, response)
+}
+
+// ------------------------------------------------------
+
+exports.userDetails = async (req, res, next) => {
+    let userId = req?.userId
+    const response = await userService.getUserDetails(userId)
+    return sendResponse(res, response)
+}
+
+exports.userBankDetails = async (req, res, next) => {
+    let userId = req?.userId
+    const response = await userService.getUserBankDetails(userId)
+    return sendResponse(res, response)
+}
+
+exports.addBankDetails = async (req, res, next) => {
+    let userId = req?.userId
+    let data = req?.body
+    const response = await userService.addUserBankDetails(data, userId)
+    return sendResponse(res, response)
+}
+
+exports.updateBankDetails = async (req, res, next) => {
+    let userId = req?.userId
+    let data = req?.body
+    const response = await userService.updateBankDetails(data, userId)
+    return sendResponse(res, response)
+}
+
+exports.deleteBankDetails = async (req, res, next) => {
+    let userId = req?.userId
+    const response = await userService.deleteBankDetails(userId)
     return sendResponse(res, response)
 }
