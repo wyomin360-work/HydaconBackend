@@ -79,6 +79,13 @@ const generateOtp = (length) => {
     return Array(length).fill(0).map(() => Math.floor(Math.random() * 10)).join('');
 }
 
+function formatNotification(template, data) {
+  return template.replace(/{{(.*?)}}/g, (_, key) => {
+    return data[key.trim()]?.toString() || '';
+  });
+}
+
+
 
 module.exports = {
     handleError,
@@ -90,5 +97,6 @@ module.exports = {
     attachId,
     generateOtp,
     generateBufferToken,
-    generateRandomPassword
+    generateRandomPassword,
+    formatNotification
 }

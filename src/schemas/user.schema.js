@@ -7,9 +7,13 @@ const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true, lowercase: true },
   password: { type: String, required: true },
+  fcmTokens:  { type: [String], default: [] },
   totalPoints: { type: Number, default: 0 },
   totalWithdraw: { type: Number, default: 0 },
   authKey: { type: String, required: false },
+  agreedToTerms: { type: Boolean, default:true },
+  enableNotification: { type: Boolean, default:true },
+  avatarId:{ type: String, required: false },
   authType: {
     type: String,
     enum: Object.values(AuthTypes),

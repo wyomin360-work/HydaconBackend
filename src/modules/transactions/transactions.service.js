@@ -1,15 +1,17 @@
 const { PAYMENT_STATUS, SORT_OPTIONS, PAYMENT_METHODS } = require("../../constants/transactions")
+const Admin = require("../../schemas/admin.schema")
 const AppConfig = require("../../schemas/app-config.schema")
 const Transactions = require("../../schemas/transaction.schema")
 const User = require("../../schemas/user.schema")
 const { decrypt, encrypt } = require("../../utils/encryption")
+const { attachId, formatNotification } = require("../../utils/heplers")
 const { sendFailResponse } = require("../../utils/responseHandlers")
 
 // ----------------------
 // Transaction List
 // ----------------------
 async function listTransactions(data) {
-    const { page, limit, sortBy, status, userId } = data
+    const { page, limit, sortBy, status, userId, adminId } = data
     let skip = (page - 1) * limit
 
     let query = {}
@@ -21,6 +23,11 @@ async function listTransactions(data) {
 
     if (userId) {
         query.userId = userId
+    }
+    if (!userId) {
+        if (!adminId) sendFailResponse('Access dined')
+        const admin = Admin.findById(adminId)
+        if (!admin) sendFailResponse('Access dined')
     }
 
     if (sortBy) {
@@ -34,7 +41,7 @@ async function listTransactions(data) {
 
     const transactions = await Transactions
         .find(query)
-        .select('-bankDetails')
+        .select('-bankDetails.accountNumber -bankDetails.ifscCode -bankDetails.accountIv -bankDetails.ifscIv')
         .populate({ path: 'user', select: "name email " })
         .sort(sortOptions)
         .skip(skip)
@@ -45,7 +52,7 @@ async function listTransactions(data) {
     const totalPages = Math.ceil(totalItems / limit)
 
     return {
-        transactions,
+        transactions: attachId(transactions),
         currentPage: page,
         limit,
         totalPages,
@@ -92,6 +99,8 @@ async function transactionDetails(transactionId) {
 // ----------------------
 async function createTransaction(data, userId) {
     const { amount } = data
+    let withdrawNotification = APP_NOTIFICATIONS.withdraw
+
     const user = await User.findById(userId)
     if (!user) sendFailResponse('User not found')
     if (!user.bankDetails?.accountNumber) sendFailResponse('Add bank details to withdraw amount')
@@ -127,7 +136,7 @@ async function createTransaction(data, userId) {
         bankName: user.bankDetails?.bankName
     }
 
-    await Transactions.create({
+    const transaction = await Transactions.create({
         amount,
         userId,
         bankDetails,
@@ -137,9 +146,21 @@ async function createTransaction(data, userId) {
     let userRemainingPoints = user.totalPoints - Math.ceil((amount / coinConfig.coinValue))
     user.totalPoints = userRemainingPoints
     await user.save()
+    if (user?.fcmTokens?.length && user?.enableNotification) {
+        await sendFcmNotifications(user.fcmTokens,
+            withdrawNotification.initiated.title,
+            formatNotification(withdrawNotification.initiated.body,
+                { amount: amount })
+        )
+    }
     return {
         message: "Withdraw request created",
-        data: { withdrawRequested: true }
+        data: {
+            withdrawRequested: true,
+            transactionId: transaction?._id,
+            transferringTo: user.bankDetails?.userName,
+            createdAt: transaction?.createdAt
+        }
     }
 }
 
@@ -148,7 +169,9 @@ async function createTransaction(data, userId) {
 // ----------------------
 async function updateTransaction(data, transactionId) {
     const { status, userId } = data
-
+    let withdrawNotification = APP_NOTIFICATIONS.withdraw
+    let notificationTitle = ''
+    let notificationBody = ''
     const user = await User.findById(userId)
     if (!user) sendFailResponse('User not found')
 
@@ -164,6 +187,8 @@ async function updateTransaction(data, transactionId) {
 
         transaction.status = PAYMENT_STATUS.CANCELLED
         transaction.cancellationReason = data?.cancellationReason
+        notificationTitle = withdrawNotification.cancelled.title
+        notificationBody = withdrawNotification.cancelled.body
     } else if (status === PAYMENT_STATUS.FAILED) {
 
         if (!data?.failureReason || data?.failureReason?.length < 5)
@@ -171,6 +196,8 @@ async function updateTransaction(data, transactionId) {
 
         transaction.status = PAYMENT_STATUS.FAILED
         transaction.failureReason = data?.failureReason
+        notificationTitle = withdrawNotification.failed.title
+        notificationBody = withdrawNotification.failed.body
     } else if (status === PAYMENT_STATUS.PAID) {
 
         if (!data?.transactionId) sendFailResponse('Add transaction id')
@@ -179,10 +206,18 @@ async function updateTransaction(data, transactionId) {
         transaction.transactionId = data?.transactionId
         transaction.paidAt = new Date()
         user.totalWithdraw = (user.totalWithdraw + transaction.amount)
+        notificationTitle = withdrawNotification.success.title
+        notificationBody = formatNotification(withdrawNotification.success.body, { amount: transaction.amount })
     }
     await transaction.save()
     await user.save()
-    return { message: 'Transaction status updated', data: { transactionStatusUpdated: true } }
+    if (user?.fcmTokens?.length && user?.enableNotification) {
+        await sendFcmNotifications(user.fcmTokens, notificationTitle, notificationBody)
+    }
+    return {
+        message: 'Transaction status updated',
+        data: { transactionStatusUpdated: true }
+    }
 }
 
 async function deleteTransaction(transactionId) {

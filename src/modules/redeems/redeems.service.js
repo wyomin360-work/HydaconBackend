@@ -1,9 +1,10 @@
 const { REDEEM_STATUS, LIGHT_CARD_COLORS } = require('../../constants/redeem')
+const { sendFcmNotifications } = require('../../functions/fcm')
 const Product = require('../../schemas/product.schema')
 const Redeem = require('../../schemas/redeem.schema')
 const Reward = require('../../schemas/reward.schema')
 const User = require('../../schemas/user.schema')
-const { attachId } = require('../../utils/heplers')
+const { attachId, formatNotification } = require('../../utils/heplers')
 const { sendFailResponse } = require('../../utils/responseHandlers')
 
 async function listRedeems(data) {
@@ -57,6 +58,7 @@ async function redeemDetails(redeemId) {
 async function createRedeem(redeemData) {
     const { userId, productId, rewardId, rewardUidCode } = redeemData
     const now = new Date()
+    let rewardNotification = APP_NOTIFICATIONS.rewards
     const bgColor =
         LIGHT_CARD_COLORS[Math.floor(Math.random() * LIGHT_CARD_COLORS.length)];
 
@@ -95,6 +97,13 @@ async function createRedeem(redeemData) {
     // save
     await user.save()
     await reward.save()
+    if(user?.fcmTokens?.length && user?.enableNotification){
+        await sendFcmNotifications(user.fcmTokens,
+            rewardNotification.qrScanSuccess.title,
+            formatNotification(rewardNotification.qrScanSuccess.body,
+                {coins: reward?.point ,productName: product?.name})
+            )
+    }
     return { message: 'redeem successful', data: { redeemSuccessful: true, pointsRewarded: newRedeem?.rewardPoints } }
 }
 

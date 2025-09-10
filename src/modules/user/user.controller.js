@@ -52,6 +52,29 @@ exports.userDetails = async (req, res, next) => {
     return sendResponse(res, response)
 }
 
+exports.updateProfile = async (req, res, next) => {
+    let userId = req?.userId
+    let data = req?.body
+    const response = await userService.updateUserProfile(data,userId)
+    return sendResponse(res, response)
+}
+
+exports.updatePreferences = async (req, res, next) => {
+    let userId = req?.userId
+    let data = req?.body
+    const response = await userService.updatePreferences(data,userId)
+    return sendResponse(res, response)
+}
+
+exports.addFcmToken = async (req, res, next) => {
+    let userId = req?.userId
+    let data = req?.body
+    const response = await userService.addFcmToken(data,userId)
+    return sendResponse(res, response)
+}
+
+// ---------------------------------------------------------
+
 exports.userBankDetails = async (req, res, next) => {
     let userId = req?.userId
     const response = await userService.getUserBankDetails(userId)
