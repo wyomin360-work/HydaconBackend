@@ -5,6 +5,7 @@ const userRegisterRequestType = {
         email: { type: 'string', format: 'email' },
         name: { type: 'string' },
         password: { type: 'string', format: 'password' },
+        avatarId: { type: 'string',  minLength: 10},
     },
     required: ['email', 'password', 'name'],
     additionalProperties: false
@@ -17,6 +18,26 @@ const userLoginRequestType = {
         password: { type: 'string', format: 'password' },
     },
     required: ['email', 'password'],
+    additionalProperties: false
+}
+
+const userProfileUpdateRequestType = {
+    type: 'object',
+    properties: {
+        name: { type: 'string', minLength: 2},
+        avatarId: { type: 'string',  minLength: 10},
+    },
+    required: ['name', 'avatarId'],
+    additionalProperties: false
+}
+
+
+const userFcmRequestType = {
+    type: 'object',
+    properties: {
+        fcmToken: { type: 'string', minLength: 5},
+    },
+    required: ['fcmToken'],
     additionalProperties: false
 }
 
@@ -57,5 +78,7 @@ const userBankDetailsRequestType = {
 module.exports = {
     userLoginRequestType,
     userRegisterRequestType,
-    userBankDetailsRequestType
+    userBankDetailsRequestType,
+    userProfileUpdateRequestType,
+    userFcmRequestType
 }

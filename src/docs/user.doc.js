@@ -16,6 +16,10 @@ module.exports = {
                 name: { type: "string", example: "Jane Doe" },
                 email: { type: "string", format: "email", example: "user@example.com" },
                 password: { type: "string", format: "password", example: "UserPassword123" },
+                avatarId: {
+                  type: "string",
+                  example: "user_avatar_03"
+                }
               }
             }
           }
@@ -280,6 +284,10 @@ module.exports = {
                   type: "string",
                   enum: ["GOOGLE", "APPLE", "EMAIL"],
                   example: "GOOGLE"
+                },
+                avatarId: {
+                  type: "string",
+                  example: "user_avatar_03"
                 }
               }
             }
@@ -341,13 +349,99 @@ module.exports = {
                   name: { type: "string", example: "John Doe" },
                   email: { type: "string", example: "john@example.com" },
                   accessToken: { type: "string", example: "eyJhbGciOiJIUzI1NiIsInR..." },
-                  refreshToken: { type: "string", example: "dghjkuytrewqasdfghjkl..." }
+                  refreshToken: { type: "string", example: "dghjkuytrewqasdfghjkl..." },
+                  avatarId: {
+                    type: "string",
+                    example: "user_avatar_03"
+                  },
+                  enableNotification: {
+                    type: "boolean",
+                    example: "true"
+                  },
+                  agreedToTerms: {
+                    type: "boolean",
+                    example: "true"
+                  },
+                  fcmTokens: {
+                    type: "array",
+                    example: []
+                  }
                 }
               }
             }
           },
           404: {
             description: "User not found "
+          }
+        }
+      }
+    }
+  },
+  "/user/profile/update": {
+    "patch": {
+      "summary": "Update User Profile",
+      "tags": ["User"],
+      "requestBody": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": ["name", "avatarId"],
+              "properties": {
+                name: {
+                  type: "string",
+                  example: "Prince Roy"
+                },
+                avatarId: {
+                  type: "string",
+                  example: "user_avatar_03"
+                }
+              }
+            }
+          }
+        }
+      },
+      "responses": {
+        "200": {
+          "description": "Profile updated successfully",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  message: {
+                    type: "string",
+                    example: "Profile updated successfully"
+                  },
+                  data: {
+                    type: "object",
+                    properties: {
+                      profileUpdated: {
+                        type: "boolean",
+                        example: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "404": {
+          "description": "User not found",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  error: {
+                    type: "string",
+                    example: "User not found"
+                  }
+                }
+              }
+            }
           }
         }
       }

@@ -3,7 +3,7 @@ const { handleError } = require("../../utils/heplers");
 const controller = require('./user.controller');
 const userPaths = require("./user.paths");
 const verification = require("../../middlewares/jwtVerification");
-const { userLoginRequestType, userRegisterRequestType, userBankDetailsRequestType } = require("../../validations/user.validations");
+const { userLoginRequestType, userRegisterRequestType, userBankDetailsRequestType, userProfileUpdateRequestType, userFcmRequestType } = require("../../validations/user.validations");
 const validateRequest = require("../../middlewares/validator");
 
 const router = express.Router()
@@ -55,12 +55,31 @@ router.get(
     handleError(controller.userDetails)
 )
 
+router.patch(
+    userPaths.updateProfile,
+    verification.verifyUser,
+    validateRequest(userProfileUpdateRequestType),
+    handleError(controller.updateProfile)
+)
+
+router.patch(
+    userPaths.updatePreferences,
+    verification.verifyUser,
+    handleError(controller.updatePreferences)
+)
+
+router.post(
+    userPaths.fcmToken,
+    verification.verifyUser,
+    validateRequest(userFcmRequestType),
+    handleError(controller.addFcmToken)
+)
+
 // ---------------------------------------------
 // Bank details
 router.get(
     userPaths.bank.details,
-    verification.verifyUser,
-    handleError(controller.userBankDetails)
+    verification.verifyUser,    handleError(controller.userBankDetails)
 )
 
 router.post(
