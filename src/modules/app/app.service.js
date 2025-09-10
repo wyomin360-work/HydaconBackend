@@ -5,7 +5,8 @@ const { sendFailResponse } = require("../../utils/responseHandlers");
 async function appConfigurations() {
     const config = await AppConfig.find().lean()
     if (!config || !config[0]) sendFailResponse('Failed to get app config')
-    return { appConfig: config[0] }
+    const {lastUpdatedBy,...rest} = config[0]
+    return { appConfig: {...rest}}
 }
 
 async function updateAppConfig(updateData, adminId) {
