@@ -10,6 +10,7 @@ const { verifyGoogleToken } = require('../../functions/auth')
 const { AuthTypes } = require('../../constants/user')
 const { encrypt, decrypt } = require('../../utils/encryption')
 const { validateIFSC } = require('../../functions/razorPay')
+const { sendFcmNotifications } = require('../../functions/fcm')
 
 
 async function generateAndSaveToken(payload) {
@@ -35,7 +36,7 @@ async function generateAndSaveToken(payload) {
 // Register User
 // ----------------------
 async function registerUser(userData) {
-    const { name, email, password } = userData
+    const { name, email, password , avatarId } = userData
 
     const userExist = await User.findOne({ email })
     if (userExist) sendFailResponse('The mail id exist')
@@ -44,7 +45,8 @@ async function registerUser(userData) {
         name,
         email,
         password,
-        authType: AuthTypes.EMAIL
+        authType: AuthTypes.EMAIL,
+        avatarId
     })
 
     const { refreshToken, accessToken } = await generateAndSaveToken({ userId: user?._id, email: user?.email })
@@ -84,7 +86,7 @@ async function login(userData) {
 // ----------------------
 
 async function providerAuth(data) {
-    const { idToken, provider } = data
+    const { idToken, provider,avatarId } = data
     if (!idToken) sendFailResponse('Auth token missing')
 
     const providerData = await verifyGoogleToken(idToken)
@@ -101,6 +103,7 @@ async function providerAuth(data) {
             authKey,
             authType: provider,
             name,
+            avatarId
         })
 
         const { refreshToken, accessToken } = await generateAndSaveToken({ userId: newUser?._id, email: newUser?.email })
@@ -130,6 +133,7 @@ async function providerAuth(data) {
 // ----------------------
 async function logout(userId) {
     await RefreshToken.findOneAndDelete({ userId: userId })
+    await User.findByIdAndUpdate(userId,{$addToSet:{fcmTokens:[]}},{new:true})
     return { message: 'Logged Out successfully', data: { loggedOut: true } }
 }
 
@@ -253,13 +257,49 @@ async function getUserDetails(userId) {
     let returnData = {}
 
     if (user.bankDetails) {
-        const { bankDetails, ...rest } = user
+        const { bankDetails, ...rest } = attachId(user)
         returnData = rest
     } else {
-        returnData = user
+        returnData = attachId(user)
     }
 
     return { data: returnData }
+}
+
+// ----------------------
+// Update User profile
+// ----------------------
+async function updateUserProfile(data,userId) {
+    const {name,avatarId} = data
+    const user = await User.findByIdAndUpdate(userId,{name,avatarId})
+    if (!user) sendFailResponse('User not found')
+    return {message:"Profile Updated Successfully" ,data: {profileUpdated:true} }
+}
+
+// ----------------------
+// Update User settings
+// ----------------------
+async function updatePreferences(data,userId) {
+    const {enableNotification} = data
+    const user = await User.findByIdAndUpdate(userId,{enableNotification})
+    if (!user) sendFailResponse('User not found')
+    return {message:"Settings Updated Successfully" ,data: {userPreferenceUpdated:true} }
+}
+
+
+// ----------------------
+// Add User Fcm token
+// ----------------------
+async function addFcmToken(data,userId) {
+    const {fcmToken} = data
+    const user = await User.findByIdAndUpdate(userId,
+        {
+        $addToSet: { fcmTokens: fcmToken },
+      },
+       { new: true },
+    )
+    if (!user) sendFailResponse('User not found')
+    return {data: {tokenUpdated:true , updatedTokens: user.fcmTokens}}
 }
 
 // ----------------------
@@ -368,8 +408,11 @@ module.exports = {
     verifyOtp,
     providerAuth,
     getUserDetails,
+    updateUserProfile,
+    addFcmToken,
     addUserBankDetails,
     updateBankDetails,
     deleteBankDetails,
-    getUserBankDetails
+    getUserBankDetails,
+    updatePreferences
 }

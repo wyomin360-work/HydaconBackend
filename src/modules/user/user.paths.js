@@ -2,6 +2,9 @@
 module.exports = {
     root: '/user',
     details: '/details',
+    updateProfile:'/profile/update',
+    updatePreferences:'/preference/update',
+    fcmToken:'/fcm-token',
     auth: {
         login: '/auth/login',
         register: '/auth/register',
