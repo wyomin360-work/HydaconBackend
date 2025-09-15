@@ -11,7 +11,7 @@ module.exports = {
               type: "object",
               required: ["file"],
               properties: {
-                file: {
+                image: {
                   type: "string",
                   format: "binary",
                   description: "Image file to upload"

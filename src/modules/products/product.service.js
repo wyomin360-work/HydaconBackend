@@ -37,14 +37,15 @@ async function createProduct(productData) {
 }
 
 async function updateProduct(productData, productId) {
-    const { name, description, image, price, rewardPoints,netWeight } = productData
+    const { name, description, image, price, rewardPoints,netWeight , active} = productData
     await Product.findByIdAndUpdate(productId, {
         name,
         description,
         image,
         price,
         rewardPoints,
-        netWeight
+        netWeight,
+        active
     })
     return { message: 'Product updated', data: { productUpdated: true } }
 }
