@@ -28,6 +28,10 @@ async function listRedeems(data) {
     const redeems = await Redeem.find(query)
         .populate('reward')
         .populate('product')
+        .populate({
+            path:"user",
+            select:"name email"
+        })
         .skip(skip)
         .limit(limit)
         .sort({ createdAt: -1 })
