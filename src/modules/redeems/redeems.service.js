@@ -1,4 +1,5 @@
 const { REDEEM_STATUS, LIGHT_CARD_COLORS } = require('../../constants/redeem')
+const { APP_NOTIFICATIONS } = require('../../constants/notifications')
 const { sendFcmNotifications } = require('../../functions/fcm')
 const Product = require('../../schemas/product.schema')
 const Redeem = require('../../schemas/redeem.schema')
