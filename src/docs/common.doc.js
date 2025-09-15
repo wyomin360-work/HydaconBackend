@@ -34,7 +34,7 @@ module.exports = {
                     properties: {
                       url: {
                         type: "string",
-                        example: "/uploads/images/sample.jpg"
+                        example: "https://hydaconbackend.onrender.com/api/v1/uploads/images/sample.jpg"
                       }
                     }
                   }
