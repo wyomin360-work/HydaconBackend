@@ -19,3 +19,14 @@ exports.logout = async (req, res, next) => {
     const response = await adminService.logout(adminId)
     return sendResponse(res, response)
 }
+exports.forgotPassword = async (req, res, next) => {
+    const { email } = req.body;
+    const response = await adminService.forgotPassword(email);
+    return sendResponse(res, response);
+}
+
+exports.resetPassword = async (req, res, next) => {
+    const { token, newPassword } = req.body;
+    const response = await adminService.resetPassword(token, newPassword);
+    return sendResponse(res, response);
+}
