@@ -1,3 +1,5 @@
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 const Admin = require('../../schemas/admin.schema')
 const RefreshToken = require('../../schemas/refreshtoken.schema')
 const { sendFailResponse, sendResponse } = require('../../utils/responseHandlers')
@@ -71,8 +73,58 @@ async function logout(adminId) {
     return { message: 'Logged Out successfully', data: { loggedOut: true } }
 }
 
+
+
+// ----------------------
+// Generate Forgot Password Token & Send Email
+// ----------------------
+async function forgotPassword(email) {
+    const admin = await Admin.findOne({ email });
+    if (!admin) sendFailResponse('Admin not found with this email');
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenExpiry = Date.now() + 60 * 60 * 1000; // 1 hour
+
+    admin.resetPasswordToken = resetToken;
+    admin.resetPasswordExpires = resetTokenExpiry;
+    await admin.save();
+
+    const resetUrl = `${process.env.FRONTEND_URL}/admin/reset-password/${resetToken}`;
+
+    //  Instead of sending email, just for testing
+    console.log('Password Reset Link:', resetUrl);
+
+     return { 
+        message: 'Password reset link generated',
+        resetToken 
+    };
+}
+
+
+// ----------------------
+// Reset Password using token
+// ----------------------
+async function resetPassword(token, newPassword) {
+    const admin = await Admin.findOne({
+        resetPasswordToken: token,
+        resetPasswordExpires: { $gt: Date.now() } // token still valid
+    });
+
+    if (!admin) sendFailResponse('Invalid or expired reset token');
+
+    admin.password = newPassword;
+    admin.resetPasswordToken = undefined;
+    admin.resetPasswordExpires = undefined;
+
+    await admin.save();
+
+    return { message: 'Password reset successfully' };
+}
+
 module.exports = {
     registerAdmin,
     login,
-    logout
+    logout,
+    forgotPassword,
+    resetPassword
 }

@@ -26,5 +26,14 @@ router.post(
     verification.verifyAdmin,
     handleError(controller.logout)
 )
+router.post(
+    adminPaths.auth.forgotPassword, 
+);
+
+router.post(
+    adminPaths.auth.resetPassword, 
+    handleError(controller.resetPassword)
+);
+
 
 module.exports = router
