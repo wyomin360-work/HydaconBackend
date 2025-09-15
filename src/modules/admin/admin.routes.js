@@ -28,6 +28,7 @@ router.post(
 )
 router.post(
     adminPaths.auth.forgotPassword, 
+     handleError(controller.forgotPassword)
 );
 
 router.post(
