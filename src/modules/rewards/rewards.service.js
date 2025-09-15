@@ -12,8 +12,13 @@ async function listRewards(data) {
         query.productId = data?.productId
     }
 
-    const rewards = await Reward.find(query).skip(skip).limit(limit).lean()
-    const rewardsWithId = attachId(rewards)    
+    const rewards = await Reward
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+    const rewardsWithId = attachId(rewards)
     const totalDocuments = await Reward.countDocuments()
     return {
         data: {
