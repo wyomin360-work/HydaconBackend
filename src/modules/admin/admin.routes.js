@@ -11,6 +11,7 @@ const router = express.Router()
 // Auth
 router.post(
     adminPaths.auth.register,
+    verification.verifyAdmin,
     validateRequest(adminRegisterRequestType),
     handleError(controller.register)
 )

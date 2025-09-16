@@ -7,6 +7,7 @@ const adminSchema = new mongoose.Schema({
     password: { type: String, required: true },
     resetPasswordToken: { type: String },
     resetPasswordExpires: { type: Date },
+    createdBy:{ type: mongoose.Schema.Types.ObjectId, ref: 'Admins' }
 }, { timestamps: true })
 
 adminSchema.pre('save', async function (next) {
@@ -17,5 +18,5 @@ adminSchema.pre('save', async function (next) {
 });
 
 
-const Admin = mongoose.model('Admins', adminSchema)
+const Admin = mongoose.model('Admin', adminSchema)
 module.exports = Admin

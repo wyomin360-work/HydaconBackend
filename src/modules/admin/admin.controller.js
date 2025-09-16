@@ -3,8 +3,9 @@ const adminService = require('./admin.service')
 
 
 exports.register = async (req, res, next) => {
-    let data = req?.body
-    const response = await adminService.registerAdmin(data)
+    let data = req?.body;
+     let createdBy = req?.userId;
+    const response = await adminService.registerAdmin(data,createdBy)
     return sendResponse(res, response)
 }
 
