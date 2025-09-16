@@ -31,3 +31,9 @@ exports.resetPassword = async (req, res, next) => {
     const response = await adminService.resetPassword(token, newPassword);
     return sendResponse(res, response);
 }
+exports.updateDetails = async (req, res, next) => {
+    const adminId = req?.userId;
+    const data = req?.body;
+    const response = await adminService.updateDetails(adminId, data);
+    return sendResponse(res, response);
+};
