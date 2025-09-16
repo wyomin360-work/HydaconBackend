@@ -60,7 +60,8 @@ async function createRewards(rewardData) {
         structuredRewards.push(reward)
     }
 
-    if (!structuredRewards.length) sendFailResponse('failed to generate rewards')
+    if (!structuredRewards.length) 
+        sendFailResponse('failed to generate rewards')
     await Reward.insertMany(structuredRewards)
     return { message: `Created ${count} rewards`, data: { rewardsAdded: true } }
 }
