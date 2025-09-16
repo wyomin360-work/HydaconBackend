@@ -133,10 +133,37 @@ async function resetPassword(token, newPassword) {
     return { message: 'Password reset successfully' };
 }
 
+// ----------------------
+// Update Admin Details (name & password)
+// ----------------------
+async function updateDetails(adminId, updateData) {
+    const { name, oldPassword, newPassword } = updateData;
+
+    const admin = await Admin.findById(adminId);
+    if (!admin) sendFailResponse('Admin not found');
+    if (name) {
+        admin.name = name;
+    }
+    if (oldPassword && newPassword) {
+        const isMatch = await compareHash(oldPassword, admin.password);
+        if (!isMatch) sendFailResponse('Old password is incorrect');
+
+        admin.password = newPassword;
+    }
+    await admin.save();
+    const { password, ...rest } = admin.toObject();
+    return {
+        message: 'Admin details updated successfully',
+        data: rest
+    };
+}
+
+
 module.exports = {
     registerAdmin,
     login,
     logout,
     forgotPassword,
-    resetPassword
+    resetPassword,
+    updateDetails
 }
