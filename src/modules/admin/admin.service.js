@@ -24,23 +24,35 @@ async function generateAndSaveToken(payload) {
 // ----------------------
 // Register Admin
 // ----------------------
-async function registerAdmin(adminData) {
-    const { name, email, password } = adminData
+async function registerAdmin(adminData, createdBy) {
+    const { name, email, password } = adminData;
 
-    const adminExist = await Admin.findOne({ email })
-    if (adminExist) sendFailResponse('The mail id exist')
+    const adminExist = await Admin.findOne({ email });
+    if (adminExist) sendFailResponse('The mail id exist');
 
-    const admin = await Admin.create({
+    const newAdminData = {
         name,
         email,
         password,
-    })
+    };
 
-    const { refreshToken, accessToken } = await generateAndSaveToken({ adminId: admin?._id, email: admin?.email })
+    if (createdBy) {
+        newAdminData.createdBy = createdBy;
+    }
+
+    const admin = await Admin.create(newAdminData);
+
+    const { refreshToken, accessToken } = await generateAndSaveToken({
+        adminId: admin?._id,
+        email: admin?.email,
+    });
 
     const { password: pw, ...rest } = admin.toObject();
 
-    return { message: 'Registration successful', data: { ...rest, accessToken, refreshToken } }
+    return {
+        message: 'Registration successful',
+        data: { ...rest, accessToken, refreshToken },
+    };
 }
 
 
