@@ -11,7 +11,7 @@ const router = express.Router()
 
 router.post(
     redeemsPath.list,
-    verification.verifyAdmin,
+    verification.verifyAdminOrUser,
     validateRequest(listRedeemsRequestType),
     handleError(redeemsController.listRedeems)
 )

@@ -8,10 +8,57 @@ async function getProduct(productId) {
 }
 
 async function productList(data) {
-    const { page = 1, limit = 10 } = data
-    const skip = (page - 1) * limit
-    const products = await Product.find().skip(skip).limit(limit).lean() ?? []
-    const totalProducts = await Product.countDocuments();
+    const { 
+        page = 1, 
+        limit = 10, 
+        search = "", 
+        sortBy = "createdAt", 
+        sortOrder = "desc", 
+        filters = {} 
+    } = data;
+
+    const skip = (page - 1) * limit;
+
+    // 🔍 Build query
+    let query = {};
+    if (search) {
+        query.$or = [
+            { name: { $regex: search, $options: "i" } },
+            { description: { $regex: search, $options: "i" } }
+        ];
+    }
+
+    // 🎯 Filters
+    if (filters.active !== undefined) {
+        query.active = filters.active;
+    }
+    if (filters.minPrice !== undefined || filters.maxPrice !== undefined) {
+        query.price = {};
+        if (filters.minPrice !== undefined) query.price.$gte = Number(filters.minPrice);
+        if (filters.maxPrice !== undefined) query.price.$lte = Number(filters.maxPrice);
+    }
+    if (filters.minPoints !== undefined || filters.maxPoints !== undefined) {
+        query.rewardPoints = {};
+        if (filters.minPoints !== undefined) query.rewardPoints.$gte = Number(filters.minPoints);
+        if (filters.maxPoints !== undefined) query.rewardPoints.$lte = Number(filters.maxPoints);
+    }
+    if (filters.netWeight) {
+        query.netWeight = filters.netWeight;
+    }
+
+    // ↕️ Sorting
+    const sort = {};
+    sort[sortBy] = sortOrder === "asc" ? 1 : -1;
+
+    // 📦 Fetch products
+    const products = await Product.find(query)
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .lean() ?? [];
+
+    const totalProducts = await Product.countDocuments(query);
+
     return {
         data: {
             products,
@@ -20,8 +67,9 @@ async function productList(data) {
             total: totalProducts,
             page,
         }
-    }
+    };
 }
+
 
 async function createProduct(productData) {
     const { name, description, image, price, rewardPoints , netWeight } = productData
@@ -37,14 +85,15 @@ async function createProduct(productData) {
 }
 
 async function updateProduct(productData, productId) {
-    const { name, description, image, price, rewardPoints,netWeight } = productData
+    const { name, description, image, price, rewardPoints,netWeight , active} = productData
     await Product.findByIdAndUpdate(productId, {
         name,
         description,
         image,
         price,
         rewardPoints,
-        netWeight
+        netWeight,
+        active
     })
     return { message: 'Product updated', data: { productUpdated: true } }
 }
