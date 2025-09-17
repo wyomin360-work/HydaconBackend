@@ -16,7 +16,8 @@ const listRedeemsRequestType = {
     properties: {
         page: { type: 'integer', minimum: 1 },
         limit: { type: 'integer', minimum: 1 },
-        search: { type: 'string', minLength: 1 }
+        search: { type: 'string', minLength: 1 },
+        userId:  { type: 'string', pattern: "^[0-9a-fA-F]{24}$" }
     },
     required: ['page', 'limit'],
     additionalProperties: false
@@ -25,7 +26,7 @@ const listRedeemsRequestType = {
 const redeemIdRequestType = {
     type: 'object',
     properties: {
-        redeemId: { type: 'string', format: 'uuid' }
+        redeemId:  { type: 'string', pattern: "^[0-9a-fA-F]{24}$" }
     },
     required: ['redeemId'],
     additionalProperties: false

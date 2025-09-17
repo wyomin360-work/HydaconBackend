@@ -4,6 +4,9 @@ const adminDoc = require("../docs/admin.doc");
 const userDoc = require("../docs/user.doc");
 const rewardsDoc = require("../docs/rewards.doc");
 const redeemsDoc = require("../docs/redeems.doc");
+const transactionsDoc = require("../docs/transactions.doc");
+const appDoc = require("../docs/app.doc");
+const commonDoc = require("../docs/common.doc");
 
 const options = {
   definition: {
@@ -11,7 +14,7 @@ const options = {
     info: {
       title: "Hydacon API",
       version: "1.0.0",
-      description: "API documentation for my Hydacon app",
+      description: "API documentation for [Hydacon App & Dashboard]",
     },
     // servers: [
     //   { url: "http://localhost:5000" }
@@ -21,7 +24,10 @@ const options = {
       ...userDoc,
       ...productsDoc,
       ...rewardsDoc,
-      ...redeemsDoc
+      ...redeemsDoc,
+      ...transactionsDoc,
+      ...commonDoc,
+      ...appDoc
     }
   },
   apis: [],

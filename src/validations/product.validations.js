@@ -9,8 +9,8 @@ const productCreateRequestType = {
         rewardPoints: { type: 'integer', minimum: 0 },
         netWeight: { type: 'string', minLength: 2 }
     },
-    required: ['name', 'description','price', 'rewardPoints','netWeight'],
-    additionalProperties: false
+    required: ['name', 'description', 'price', 'rewardPoints', 'netWeight'],
+    additionalProperties: true
 }
 
 const productUpdateRequestType = {
@@ -21,7 +21,8 @@ const productUpdateRequestType = {
         image: { type: 'string', format: 'uri' },
         price: { type: 'number', minimum: 0 },
         rewardPoints: { type: 'integer', minimum: 0 },
-        netWeight: { type: 'string', minLength: 2 }
+        netWeight: { type: 'string', minLength: 2 },
+        active: { type: 'boolean' },
     },
     additionalProperties: false
 }
