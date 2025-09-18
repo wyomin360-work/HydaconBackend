@@ -411,7 +411,6 @@ async function Userslist(data) {
 
     const skip = (page - 1) * limit;
 
-    // 🔍 Build query
     let query = {};
     if (search) {
         query.$or = [
@@ -420,7 +419,6 @@ async function Userslist(data) {
         ];
     }
 
-    // 🎯 Filters
     if (filters.authType) {
         query.authType = filters.authType;
     }
@@ -436,11 +434,9 @@ async function Userslist(data) {
         if (filters.maxPoints !== undefined) query.totalPoints.$lte = Number(filters.maxPoints);
     }
 
-    // ↕️ Sorting
     const sort = {};
     sort[sortBy] = sortOrder === "asc" ? 1 : -1;
 
-    // 📦 Fetch users
     const users = await User.find(query)
         .sort(sort)
         .skip(skip)
