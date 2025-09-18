@@ -15,25 +15,22 @@ async function listRewards(data) {
 
     const skip = (page - 1) * limit;
 
-    // 🔍 Build query
+
     let query = {};
 
-    // Filter by productId if provided
+
     if (data?.productId) {
         query.productId = data.productId;
     }
 
-    // Filter by active status
     if (filters.active !== undefined) {
         query.active = filters.active;
     }
 
-    // Filter by redeemed status
     if (filters.isRedeemed !== undefined) {
         query.isRedeemed = filters.isRedeemed;
     }
 
-    // Filter by points range
     if (filters.minPoints !== undefined || filters.maxPoints !== undefined) {
         query.point = {};
         if (filters.minPoints !== undefined) query.point.$gte = Number(filters.minPoints);
@@ -47,7 +44,7 @@ async function listRewards(data) {
         if (filters.expiresBefore) query.expiresAt.$lte = new Date(filters.expiresBefore);
     }
 
-    // 🔍 Search by uidCode or Product name
+    //  Search by uidCode or Product name
     if (search) {
         query.$or = [
             { uidCode: { $regex: search, $options: "i" } },
@@ -56,11 +53,11 @@ async function listRewards(data) {
         ];
     }
 
-    // ↕️ Sorting
+    // ↕ Sorting
     const sort = {};
     sort[sortBy] = sortOrder === "asc" ? 1 : -1;
 
-    // 📦 Fetch rewards with product populated
+    // Fetch rewards with product populated
     const rewards = await Reward.find(query)
         .populate('product')
         .sort(sort)

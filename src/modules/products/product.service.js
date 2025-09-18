@@ -19,7 +19,6 @@ async function productList(data) {
 
     const skip = (page - 1) * limit;
 
-    // 🔍 Build query
     let query = {};
     if (search) {
         query.$or = [
@@ -28,7 +27,6 @@ async function productList(data) {
         ];
     }
 
-    // 🎯 Filters
     if (filters.active !== undefined) {
         query.active = filters.active;
     }
@@ -46,11 +44,9 @@ async function productList(data) {
         query.netWeight = filters.netWeight;
     }
 
-    // ↕️ Sorting
     const sort = {};
     sort[sortBy] = sortOrder === "asc" ? 1 : -1;
-
-    // 📦 Fetch products
+    
     const products = await Product.find(query)
         .sort(sort)
         .skip(skip)
