@@ -399,9 +399,72 @@ async function deleteBankDetails(userId) {
     return { message: 'Bank details been deleted successfully', data: { deletedBankDetails: true } }
 }
 
+async function Userslist(data) {
+    const { 
+        page = 1, 
+        limit = 10, 
+        search = "", 
+        sortBy = "createdAt", 
+        sortOrder = "desc", 
+        filters = {} 
+    } = data;
+
+    const skip = (page - 1) * limit;
+
+    // 🔍 Build query
+    let query = {};
+    if (search) {
+        query.$or = [
+            { name: { $regex: search, $options: "i" } },
+            { email: { $regex: search, $options: "i" } }
+        ];
+    }
+
+    // 🎯 Filters
+    if (filters.authType) {
+        query.authType = filters.authType;
+    }
+    if (filters.enableNotification !== undefined) {
+        query.enableNotification = filters.enableNotification;
+    }
+    if (filters.agreedToTerms !== undefined) {
+        query.agreedToTerms = filters.agreedToTerms;
+    }
+    if (filters.minPoints !== undefined || filters.maxPoints !== undefined) {
+        query.totalPoints = {};
+        if (filters.minPoints !== undefined) query.totalPoints.$gte = Number(filters.minPoints);
+        if (filters.maxPoints !== undefined) query.totalPoints.$lte = Number(filters.maxPoints);
+    }
+
+    // ↕️ Sorting
+    const sort = {};
+    sort[sortBy] = sortOrder === "asc" ? 1 : -1;
+
+    // 📦 Fetch users
+    const users = await User.find(query)
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .lean() ?? [];
+
+    const totalUsers = await User.countDocuments(query);
+
+    return {
+        data: {
+            users,
+            limit,
+            totalPages: Math.ceil(totalUsers / limit),
+            total: totalUsers,
+            page,
+        }
+    };
+}
+
+
 module.exports = {
     registerUser,
     login,
+    Userslist,
     logout,
     updatePassword,
     verifyEmail,

@@ -100,3 +100,9 @@ exports.deleteBankDetails = async (req, res, next) => {
     const response = await userService.deleteBankDetails(userId)
     return sendResponse(res, response)
 }
+
+exports.Userslist = async (req, res) => {
+    const data = req?.body;
+    const response = await userService.Userslist(data);
+    return sendResponse(res, response);
+};

@@ -102,4 +102,11 @@ router.delete(
     handleError(controller.deleteBankDetails)
 )
 
+router.post(
+    userPaths.list,               
+    verification.verifyUser,  
+    handleError(controller.Userslist)
+);
+
+
 module.exports = router
