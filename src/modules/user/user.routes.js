@@ -104,8 +104,8 @@ router.delete(
 
 router.post(
     userPaths.list,               
-    verification.verifyUser,  
-    handleError(controller.Userslist)
+    verification.verifyAdmin,  
+    handleError(controller.userList)
 );
 
 

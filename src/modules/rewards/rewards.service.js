@@ -53,7 +53,6 @@ async function listRewards(data) {
         ];
     }
 
-    // ↕ Sorting
     const sort = {};
     sort[sortBy] = sortOrder === "asc" ? 1 : -1;
 

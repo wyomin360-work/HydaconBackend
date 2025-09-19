@@ -3,7 +3,8 @@ const nodemailer = require('nodemailer');
 const Admin = require('../../schemas/admin.schema')
 const RefreshToken = require('../../schemas/refreshtoken.schema')
 const { sendFailResponse, sendResponse } = require('../../utils/responseHandlers')
-const { compareHash, generateToken } = require('../../utils/heplers')
+const { compareHash, generateToken } = require('../../utils/heplers');
+const { sendMail } = require('../../functions/nodemailer');
 
 
 async function generateAndSaveToken(payload) {
@@ -105,6 +106,16 @@ async function forgotPassword(email) {
 
     //  Instead of sending email, just for testing
     console.log('Password Reset Link:', resetUrl);
+
+    const mailOptions = {
+        from: process.env.GOOGLE_USER_MAIL,
+        to: user.email,
+        subject: "Otp for forgot password",
+        text: `Greetings from Hydacon , To reset your password click the link ${resetUrl}`
+    }
+
+    const mailSent = await sendMail(mailOptions)
+    if (!mailSent) sendFailResponse('Failed to sent mail , try again')
 
      return { 
         message: 'Password reset link generated',
