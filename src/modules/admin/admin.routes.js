@@ -11,6 +11,7 @@ const router = express.Router()
 // Auth
 router.post(
     adminPaths.auth.register,
+    verification.verifyAdmin,
     validateRequest(adminRegisterRequestType),
     handleError(controller.register)
 )
@@ -25,6 +26,21 @@ router.post(
     adminPaths.auth.logout,
     verification.verifyAdmin,
     handleError(controller.logout)
+)
+router.post(
+    adminPaths.auth.forgotPassword, 
+     handleError(controller.forgotPassword)
+);
+
+router.post(
+    adminPaths.auth.resetPassword, 
+    handleError(controller.resetPassword)
+);
+
+router.put(
+    adminPaths.auth.updateDetails, 
+    verification.verifyAdmin,
+    handleError(controller.updateDetails)
 )
 
 module.exports = router
