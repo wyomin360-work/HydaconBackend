@@ -63,10 +63,8 @@ async function listTransactions(data) {
         if (filters.maxAmount !== undefined) query.amount.$lte = Number(filters.maxAmount);
     }
 
-    // ↕️ Sorting
     sortOptions[sortBy] = sortOrder === "asc" ? 1 : -1;
 
-    // 📦 Fetch transactions
     const transactions = await Transactions.find(query)
         .select(
             "-bankDetails.accountNumber -bankDetails.ifscCode -bankDetails.accountIv -bankDetails.ifscIv"

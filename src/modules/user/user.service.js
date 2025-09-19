@@ -399,7 +399,11 @@ async function deleteBankDetails(userId) {
     return { message: 'Bank details been deleted successfully', data: { deletedBankDetails: true } }
 }
 
-async function Userslist(data) {
+// ----------------------
+// Users List
+// ----------------------
+
+async function userList(data) {
     const { 
         page = 1, 
         limit = 10, 
@@ -460,7 +464,7 @@ async function Userslist(data) {
 module.exports = {
     registerUser,
     login,
-    Userslist,
+    userList,
     logout,
     updatePassword,
     verifyEmail,
