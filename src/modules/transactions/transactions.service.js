@@ -1,3 +1,4 @@
+//service
 const { PAYMENT_STATUS, SORT_OPTIONS, PAYMENT_METHODS } = require("../../constants/transactions")
 const { APP_NOTIFICATIONS } = require('../../constants/notifications')
 const Admin = require("../../schemas/admin.schema")
@@ -12,45 +13,70 @@ const { sendFailResponse } = require("../../utils/responseHandlers")
 // Transaction List
 // ----------------------
 async function listTransactions(data) {
-    const { page, limit, sortBy, status, userId, adminId } = data
-    let skip = (page - 1) * limit
+    const { 
+        page = 1, 
+        limit = 10, 
+        search = "", 
+        sortBy = "createdAt", 
+        sortOrder = "desc", 
+        filters = {}, 
+        userId, 
+        adminId 
+    } = data;
 
-    let query = {}
-    let sortOptions = { createdAt: -1 }
+    let skip = (page - 1) * limit;
+    let query = {};
+    let sortOptions = {};
 
-    if (status) {
-        query.status = status
-    }
-
+    // User/Admin access check
     if (userId) {
-        query.userId = userId
-    }
-    if (!userId) {
-        if (!adminId) sendFailResponse('Access dined')
-        const admin = Admin.findById(adminId)
-        if (!admin) sendFailResponse('Access dined')
-    }
-
-    if (sortBy) {
-        if (sortBy === SORT_OPTIONS.MOST_RECENT) {
-            sortOptions.createdAt = -1
-        }
-        if (sortBy === SORT_OPTIONS.AMOUNT) {
-            sortOptions.amount = -1
-        }
+        query.userId = userId;
+    } else {
+        if (!adminId) sendFailResponse("Access denied");
+        const admin = await Admin.findById(adminId);
+        if (!admin) sendFailResponse("Access denied");
     }
 
-    const transactions = await Transactions
-        .find(query)
-        .select('-bankDetails.accountNumber -bankDetails.ifscCode -bankDetails.accountIv -bankDetails.ifscIv')
-        .populate({ path: 'user', select: "name email " })
+    // Search (by transactionId, bank userName, or user email)
+    if (search) {
+        query.$or = [
+            { transactionId: { $regex: search, $options: "i" } },
+            { "bankDetails.userName": { $regex: search, $options: "i" } }
+        ];
+    }
+
+    // Filters
+    if (filters.status) {
+        query.status = filters.status;
+    }
+    if (filters.paymentMethod) {
+        query.paymentMethod = filters.paymentMethod;
+    }
+    if (filters.dateFrom || filters.dateTo) {
+        query.createdAt = {};
+        if (filters.dateFrom) query.createdAt.$gte = new Date(filters.dateFrom);
+        if (filters.dateTo) query.createdAt.$lte = new Date(filters.dateTo);
+    }
+    if (filters.minAmount !== undefined || filters.maxAmount !== undefined) {
+        query.amount = {};
+        if (filters.minAmount !== undefined) query.amount.$gte = Number(filters.minAmount);
+        if (filters.maxAmount !== undefined) query.amount.$lte = Number(filters.maxAmount);
+    }
+
+    sortOptions[sortBy] = sortOrder === "asc" ? 1 : -1;
+
+    const transactions = await Transactions.find(query)
+        .select(
+            "-bankDetails.accountNumber -bankDetails.ifscCode -bankDetails.accountIv -bankDetails.ifscIv"
+        )
+        .populate({ path: "user", select: "name email" })
         .sort(sortOptions)
         .skip(skip)
         .limit(limit)
-        .lean()
+        .lean();
 
-    const totalItems = await Transactions.countDocuments()
-    const totalPages = Math.ceil(totalItems / limit)
+    const totalItems = await Transactions.countDocuments(query);
+    const totalPages = Math.ceil(totalItems / limit);
 
     return {
         transactions: attachId(transactions),
@@ -61,8 +87,9 @@ async function listTransactions(data) {
         isNext: page < totalPages,
         isPrevious: page > 1,
         isData: transactions?.length > 0
-    }
+    };
 }
+
 
 // ----------------------
 // Transaction  Details
