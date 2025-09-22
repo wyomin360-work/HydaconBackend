@@ -3,6 +3,7 @@ const { sendFailResponse } = require('../utils/responseHandlers');
 const { verifyToken } = require('../utils/heplers');
 const Admin = require('../schemas/admin.schema');
 const User = require('../schemas/user.schema');
+const { ROLES } = require('../constants/common');
 
 const secretKey = process.env.JWT_SECRET
 
@@ -69,14 +70,14 @@ async function verifyAdminOrUser(req, res, next) {
    let entity = await Admin.findById(verifiedToken.adminId);
    if (entity) {
       req.userId = verifiedToken.adminId;
-      req.role = 'admin';
+      req.role = ROLES.ADMIN;
       return next();
    }
 
    entity = await User.findById(verifiedToken.userId);
    if (entity) {
       req.userId = verifiedToken.userId;
-      req.role = 'user';
+      req.role = ROLES.USER;
       return next();
    }
 
