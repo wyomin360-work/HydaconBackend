@@ -64,12 +64,12 @@ async function listRewards(data) {
         .limit(limit)
         .lean();
 
-    const rewardWithId = attachId(rewards)  
+    const rewardsWithId = attachId(rewards)  
     const totalDocuments = await Reward.countDocuments(query);
 
     return {
         data: {
-            rewards :rewardWithId,
+            rewards :rewardsWithId,
             page,
             limit,
             totalPages: Math.ceil(totalDocuments / limit),
