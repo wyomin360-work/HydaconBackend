@@ -20,6 +20,12 @@ exports.providerAuth = async (req, res, next) => {
     return sendResponse(res, response)
 }
 
+exports.providerAuth = async (req, res, next) => {
+    let data = req?.body
+    const response = await userService.providerAuth(data)
+    return sendResponse(res, response)
+}
+
 exports.logout = async (req, res, next) => {
     let userId = req?.userId
     const response = await userService.logout(userId)
