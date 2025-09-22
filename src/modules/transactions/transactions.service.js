@@ -12,7 +12,7 @@ const { sendFailResponse } = require("../../utils/responseHandlers")
 // ----------------------
 // Transaction List
 // ----------------------
-async function listTransactions(data) {
+async function listTransactions(data,adminId) {
     const { 
         page = 1, 
         limit = 10, 
@@ -20,8 +20,7 @@ async function listTransactions(data) {
         sortBy = "createdAt", 
         sortOrder = "desc", 
         filters = {}, 
-        userId, 
-        adminId 
+        userId,  
     } = data;
 
     let skip = (page - 1) * limit;
@@ -31,7 +30,7 @@ async function listTransactions(data) {
     // User/Admin access check
     if (userId) {
         query.userId = userId;
-    } else {
+    } else {        
         if (!adminId) sendFailResponse("Access denied");
         const admin = await Admin.findById(adminId);
         if (!admin) sendFailResponse("Access denied");
