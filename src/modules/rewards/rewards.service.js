@@ -64,7 +64,7 @@ async function listRewards(data) {
         .limit(limit)
         .lean();
 
-    const rewardWithId = attachId(rewards)  ee line missing 
+    const rewardWithId = attachId(rewards)  
     const totalDocuments = await Reward.countDocuments(query);
 
     return {
