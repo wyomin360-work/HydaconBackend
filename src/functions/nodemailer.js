@@ -1,11 +1,13 @@
 const nodemailer = require('nodemailer');
 
 const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-        user: process.env.GOOGLE_USER_MAIL,
-        pass: process.env.GOOGLE_APP_PASSWORD
-    }
+  service: "gmail",
+  auth: {
+    user: process.env.GOOGLE_USER_MAIL,
+    pass: process.env.GOOGLE_APP_PASSWORD
+  },
+  debug: true,
+  logger: true
 })
 
 const sendMail = async (data) => {
@@ -20,6 +22,6 @@ const sendMail = async (data) => {
 };
 
 
-module.exports ={
-    sendMail
+module.exports = {
+  sendMail
 }
