@@ -169,6 +169,68 @@ async function updateDetails(adminId, updateData) {
     };
 }
 
+// ----------------------
+// Admin List
+// ----------------------
+async function adminList(data) {
+    const { 
+        page = 1, 
+        limit = 10, 
+        search = "", 
+        sortBy = "createdAt", 
+        sortOrder = "desc", 
+        filters = {} 
+    } = data;
+
+    const skip = (page - 1) * limit;
+
+    let query = {};
+    if (search) {
+        query.$or = [
+            { name: { $regex: search, $options: "i" } },
+            { email: { $regex: search, $options: "i" } }
+        ];
+    }
+
+    if (filters.authType) {
+        query.authType = filters.authType;
+    }
+    if (filters.enableNotification !== undefined) {
+        query.enableNotification = filters.enableNotification;
+    }
+    if (filters.agreedToTerms !== undefined) {
+        query.agreedToTerms = filters.agreedToTerms;
+    }
+    if (filters.minPoints !== undefined || filters.maxPoints !== undefined) {
+        query.totalPoints = {};
+        if (filters.minPoints !== undefined) query.totalPoints.$gte = Number(filters.minPoints);
+        if (filters.maxPoints !== undefined) query.totalPoints.$lte = Number(filters.maxPoints);
+    }
+
+    const sort = {};
+    sort[sortBy] = sortOrder === "asc" ? 1 : -1;
+
+    // ✅ Use Admin instead of User
+    const admins = await Admin.find(query)
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .lean() ?? [];
+
+    const totalAdmins = await Admin.countDocuments(query);
+
+    return {
+        data: {
+            admins,               // changed from users -> admins
+            limit,
+            totalPages: Math.ceil(totalAdmins / limit),
+            total: totalAdmins,
+            page,
+        }
+    };
+}
+
+
 
 module.exports = {
     registerAdmin,
@@ -176,5 +238,6 @@ module.exports = {
     logout,
     forgotPassword,
     resetPassword,
-    updateDetails
+    updateDetails,
+    adminList
 }

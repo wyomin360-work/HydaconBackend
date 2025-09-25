@@ -37,3 +37,9 @@ exports.updateDetails = async (req, res, next) => {
     const response = await adminService.updateDetails(adminId, data);
     return sendResponse(res, response);
 };
+
+exports.adminList = async (req, res) => {
+    const data = req?.body;
+    const response = await adminService.adminList(data);
+    return sendResponse(res, response);
+};
