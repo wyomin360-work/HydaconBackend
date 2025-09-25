@@ -75,7 +75,7 @@ module.exports = {
               schema: {
                 type: "object",
                 properties: {
-                  message: { type: "string", example: "registration success" },
+                  message: { type: "string", example: "Login success" },
                   data: {
                     type: "object",
                     properties: {
@@ -121,6 +121,89 @@ module.exports = {
             }
           }
         }
+      }
+    }
+  },
+
+  "/admin/auth/forgot-password": {
+    post: {
+      tags: ['Admin Auth'],
+      summary: 'Generate Forgot Password Token & Send Email',
+      description: 'Generates a token for password reset and sends an email to the admin',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                email: {
+                  type: 'string',
+                  format: 'email',
+                  example: 'admin@example.com'
+                }
+              },
+              required: ['email']
+            }
+          }
+        }
+      },
+      responses: {
+        200: {
+          description: 'Password reset link generated',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  message: { type: 'string', example: 'Password reset link generated' },
+                  resetToken: { type: 'string', example: 'abc123token' }
+                }
+              }
+            }
+          }
+        },
+        404: { description: 'Admin not found with this email' },
+        500: { description: 'Failed to send mail, try again' }
+      }
+    }
+  },
+
+  "/admin/auth/reset-password": {
+    post: {
+      tags: ['Admin Auth'],
+      summary: 'Reset Password using token',
+      description: 'Resets the admin password using the provided reset token',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                token: { type: 'string', example: 'abc123token' },
+                newPassword: { type: 'string', example: 'newStrongPassword123' }
+              },
+              required: ['token', 'newPassword']
+            }
+          }
+        }
+      },
+      responses: {
+        200: {
+          description: 'Password reset successfully',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  message: { type: 'string', example: 'Password reset successfully' }
+                }
+              }
+            }
+          }
+        },
+        400: { description: 'Invalid or expired reset token' }
       }
     }
   }
