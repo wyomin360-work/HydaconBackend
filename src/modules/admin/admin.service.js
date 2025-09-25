@@ -108,7 +108,7 @@ async function forgotPassword(email) {
     console.log('Password Reset Link:', resetUrl);
 
     const mailOptions = {
-        from: process.env.GOOGLE_USER_MAIL,
+        from:  `"Hydacon Support" <${process.env.SEND_GRID_FROM_MAIL}>`,
         to: admin.email,
         subject: "Otp for forgot password",
         text: `Greetings from Hydacon , To reset your password click the link ${resetUrl}`
