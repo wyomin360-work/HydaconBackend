@@ -109,7 +109,7 @@ async function forgotPassword(email) {
 
     const mailOptions = {
         from: process.env.GOOGLE_USER_MAIL,
-        to: user.email,
+        to: admin.email,
         subject: "Otp for forgot password",
         text: `Greetings from Hydacon , To reset your password click the link ${resetUrl}`
     }
