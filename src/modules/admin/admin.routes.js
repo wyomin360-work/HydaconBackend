@@ -43,4 +43,10 @@ router.put(
     handleError(controller.updateDetails)
 )
 
+router.post(
+    adminPaths.list,               
+    verification.verifyAdmin,  
+    handleError(controller.adminList)
+);
+
 module.exports = router

@@ -1,5 +1,6 @@
 module.exports = {
     root: '/admin',
+    list: '/list',
     auth: {
         login: '/auth/login',
         register: '/auth/register',
