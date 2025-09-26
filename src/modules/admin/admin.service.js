@@ -350,6 +350,14 @@ async function adminList(data) {
 }
 
 
+// ----------------------
+// Admin Delete
+// ----------------------
+async function adminDelete(adminId) {
+    await Admin.findByIdAndDelete(adminId)
+    return { message: "reward deleted", data: { adminDeleted: true } }
+}
+
 
 module.exports = {
     registerAdmin,
@@ -358,5 +366,6 @@ module.exports = {
     forgotPassword,
     resetPassword,
     updateDetails,
-    adminList
+    adminList,
+    adminDelete
 }
