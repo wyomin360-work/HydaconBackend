@@ -31,4 +31,9 @@ router.delete(
     handleError(rewardsController.deleteReward)
 )
 
+router.delete(
+    rewardsPath.deleteAll,
+    handleError(rewardsController.deleteAllReward)
+)
+
 module.exports = router
