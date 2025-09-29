@@ -48,8 +48,7 @@ async function listRewards(data) {
     if (search) {
         query.$or = [
             { uidCode: { $regex: search, $options: "i" } },
-            // Join with Product collection to search by name
-            // This requires aggregation
+            
         ];
     }
 
@@ -129,10 +128,16 @@ async function deleteReward(rewardId) {
     return { message: "reward deleted", data: { rewardDeleted: true } }
 }
 
+async function deleteAllReward() {
+    await Reward.deleteMany({})
+    return { message: "all rewards deleted", data: { rewardsDeleted: true } }
+}
+
 module.exports = {
     listRewards,
     rewardDetails,
     createRewards,
     updateReward,
-    deleteReward
+    deleteReward,
+    deleteAllReward
 }

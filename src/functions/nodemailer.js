@@ -2,7 +2,7 @@ const nodemailer = require('nodemailer');
 
 const transporter = nodemailer.createTransport({
   host: "smtp.sendgrid.net",
-  port: 2525,
+  port: 2525,//587, 
   secure: false,
   auth: {
     user: 'apikey',

@@ -5,4 +5,5 @@ module.exports = {
     delete: '/delete/:rewardId',
     update: '/update/:rewardId',
     details: '/details/:rewardId',
+    deleteAll: '/delete',
 }
