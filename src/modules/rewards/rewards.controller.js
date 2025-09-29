@@ -32,3 +32,8 @@ exports.deleteReward = async (req, res) => {
     const response = await rewardService.deleteReward(rewardId)
     return sendResponse(res, response)
 }
+
+exports.deleteAllReward = async (req, res) => {
+    const response = await rewardService.deleteAllReward()
+    return sendResponse(res, response)
+}
