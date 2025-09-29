@@ -221,7 +221,7 @@ async function forgotPassword(email) {
     admin.resetPasswordExpires = resetTokenExpiry;
     await admin.save();
 
-    const resetUrl = `${process.env.FRONTEND_URL}/admin/reset-password/${resetToken}`;
+    const resetUrl = `${process.env.FRONTEND_URL}/auth/reset-password/${resetToken}`;
 
     //  Instead of sending email, just for testing
     console.log('Password Reset Link:', resetUrl);
