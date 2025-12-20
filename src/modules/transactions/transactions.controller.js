@@ -1,9 +1,11 @@
+const { ROLES } = require("../../constants/common")
 const { sendResponse } = require("../../utils/responseHandlers")
 const transactionService = require('./transactions.service')
 
 exports.transactionList = async (req, res, next) => {
     const data = req?.body
-    const response = await transactionService.listTransactions(data)
+    const adminId = req?.role === ROLES.ADMIN ? req?.userId : null
+    const response = await transactionService.listTransactions(data, adminId)
     return sendResponse(res, response)
 }
 

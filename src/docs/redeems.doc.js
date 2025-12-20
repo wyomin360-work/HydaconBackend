@@ -10,14 +10,26 @@ module.exports = {
             schema: {
               type: "object",
               properties: {
-                page: { type: "integer", default: 1, description: "Page number" },
-                limit: { type: "integer", default: 20, description: "Number of redeems per page" },
-                search: { type: "string", description: "Search by userId, productId, rewardId, or rewardUidCode" }
+                page: {
+                  type: "integer",
+                  default: 1,
+                  description: "Page number",
+                },
+                limit: {
+                  type: "integer",
+                  default: 20,
+                  description: "Number of redeems per page",
+                },
+                search: {
+                  type: "string",
+                  description:
+                    "Search by userId, productId, rewardId, or rewardUidCode",
+                },
               },
-              required: ["page", "limit"]
-            }
-          }
-        }
+              required: ["page", "limit"],
+            },
+          },
+        },
       },
       responses: {
         200: {
@@ -41,23 +53,73 @@ module.exports = {
                             rewardId: { type: "string" },
                             rewardUidCode: { type: "string" },
                             rewardPoints: { type: "number" },
-                            status: { type: "string" }
-                          }
-                        }
+                            status: { type: "string", example: "SUCCESS" },
+                            cardBg: { type: "string", example: "#d0f0f2f0" },
+                            createdAt: { type: "string", format: "date-time" },
+                            updatedAt: { type: "string", format: "date-time" },
+                            __v: { type: "integer" },
+                            id: { type: "string" },
+                            product: {
+                              type: "object",
+                              properties: {
+                                _id: { type: "string" },
+                                name: { type: "string" },
+                                description: { type: "string" },
+                                netWeight: { type: "string" },
+                                price: { type: "number" },
+                                rewardPoints: { type: "integer" },
+                                __v: { type: "integer" },
+                                updatedAt: {
+                                  type: "string",
+                                  format: "date-time",
+                                },
+                              },
+                            },
+                            user: {
+                              type: "object",
+                              properties: {
+                                _id: { type: "string" },
+                                name: { type: "string" },
+                                email: { type: "string" },
+                              },
+                            },
+                            reward: {
+                              type: "object",
+                              properties: {
+                                _id: { type: "string" },
+                                productId: { type: "string" },
+                                uidCode: { type: "string" },
+                                point: { type: "integer" },
+                                expiresAt: {
+                                  type: "string",
+                                  format: "date-time",
+                                },
+                                isRedeemed: { type: "boolean" },
+                                active: { type: "boolean" },
+                                __v: { type: "integer" },
+                                redeemedAt: {
+                                  type: "string",
+                                  format: "date-time",
+                                },
+                                redeemedBy: { type: "string" },
+                              },
+                            },
+                          },
+                        },
                       },
                       limit: { type: "integer", example: 20 },
                       total: { type: "integer", example: 100 },
                       page: { type: "integer", example: 1 },
-                      totalPages: { type: "integer", example: 5 }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+                      totalPages: { type: "integer", example: 5 },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   },
 
   "/redeems/create": {
@@ -75,11 +137,14 @@ module.exports = {
                 userId: { type: "string", description: "User ID (UUID)" },
                 productId: { type: "string", description: "Product ID (UUID)" },
                 rewardId: { type: "string", description: "Reward ID (UUID)" },
-                rewardUidCode: { type: "string", description: "Unique code for reward" }
-              }
-            }
-          }
-        }
+                rewardUidCode: {
+                  type: "string",
+                  description: "Unique code for reward",
+                },
+              },
+            },
+          },
+        },
       },
       responses: {
         201: {
@@ -93,18 +158,18 @@ module.exports = {
                   data: {
                     type: "object",
                     properties: {
-                      redeemSuccessful: { type: "boolean", example: true }
-                    }
-                  }
-                }
-              }
-            }
-          }
+                      redeemSuccessful: { type: "boolean", example: true },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
         400: { description: "Invalid input" },
-        404: { description: "User, product, or reward not found" }
-      }
-    }
+        404: { description: "User, product, or reward not found" },
+      },
+    },
   },
 
   "/redeems/details/{redeemId}": {
@@ -112,7 +177,12 @@ module.exports = {
       summary: "Get redeem details by ID",
       tags: ["Redeems"],
       parameters: [
-        { name: "redeemId", in: "path", required: true, schema: { type: "string" } }
+        {
+          name: "redeemId",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+        },
       ],
       responses: {
         200: {
@@ -131,17 +201,17 @@ module.exports = {
                       reward: { type: "object" },
                       rewardUidCode: { type: "string" },
                       rewardPoints: { type: "number" },
-                      status: { type: "string" }
-                    }
-                  }
-                }
-              }
-            }
-          }
+                      status: { type: "string" },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
-        404: { description: "Redeem not found" }
-      }
-    }
+        404: { description: "Redeem not found" },
+      },
+    },
   },
 
   "/redeems/delete/{redeemId}": {
@@ -149,7 +219,12 @@ module.exports = {
       summary: "Delete a redeem by ID",
       tags: ["Redeems"],
       parameters: [
-        { name: "redeemId", in: "path", required: true, schema: { type: "string" } }
+        {
+          name: "redeemId",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+        },
       ],
       responses: {
         200: {
@@ -163,16 +238,16 @@ module.exports = {
                   data: {
                     type: "object",
                     properties: {
-                      redeemDeleted: { type: "boolean", example: true }
-                    }
-                  }
-                }
-              }
-            }
-          }
+                      redeemDeleted: { type: "boolean", example: true },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
-        404: { description: "Redeem not found" }
-      }
-    }
-  }
+        404: { description: "Redeem not found" },
+      },
+    },
+  },
 };

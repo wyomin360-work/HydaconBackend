@@ -5,6 +5,9 @@ const adminSchema = new mongoose.Schema({
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true, lowercase: true },
     password: { type: String, required: true },
+    resetPasswordToken: { type: String },
+    resetPasswordExpires: { type: Date },
+    createdBy:{ type: mongoose.Schema.Types.ObjectId, ref: 'Admins' }
 }, { timestamps: true })
 
 adminSchema.pre('save', async function (next) {
