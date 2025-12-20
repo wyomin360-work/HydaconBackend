@@ -1,52 +1,75 @@
 module.exports = {
   "/rewards/list": {
-    post: {
-      summary: "Get all rewards (paginated)",
-      tags: ["Rewards"],
-      requestBody: {
-        required: false,
+  post: {
+    summary: "Get all rewards (paginated)",
+    tags: ["Rewards"],
+    requestBody: {
+      required: false,
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            properties: {
+              page: { type: "integer", default: 1, description: "Page number" },
+              limit: { type: "integer", default: 20, description: "Number of rewards per page" },
+              productId: { type: "string", format: "uuid", description: "Filter by product ID" }
+            }
+          }
+        }
+      }
+    },
+    responses: {
+      200: {
+        description: "List of rewards with pagination",
         content: {
           "application/json": {
             schema: {
               type: "object",
               properties: {
-                page: { type: "integer", default: 1, description: "Page number" },
-                limit: { type: "integer", default: 20, description: "Number of rewards per page" },
-                productId: { type: "string", format: "uuid", description: "Filter by product ID" }
-              }
-            }
-          }
-        }
-      },
-      responses: {
-        200: {
-          description: "List of rewards with pagination",
-          content: {
-            "application/json": {
-              schema: {
-                type: "object",
-                properties: {
-                  data: {
-                    type: "object",
-                    properties: {
-                      rewards: {
-                        type: "array",
-                        items: {
-                          type: "object",
-                          properties: {
-                            _id: { type: "string" },
-                            productId: { type: "string" },
-                            expiresAt: { type: "string", format: "date-time" },
-                            uidCode: { type: "string" },
-                            point: { type: "integer" },
-                            active: { type: "boolean" }
+                status: { type: "string", example: "success" },
+                data: {
+                  type: "object",
+                  properties: {
+                    data: {
+                      type: "object",
+                      properties: {
+                        rewards: {
+                          type: "array",
+                          items: {
+                            type: "object",
+                            properties: {
+                              _id: { type: "string" },
+                              productId: { type: "string" },
+                              uidCode: { type: "string" },
+                              point: { type: "integer" },
+                              expiresAt: { type: "string", format: "date-time" },
+                              isRedeemed: { type: "boolean" },
+                              active: { type: "boolean" },
+                              redeemedAt: { type: "string", format: "date-time", nullable: true },
+                              redeemedBy: { type: "string", nullable: true },
+                              __v: { type: "integer" },
+                              id: { type: "string" },
+                              product: {
+                                type: "object",
+                                properties: {
+                                  _id: { type: "string" },
+                                  name: { type: "string" },
+                                  description: { type: "string" },
+                                  netWeight: { type: "string" },
+                                  price: { type: "number" },
+                                  rewardPoints: { type: "integer" },
+                                  __v: { type: "integer" },
+                                  updatedAt: { type: "string", format: "date-time" }
+                                }
+                              }
+                            }
                           }
-                        }
-                      },
-                      limit: { type: "integer", example: 20 },
-                      total: { type: "integer", example: 50 },
-                      page: { type: "integer", example: 1 },
-                      totalPages: { type: "integer", example: 3 }
+                        },
+                        page: { type: "integer", example: 2 },
+                        limit: { type: "integer", example: 1 },
+                        totalPages: { type: "integer", example: 74 },
+                        total: { type: "integer", example: 74 }
+                      }
                     }
                   }
                 }
@@ -56,7 +79,9 @@ module.exports = {
         }
       }
     }
-  },
+  }
+}
+,
   "/rewards/create": {
     post: {
       summary: "Create multiple rewards for a product",

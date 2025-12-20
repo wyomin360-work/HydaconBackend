@@ -71,7 +71,8 @@ module.exports = {
                 description: { type: "string" },
                 image: { type: "string" },
                 price: { type: "number" },
-                rewardPoints: { type: "number" }
+                rewardPoints: { type: "number" },
+                netWeight: { type: 'string' },
               }
             }
           }
@@ -123,7 +124,9 @@ module.exports = {
                       description: { type: "string" },
                       image: { type: "string" },
                       price: { type: "number" },
-                      rewardPoints: { type: "number" }
+                      rewardPoints: { type: "number" },
+                      netWeight: { type: 'string' },
+                      active: { type: 'boolean' },
                     }
                   }
                 }
@@ -152,6 +155,8 @@ module.exports = {
                 name: { type: "string" },
                 description: { type: "string" },
                 image: { type: "string" },
+                active: { type: "boolean" },
+                netWeight: { type: 'string' },
                 price: { type: "number" },
                 rewardPoints: { type: "number" }
               }

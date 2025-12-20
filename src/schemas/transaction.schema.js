@@ -1,3 +1,4 @@
+// schema
 const { default: mongoose } = require("mongoose");
 const { PAYMENT_STATUS, PAYMENT_METHODS } = require("../constants/transactions");
 

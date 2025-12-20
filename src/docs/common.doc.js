@@ -11,7 +11,7 @@ module.exports = {
               type: "object",
               required: ["file"],
               properties: {
-                file: {
+                image: {
                   type: "string",
                   format: "binary",
                   description: "Image file to upload"
@@ -34,7 +34,7 @@ module.exports = {
                     properties: {
                       url: {
                         type: "string",
-                        example: "/uploads/images/sample.jpg"
+                        example: "https://hydaconbackend.onrender.com/api/v1/uploads/images/sample.jpg"
                       }
                     }
                   }

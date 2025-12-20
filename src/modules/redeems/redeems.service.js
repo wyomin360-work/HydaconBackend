@@ -1,4 +1,5 @@
 const { REDEEM_STATUS, LIGHT_CARD_COLORS } = require('../../constants/redeem')
+const { APP_NOTIFICATIONS } = require('../../constants/notifications')
 const { sendFcmNotifications } = require('../../functions/fcm')
 const Product = require('../../schemas/product.schema')
 const Redeem = require('../../schemas/redeem.schema')
@@ -27,6 +28,10 @@ async function listRedeems(data) {
     const redeems = await Redeem.find(query)
         .populate('reward')
         .populate('product')
+        .populate({
+            path:"user",
+            select:"name email"
+        })
         .skip(skip)
         .limit(limit)
         .sort({ createdAt: -1 })
