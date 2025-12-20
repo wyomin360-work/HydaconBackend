@@ -14,7 +14,7 @@ const options = {
     info: {
       title: "Hydacon API",
       version: "1.0.0",
-      description: "API documentation for my Hydacon app",
+      description: "API documentation for [Hydacon App & Dashboard]",
     },
     // servers: [
     //   { url: "http://localhost:5000" }

@@ -1,30 +1,60 @@
-const express = require('express')
-const adminPaths = require('./admin.paths')
-const controller = require('./admin.controller')
-const { handleError } = require('../../utils/heplers')
-const validateRequest = require('../../middlewares/validator')
-const { adminRegisterRequestType, adminLoginRequestType } = require('../../validations/admin.validations')
-const verification = require('../../middlewares/jwtVerification')
+const express = require("express");
+const adminPaths = require("./admin.paths");
+const controller = require("./admin.controller");
+const { handleError } = require("../../utils/heplers");
+const validateRequest = require("../../middlewares/validator");
+const {
+  adminRegisterRequestType,
+  adminLoginRequestType,
+} = require("../../validations/admin.validations");
+const verification = require("../../middlewares/jwtVerification");
 
-const router = express.Router()
+const router = express.Router();
 
 // Auth
 router.post(
-    adminPaths.auth.register,
-    validateRequest(adminRegisterRequestType),
-    handleError(controller.register)
-)
+  adminPaths.auth.register,
+  verification.verifyAdmin,
+  validateRequest(adminRegisterRequestType),
+  handleError(controller.register)
+);
 
 router.post(
-    adminPaths.auth.login,
-    validateRequest(adminLoginRequestType),
-    handleError(controller.login)
-)
+  adminPaths.auth.login,
+  validateRequest(adminLoginRequestType),
+  handleError(controller.login)
+);
 
 router.post(
-    adminPaths.auth.logout,
-    verification.verifyAdmin,
-    handleError(controller.logout)
-)
+  adminPaths.auth.logout,
+  verification.verifyAdmin,
+  handleError(controller.logout)
+);
+router.post(
+  adminPaths.auth.forgotPassword,
+  handleError(controller.forgotPassword)
+);
 
-module.exports = router
+router.post(
+  adminPaths.auth.resetPassword,
+  handleError(controller.resetPassword)
+);
+
+router.put(
+  adminPaths.auth.updateDetails,
+  verification.verifyAdmin,
+  handleError(controller.updateDetails)
+);
+
+router.post(
+  adminPaths.list,
+  verification.verifyAdmin,
+  handleError(controller.adminList)
+);
+router.delete(
+  adminPaths.delete,
+  verification.verifyAdmin,
+  handleError(controller.adminDelete)
+);
+
+module.exports = router;
