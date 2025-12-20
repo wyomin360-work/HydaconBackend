@@ -15,8 +15,23 @@ const AppError = require("./utils/appError");
 
 const app = express();
 
+// const allowedOrigins = process.env.ALLOWED_ORIGINS.split(',');
+
+// app.use(cors({
+//   origin: function (origin, callback) {
+//     if (!origin) return callback(null, true);
+//     if (allowedOrigins.includes(origin)) {
+//       return callback(null, true);
+//     } else {
+//       return callback(new Error('Not allowed by CORS'));
+//     }
+//   },
+//   credentials: true,
+// }));
+
+// For development, allow all origins. In production, restrict this appropriately using function above.
 app.use(cors({
-  origin: 'http://localhost:8082',
+  origin: true, 
   credentials: true,
 }));
 

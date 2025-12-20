@@ -82,3 +82,5 @@ const APP_NOTIFICATIONS = {
     },
   },
 };
+
+module.exports ={APP_NOTIFICATIONS}

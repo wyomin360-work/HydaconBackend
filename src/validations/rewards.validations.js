@@ -1,3 +1,5 @@
+const { search } = require("../modules/rewards/rewards.routes")
+
 const createRewardRequestType = {
     type: 'object',
     properties: {
@@ -20,12 +22,39 @@ const updateRewardRequestType = {
     additionalProperties: false
 }
 
+// const listRewardRequestType = {
+//     type: 'object',
+//     properties: {
+//         page: { type: 'integer', minimum: 1 },
+//         limit: { type: 'integer', minimum: 1 },
+//         productId: { type: 'string', pattern: "^[0-9a-fA-F]{24}$" }
+//     },
+//     required: ['page', 'limit'],
+//     additionalProperties: false
+// }
+
+// add search feature
 const listRewardRequestType = {
     type: 'object',
     properties: {
         page: { type: 'integer', minimum: 1 },
         limit: { type: 'integer', minimum: 1 },
-        productId: { type: 'string', pattern: "^[0-9a-fA-F]{24}$" }
+        productId: { type: 'string', pattern: "^[0-9a-fA-F]{24}$" },
+        search: { type: 'string' },
+        sortBy: { type: 'string', enum: ['createdAt', 'expiresAt', 'point', 'uidCode'] },
+        sortOrder: { type: 'string', enum: ['asc', 'desc'] },
+        filters: {
+            type: 'object',
+            properties: {
+                active: { type: 'boolean' },
+                isRedeemed: { type: 'boolean' },
+                minPoints: { type: 'number', minimum: 0 },
+                maxPoints: { type: 'number', minimum: 0 },
+                expiresAfter: { type: 'string', format: 'date-time' },
+                expiresBefore: { type: 'string', format: 'date-time' }
+            },
+            additionalProperties: false
+        }
     },
     required: ['page', 'limit'],
     additionalProperties: false
