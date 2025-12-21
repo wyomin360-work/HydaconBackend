@@ -72,7 +72,7 @@ async function createProduct(productData) {
     await Product.create({
         name,
         description,
-        image,
+        image, 
         price,
         rewardPoints,
         netWeight

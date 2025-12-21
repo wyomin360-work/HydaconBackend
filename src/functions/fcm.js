@@ -1,5 +1,6 @@
 const admin = require('../config/firebase.config')
 
+
 async function sendFcmNotifications(tokens, title, body, data) {
     const results = { success: [], errors: [] }
 
@@ -21,11 +22,13 @@ async function sendFcmNotifications(tokens, title, body, data) {
             if (res.success) {
                 results.success.push(tokens[index]);
             } else {
-                logError('FCM notifications error for notification', res); results.errors.push(tokens[index]);
+                console.log('FCM notifications error for notification', res); results.errors.push(tokens[index]);
+                
+                // logError();
             }
         });
     } catch (error) {
-        logError('FCM notifications error:', error);
+        // logError('FCM notifications error:', error);
         console.log('FCM error', error);
     }
     return results;
@@ -66,14 +69,19 @@ async function sendFcmNotificationsToTopics(
                 results.success.push(message.topic);
             } catch (error) {
                 results.errors.push(message.topic);
-                logError(
-                    `Failed to send notification to topic: ${message.topic}`,
-                    error,
-                );
+                console.log(`Failed to send notification to topic: ${message.topic}`,
+                    error,);
+                
+                // logError(
+                //     `Failed to send notification to topic: ${message.topic}`,
+                //     error,
+                // );
             }
         }
     } catch (error) {
-        logError('Error sending FCM notifications to topics:', error);
+        // logError('Error sending FCM notifications to topics:', error);
+        console.log('Error sending FCM notifications to topics:', error);
+        
     }
 
     return results;
