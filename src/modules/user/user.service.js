@@ -6,7 +6,7 @@ const { compareHash, generateToken, attachId, generateOtp, generateBufferToken, 
 const { sendMail } = require('../../functions/nodemailer')
 const { ServiceRequestStatus, ServiceRequestType } = require('../../constants/service-request')
 const moment = require('moment')
-const { verifyGoogleToken } = require('../../functions/auth')
+const { verifyGoogleToken, verifyAppleIdentityToken } = require('../../functions/auth')
 const { AuthTypes } = require('../../constants/user')
 const { encrypt, decrypt } = require('../../utils/encryption')
 const { validateIFSC } = require('../../functions/razorPay')
@@ -36,7 +36,7 @@ async function generateAndSaveToken(payload) {
 // Register User
 // ----------------------
 async function registerUser(userData) {
-    const { name, email, password , avatarId } = userData
+    const { name, email, password, avatarId } = userData
 
     const userExist = await User.findOne({ email })
     if (userExist) sendFailResponse('The mail id exist')
@@ -86,13 +86,24 @@ async function login(userData) {
 // ----------------------
 
 async function providerAuth(data) {
-    const { idToken, provider,avatarId } = data
+    const { idToken, provider, avatarId, firstName, lastName } = data
     if (!idToken) sendFailResponse('Auth token missing')
 
-    const providerData = await verifyGoogleToken(idToken)
+    const isGoogleAuth = provider === AuthTypes.GOOGLE
+
+    let providerData = {}
+    
+    if (isGoogleAuth) {
+        providerData = await verifyGoogleToken(idToken)
+    } else if (provider === AuthTypes.APPLE) {
+        providerData = await verifyAppleIdentityToken(idToken)
+    }
+
     if (!providerData.isData) sendFailResponse(providerData?.message || 'Google auth failed, try again')
 
-    const { email, sub: authKey, name } = providerData
+    const { email, sub: authKey } = providerData
+
+    const userName = isGoogleAuth ? providerData?.name : `${firstName} ${lastName}`
 
     const userExist = await User.findOne({ email }).lean()
 
@@ -102,7 +113,7 @@ async function providerAuth(data) {
             password: generateRandomPassword(48),
             authKey,
             authType: provider,
-            name,
+            name: userName,
             avatarId
         })
 
@@ -115,9 +126,10 @@ async function providerAuth(data) {
         return { message: 'Registered successfully', data: { ...rest, accessToken, refreshToken, newUser: true } }
 
     } else {
-        if (userExist && userExist.authType !== AuthTypes.GOOGLE)
-            sendFailResponse(`This email is already registered with 
-        ${userExist.authType}. Please log in using that method.`);
+
+        // if (userExist && userExist.authType !== AuthTypes.GOOGLE)
+        //     sendFailResponse(`This email is already registered with 
+        // ${userExist.authType}. Please log in using that method.`);
 
         const { refreshToken, accessToken } = await generateAndSaveToken({ userId: userExist?._id, email: userExist?.email })
 
@@ -133,7 +145,7 @@ async function providerAuth(data) {
 // ----------------------
 async function logout(userId) {
     await RefreshToken.findOneAndDelete({ userId: userId })
-    await User.findByIdAndUpdate(userId,{$addToSet:{fcmTokens:[]}},{new:true})
+    await User.findByIdAndUpdate(userId, { $addToSet: { fcmTokens: [] } }, { new: true })
     return { message: 'Logged Out successfully', data: { loggedOut: true } }
 }
 
@@ -269,37 +281,37 @@ async function getUserDetails(userId) {
 // ----------------------
 // Update User profile
 // ----------------------
-async function updateUserProfile(data,userId) {
-    const {name,avatarId} = data
-    const user = await User.findByIdAndUpdate(userId,{name,avatarId})
+async function updateUserProfile(data, userId) {
+    const { name, avatarId } = data
+    const user = await User.findByIdAndUpdate(userId, { name, avatarId })
     if (!user) sendFailResponse('User not found')
-    return {message:"Profile Updated Successfully" ,data: {profileUpdated:true} }
+    return { message: "Profile Updated Successfully", data: { profileUpdated: true } }
 }
 
 // ----------------------
 // Update User settings
 // ----------------------
-async function updatePreferences(data,userId) {
-    const {enableNotification} = data
-    const user = await User.findByIdAndUpdate(userId,{enableNotification})
+async function updatePreferences(data, userId) {
+    const { enableNotification } = data
+    const user = await User.findByIdAndUpdate(userId, { enableNotification })
     if (!user) sendFailResponse('User not found')
-    return {message:"Settings Updated Successfully" ,data: {userPreferenceUpdated:true} }
+    return { message: "Settings Updated Successfully", data: { userPreferenceUpdated: true } }
 }
 
 
 // ----------------------
 // Add User Fcm token
 // ----------------------
-async function addFcmToken(data,userId) {
-    const {fcmToken} = data
+async function addFcmToken(data, userId) {
+    const { fcmToken } = data
     const user = await User.findByIdAndUpdate(userId,
         {
-        $addToSet: { fcmTokens: fcmToken },
-      },
-       { new: true },
+            $addToSet: { fcmTokens: fcmToken },
+        },
+        { new: true },
     )
     if (!user) sendFailResponse('User not found')
-    return {data: {tokenUpdated:true , updatedTokens: user.fcmTokens}}
+    return { data: { tokenUpdated: true, updatedTokens: user.fcmTokens } }
 }
 
 // ----------------------
@@ -308,7 +320,7 @@ async function addFcmToken(data,userId) {
 async function getUserBankDetails(userId) {
     const user = await User.findById(userId)
     if (!user) sendFailResponse('User not found')
-            
+
     if (!user.bankDetails?.accountNumber || !user.bankDetails?.ifscCode) sendFailResponse('Bank details are not added yet')
 
     const accountNumber = decrypt(user.bankDetails.accountNumber, user.bankDetails?.accountIv)
@@ -348,8 +360,8 @@ async function addUserBankDetails(data, userId) {
             ifscCode: encryptedIfscCode.encryptedData,
             ifscIv: encryptedIfscCode.iv,
             userName,
-            branchName:bankInfo?.BRANCH,
-            bankName:bankInfo?.BANK
+            branchName: bankInfo?.BRANCH,
+            bankName: bankInfo?.BANK
         }
     })
     return { message: 'Bank details been added successfully', data: { addedBankDetails: true } }
@@ -379,8 +391,8 @@ async function updateBankDetails(data, userId) {
             ifscCode: encryptedIfscCode.encryptedData,
             ifscIv: encryptedIfscCode.iv,
             userName,
-            branchName:bankInfo?.BRANCH,
-            bankName:bankInfo?.BANK
+            branchName: bankInfo?.BRANCH,
+            bankName: bankInfo?.BANK
         }
     })
     return { message: 'Bank details been updated successfully', data: { updatedBankDetails: true } }
@@ -404,13 +416,13 @@ async function deleteBankDetails(userId) {
 // ----------------------
 
 async function userList(data) {
-    const { 
-        page = 1, 
-        limit = 10, 
-        search = "", 
-        sortBy = "createdAt", 
-        sortOrder = "desc", 
-        filters = {} 
+    const {
+        page = 1,
+        limit = 10,
+        search = "",
+        sortBy = "createdAt",
+        sortOrder = "desc",
+        filters = {}
     } = data;
 
     const skip = (page - 1) * limit;

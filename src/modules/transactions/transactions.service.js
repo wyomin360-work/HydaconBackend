@@ -13,15 +13,15 @@ const { sendFcmNotifications } = require("../../functions/fcm")
 // ----------------------
 // Transaction List
 // ----------------------
-async function listTransactions(data,adminId) {
-    const { 
-        page = 1, 
-        limit = 10, 
-        search = "", 
-        sortBy = "createdAt", 
-        sortOrder = "desc", 
-        filters = {}, 
-        userId,  
+async function listTransactions(data, adminId) {
+    const {
+        page = 1,
+        limit = 10,
+        search = "",
+        sortBy = "createdAt",
+        sortOrder = "desc",
+        filters = {},
+        userId,
     } = data;
 
     let skip = (page - 1) * limit;
@@ -31,7 +31,7 @@ async function listTransactions(data,adminId) {
     // User/Admin access check
     if (userId) {
         query.userId = userId;
-    } else {        
+    } else {
         if (!adminId) sendFailResponse("Access denied");
         const admin = await Admin.findById(adminId);
         if (!admin) sendFailResponse("Access denied");
@@ -177,7 +177,7 @@ async function createTransaction(data, userId) {
     if (user?.fcmTokens?.length && user?.enableNotification) {
         await sendFcmNotifications(user.fcmTokens,
             withdrawNotification.initiated.title,
-            formatNotification(withdrawNotification.initiated.body,
+            formatNotification(withdrawNotification.initiated.body, 
                 { amount: amount })
         )
     }
@@ -217,6 +217,7 @@ async function updateTransaction(data, transactionId) {
         transaction.cancellationReason = data?.cancellationReason
         notificationTitle = withdrawNotification.cancelled.title
         notificationBody = withdrawNotification.cancelled.body
+        // await User.findByIdAndUpdate(transaction?.userId, { $set: { totalPoints: '$totalPoints' + transaction?.po} })
     } else if (status === PAYMENT_STATUS.FAILED) {
 
         if (!data?.failureReason || data?.failureReason?.length < 5)
