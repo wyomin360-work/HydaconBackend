@@ -89,7 +89,7 @@ Login Credentials:
 Email: ${admin.email}
 Password: ${password}
 
-You can log in at: ${process.env.FRONTEND_URL || "http://localhost:3000"}/admin/login
+You can log in at: ${process.env.FRONTEND_URL || "http://localhost:8082"}/admin/login
 
 ⚠️ Please change your password after your first login.
 
