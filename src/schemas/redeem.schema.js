@@ -24,8 +24,18 @@ const redeemSchema = new mongoose.Schema({
         required: true,
         enum: Object.values(REDEEM_STATUS),
     },
-    cardBg:{ type: String }
+    location: {
+        city: { type: String, required: true },
+        state: { type: String, required: true },
+        country: { type: String, required: true },
+    },
+
+    cardBg: { type: String }
 }, { timestamps: true })
+
+redeemSchema.set("toJSON", { virtuals: true });
+redeemSchema.set("toObject", { virtuals: true });
+
 
 redeemSchema.virtual('reward', {
     ref: 'Reward',
