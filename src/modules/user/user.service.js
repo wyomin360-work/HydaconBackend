@@ -103,7 +103,7 @@ async function providerAuth(data) {
 
     const { email, sub: authKey } = providerData
 
-    const userName = isGoogleAuth ? providerData?.name : `${firstName ?? 'User'} ${lastName}`
+    const userName = isGoogleAuth ? providerData?.name : `${firstName ?? 'User'} ${lastName ?? ''}`
 
     const userExist = await User.findOne({ email }).lean()
 
