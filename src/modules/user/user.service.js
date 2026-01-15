@@ -92,7 +92,7 @@ async function providerAuth(data) {
     const isGoogleAuth = provider === AuthTypes.GOOGLE
 
     let providerData = {}
-    
+
     if (isGoogleAuth) {
         providerData = await verifyGoogleToken(idToken)
     } else if (provider === AuthTypes.APPLE) {
@@ -103,7 +103,7 @@ async function providerAuth(data) {
 
     const { email, sub: authKey } = providerData
 
-    const userName = isGoogleAuth ? providerData?.name : `${firstName} ${lastName}`
+    const userName = isGoogleAuth ? providerData?.name : `${firstName ?? 'User'} ${lastName}`
 
     const userExist = await User.findOne({ email }).lean()
 

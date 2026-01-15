@@ -29,8 +29,8 @@ async function listRedeems(data) {
         .populate('reward')
         .populate('product')
         .populate({
-            path:"user",
-            select:"name email"
+            path: "user",
+            select: "name email"
         })
         .skip(skip)
         .limit(limit)
@@ -61,7 +61,7 @@ async function redeemDetails(redeemId) {
 }
 
 async function createRedeem(redeemData) {
-    const { userId, productId, rewardId, rewardUidCode } = redeemData
+    const { userId, productId, rewardId, rewardUidCode, location } = redeemData
     const now = new Date()
     let rewardNotification = APP_NOTIFICATIONS.rewards
     const bgColor =
@@ -86,6 +86,7 @@ async function createRedeem(redeemData) {
         rewardUidCode,
         rewardPoints: reward?.point,
         status: REDEEM_STATUS.SUCCESS,
+        location,
         cardBg: bgColor
     })
     if (!newRedeem) sendFailResponse('reward redeem failed')
@@ -102,12 +103,12 @@ async function createRedeem(redeemData) {
     // save
     await user.save()
     await reward.save()
-    if(user?.fcmTokens?.length && user?.enableNotification){
+    if (user?.fcmTokens?.length && user?.enableNotification) {
         await sendFcmNotifications(user.fcmTokens,
             rewardNotification.qrScanSuccess.title,
             formatNotification(rewardNotification.qrScanSuccess.body,
-                {coins: reward?.point ,productName: product?.name})
-            )
+                { coins: reward?.point, productName: product?.name })
+        )
     }
     return { message: 'redeem successful', data: { redeemSuccessful: true, pointsRewarded: newRedeem?.rewardPoints } }
 }
