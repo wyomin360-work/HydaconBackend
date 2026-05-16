@@ -29,6 +29,11 @@ const userSchema = new mongoose.Schema({
     accountIv: { type: String },
     ifscIv: { type: String },
   },
+  roleId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Role",
+    required: false,
+  },
 }, {
   timestamps: true,
   toJSON: {

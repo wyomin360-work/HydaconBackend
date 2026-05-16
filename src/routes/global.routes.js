@@ -16,6 +16,8 @@ const rewardsPath = require("../modules/rewards/rewards.path");
 const redeemsPath = require("../modules/redeems/redeems.path");
 const verification = require('../middlewares/jwtVerification');
 const transactionsPath = require("../modules/transactions/transactions.path");
+const roleRoutes = require("../modules/roles/role.routes");
+const rolePaths = require("../modules/roles/role.paths");
 
 const globalRoutes = express.Router()
 
@@ -27,5 +29,6 @@ globalRoutes.use(productPaths.root, verification.verifyAdmin, productRoutes)
 globalRoutes.use(rewardsPath.root, verification.verifyAdmin, rewardRoutes)
 globalRoutes.use(redeemsPath.root, redeemRoutes)
 globalRoutes.use(transactionsPath.root, transactionRoutes)
+globalRoutes.use(rolePaths.root, roleRoutes)
 
 module.exports = globalRoutes 
