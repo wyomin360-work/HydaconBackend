@@ -67,7 +67,7 @@ async function createRedeem(redeemData) {
     const bgColor =
         LIGHT_CARD_COLORS[Math.floor(Math.random() * LIGHT_CARD_COLORS.length)];
 
-    const user = await User.findById(userId)
+    const user = await User.findById(userId).populate('roleId')
     if (!user) sendFailResponse('unable to find user')
 
     const product = await Product.findById(productId)
@@ -79,12 +79,16 @@ async function createRedeem(redeemData) {
     if (new Date(reward.expiresAt) < now) sendFailResponse('reward is expired')
     if (reward.isRedeemed) sendFailResponse('reward already redeemed')
 
+    // Weighted Rewards Logic
+    const multiplier = user.roleId?.pointMultiplier || 1
+    const weightedPoints = (reward?.point || 0) * multiplier
+
     const newRedeem = await Redeem.create({
         userId,
         productId,
         rewardId,
         rewardUidCode,
-        rewardPoints: reward?.point,
+        rewardPoints: weightedPoints,
         status: REDEEM_STATUS.SUCCESS,
         location,
         cardBg: bgColor
@@ -98,7 +102,7 @@ async function createRedeem(redeemData) {
     reward.active = false
 
     // update user
-    user.totalPoints += reward?.point
+    user.totalPoints += weightedPoints
 
     // save
     await user.save()
@@ -107,10 +111,10 @@ async function createRedeem(redeemData) {
         await sendFcmNotifications(user.fcmTokens,
             rewardNotification.qrScanSuccess.title,
             formatNotification(rewardNotification.qrScanSuccess.body,
-                { coins: reward?.point, productName: product?.name })
+                { coins: weightedPoints, productName: product?.name })
         )
     }
-    return { message: 'redeem successful', data: { redeemSuccessful: true, pointsRewarded: newRedeem?.rewardPoints } }
+    return { message: 'redeem successful', data: { redeemSuccessful: true, pointsRewarded: weightedPoints } }
 }
 
 async function deleteRedeem(redeemId) {
