@@ -1,29 +1,28 @@
 const AppConfig = require("../../schemas/app-config.schema");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 
-
 async function appConfigurations() {
-    const config = await AppConfig.find().lean()
-    if (!config || !config[0]) sendFailResponse('Failed to get app config')
-    const {lastUpdatedBy,...rest} = config[0]
-    return { appConfig: {...rest}}
+  const config = await AppConfig.find().lean();
+  if (!config || !config[0]) sendFailResponse("Failed to get app config");
+  const { lastUpdatedBy, ...rest } = config[0];
+  return { appConfig: { ...rest } };
 }
 
 async function updateAppConfig(updateData, adminId) {
-    const config = await AppConfig.find().lean()
-    if (!config || !config[0]) sendFailResponse('Failed to get app config')
+  const config = await AppConfig.find().lean();
+  if (!config || !config[0]) sendFailResponse("Failed to get app config");
 
-    updateData.lastUpdated = new Date();
-    updateData.lastUpdatedBy = adminId;
+  updateData.lastUpdated = new Date();
+  updateData.lastUpdatedBy = adminId;
 
-    await AppConfig.findOneAndUpdate({},
-        { $set: updateData },
-        { new: true }
-    );
-    return { message: "App configuration updated", data: { appConfigUpdated: true } }
+  await AppConfig.findOneAndUpdate({}, { $set: updateData }, { new: true });
+  return {
+    message: "App configuration updated",
+    data: { appConfigUpdated: true },
+  };
 }
 
 module.exports = {
-    appConfigurations,
-    updateAppConfig
-}
+  appConfigurations,
+  updateAppConfig,
+};
