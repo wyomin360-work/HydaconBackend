@@ -27,8 +27,8 @@ const options = {
       ...redeemsDoc,
       ...transactionsDoc,
       ...commonDoc,
-      ...appDoc
-    }
+      ...appDoc,
+    },
   },
   apis: [],
 };

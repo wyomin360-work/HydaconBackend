@@ -14,12 +14,12 @@ module.exports = {
                 image: {
                   type: "string",
                   format: "binary",
-                  description: "Image file to upload"
-                }
-              }
-            }
-          }
-        }
+                  description: "Image file to upload",
+                },
+              },
+            },
+          },
+        },
       },
       responses: {
         200: {
@@ -34,20 +34,21 @@ module.exports = {
                     properties: {
                       url: {
                         type: "string",
-                        example: "https://hydaconbackend.onrender.com/api/v1/uploads/images/sample.jpg"
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
+                        example:
+                          "https://hydaconbackend.onrender.com/api/v1/uploads/images/sample.jpg",
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
         400: {
-          description: "No file received"
-        }
-      }
-    }
+          description: "No file received",
+        },
+      },
+    },
   },
 
   "/service/auth/renew-token": {
@@ -64,17 +65,17 @@ module.exports = {
               properties: {
                 currentRefreshToken: {
                   type: "string",
-                  example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
                 },
                 role: {
                   type: "string",
                   enum: ["USER", "ADMIN"],
-                  example: "USER"
-                }
-              }
-            }
-          }
-        }
+                  example: "USER",
+                },
+              },
+            },
+          },
+        },
       },
       responses: {
         200: {
@@ -86,21 +87,21 @@ module.exports = {
                 properties: {
                   accessToken: {
                     type: "string",
-                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
                   },
                   refreshToken: {
                     type: "string",
-                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                  }
-                }
-              }
-            }
-          }
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                  },
+                },
+              },
+            },
+          },
         },
         401: {
-          description: "Invalid or expired token"
-        }
-      }
-    }
-  }
+          description: "Invalid or expired token",
+        },
+      },
+    },
+  },
 };
