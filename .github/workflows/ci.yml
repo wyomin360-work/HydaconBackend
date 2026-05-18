@@ -19,6 +19,6 @@ jobs:
           node-version: 20
           cache: "npm"
       - name: Install Dependencies
-        run: yarn install --frozen-lockfile
+        run: yarn install
       - name: Run Tests
         run: npx jest --ci --runInBand
