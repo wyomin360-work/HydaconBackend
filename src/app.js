@@ -1,4 +1,3 @@
-
 const express = require("express");
 const morgan = require("morgan");
 const pinoHttp = require("pino-http");
@@ -30,42 +29,47 @@ const app = express();
 // }));
 
 // For development, allow all origins. In production, restrict this appropriately using function above.
-app.use(cors({
-  origin: true, 
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+  }),
+);
 
 // app.use(morgan("dev"));
 app.use(express.json());
 
-app.use(pinoHttp({
-    logger: logger.logger, customLogLevel: function (res, err) {
-        //   console.log('customLogLevel called:', { statusCode: res.statusCode, err: !!err });
-        // console.log(err);
-        if (res.statusCode >= 500) return "error"
-        if (res.statusCode >= 400) return "warn"
-        if (res.statusCode >= 200) return "info"
-        return "info"
-    }
-}))
+app.use(
+  pinoHttp({
+    logger: logger.logger,
+    customLogLevel: function (res, err) {
+      //   console.log('customLogLevel called:', { statusCode: res.statusCode, err: !!err });
+      // console.log(err);
+      if (res.statusCode >= 500) return "error";
+      if (res.statusCode >= 400) return "warn";
+      if (res.statusCode >= 200) return "info";
+      return "info";
+    },
+  }),
+);
 
 // Serve Swagger docs
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 app.get("/", (req, res) => {
-    logger.info("Root endpoint hit", { route: '/' })
-    res.send({ message: "Hello World" });
+  logger.info("Root endpoint hit", { route: "/" });
+  res.send({ message: "Hello World" });
 });
 
-app.use('/api/v1', globalRoutes)
+app.use("/api/v1", globalRoutes);
 
 // Handle 404
 app.use((req, res, next) => {
-    next(new AppError(`Can't find ${req.originalUrl}`, 404));
+  next(new AppError(`Can't find ${req.originalUrl}`, 404));
 });
 
 // Global Error Handler
-app.use(errorHandler)
+app.use(errorHandler);
 
 module.exports = app;

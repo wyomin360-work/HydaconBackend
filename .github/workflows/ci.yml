@@ -2,10 +2,10 @@ name: CI
 
 on:
   push:
-    branches: ["main","production","development"]
+    branches: ["main", "production", "development"]
   pull_request:
-    branches: ["main","production","development"]
-  
+    branches: ["main", "production", "development"]
+
 jobs:
   test:
     name: Run Unit Test's
@@ -22,4 +22,3 @@ jobs:
         run: yarn install --frozen-lockfile
       - name: Run Tests
         run: npx jest --ci --runInBand
-  
