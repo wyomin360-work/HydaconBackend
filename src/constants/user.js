@@ -1,9 +1,9 @@
 const AuthTypes = {
-    EMAIL: 'EMAIL',
-    GOOGLE: 'GOOGLE',
-    APPLE: 'APPLE',
-}
+  EMAIL: "EMAIL",
+  GOOGLE: "GOOGLE",
+  APPLE: "APPLE",
+};
 
 module.exports = {
-    AuthTypes
-}
+  AuthTypes,
+};
