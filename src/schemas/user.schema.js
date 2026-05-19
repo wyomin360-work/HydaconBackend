@@ -34,6 +34,34 @@ const userSchema = new mongoose.Schema({
     ref: "Role",
     required: false,
   },
+  kycStatus: {
+    type: String,
+    enum: ['NOT_STARTED', 'PENDING', 'APPROVED', 'REJECTED'],
+    default: 'NOT_STARTED'
+  },
+  kycDocuments: {
+    aadhaar: {
+      originalUrl: { type: String, default: null },
+      compressedUrl: { type: String, default: null },
+      uploadedAt: { type: Date, default: null },
+      status: { type: String, enum: ['PENDING', 'APPROVED', 'REJECTED'], default: 'PENDING' },
+      rejectionReason: { type: String, default: null }
+    },
+    pan: {
+      originalUrl: { type: String, default: null },
+      compressedUrl: { type: String, default: null },
+      uploadedAt: { type: Date, default: null },
+      status: { type: String, enum: ['PENDING', 'APPROVED', 'REJECTED'], default: 'PENDING' },
+      rejectionReason: { type: String, default: null }
+    },
+    shopPhoto: {
+      originalUrl: { type: String, default: null },
+      compressedUrl: { type: String, default: null },
+      uploadedAt: { type: Date, default: null },
+      status: { type: String, enum: ['PENDING', 'APPROVED', 'REJECTED'], default: 'PENDING' },
+      rejectionReason: { type: String, default: null }
+    }
+  }
 }, {
   timestamps: true,
   toJSON: {
