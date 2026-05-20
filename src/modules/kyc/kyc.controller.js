@@ -34,12 +34,14 @@ exports.reviewKycDocument = async (req, res) => {
   const { userId } = req.params;
   const { documentType, status, rejectionReason } = req.body;
 
-  if (!documentType) {
-    return sendFailResponse("documentType is required in request body (aadhaar, pan, shopPhoto)");
-  }
   if (!status) {
-    return sendFailResponse("status is required in request body (APPROVED, REJECTED)");
+    return sendFailResponse("status is required in request body (APPROVED, VERIFIED, REJECTED)");
   }
+
+  if (documentType && !['aadhaar', 'pan', 'shopPhoto'].includes(documentType)) {
+    return sendFailResponse("Invalid documentType. Allowed: aadhaar, pan, shopPhoto");
+  }
+
   if (status === 'REJECTED' && !rejectionReason) {
     return sendFailResponse("rejectionReason is required when status is REJECTED");
   }
