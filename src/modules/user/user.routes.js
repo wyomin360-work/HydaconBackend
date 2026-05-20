@@ -49,13 +49,8 @@ router.patch(
 )
 
 router.get(
-    userPaths.onboardingRoles,
-    handleError(roleController.getPublicRoles)
-)
-
-router.get(
     userPaths.roles,
-    handleError(roleController.getPublicRoles)
+    handleError(roleController.getRoles)
 )
 
 // ---------------------------------------------
