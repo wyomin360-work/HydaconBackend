@@ -4,6 +4,7 @@ module.exports = {
     details: '/details',
     list: '/list',
     roles: '/roles',
+    onboardingRoles: '/onboarding/roles',
     updateProfile:'/profile/update',
     updatePreferences:'/preference/update',
     fcmToken:'/fcm-token',

@@ -24,10 +24,24 @@ async function createRole(roleData) {
 async function getAllRoles(filters = {}) {
   const query = {};
   if (filters.isActive !== undefined) {
-    query.isActive = filters.isActive;
+    query.isActive = filters.isActive === true || filters.isActive === "true";
   }
 
   const roles = await Role.find(query).sort({ createdAt: -1 });
+
+  return {
+    message: "Roles fetched successfully",
+    data: roles,
+  };
+}
+
+async function getPublicRoles() {
+  const roles = await Role.find({
+    isActive: true,
+    name: { $not: /^admin$/i },
+  })
+    .select("name description isActive pointMultiplier")
+    .sort({ createdAt: -1 });
 
   return {
     message: "Roles fetched successfully",
@@ -72,6 +86,7 @@ async function deleteRole(roleId) {
 module.exports = {
   createRole,
   getAllRoles,
+  getPublicRoles,
   updateRole,
   deleteRole,
 };

@@ -6,6 +6,7 @@ const userRegisterRequestType = {
         name: { type: 'string' },
         password: { type: 'string', format: 'password' },
         avatarId: { type: 'string',  minLength: 10},
+        roleId: { type: 'string', minLength: 10 },
     },
     required: ['email', 'password', 'name'],
     additionalProperties: false
