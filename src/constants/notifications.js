@@ -81,6 +81,17 @@ const APP_NOTIFICATIONS = {
       body: 'We’ve added cool new stuff. Update now to experience it!',
     },
   },
+
+  kyc: {
+    approved: {
+      title: 'KYC Verified! 🎉',
+      body: 'Your identity verification is successful. All premium features are now unlocked!',
+    },
+    rejected: {
+      title: 'KYC Verification Failed ⚠️',
+      body: 'Your KYC submission was rejected. Reason: {{reason}}',
+    },
+  },
 };
 
 module.exports ={APP_NOTIFICATIONS}

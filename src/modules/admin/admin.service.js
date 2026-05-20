@@ -55,64 +55,6 @@ async function generateAndSaveToken(payload) {
 //         data: { ...rest, accessToken, refreshToken },
 //     };
 // }
-
-async function registerAdmin(adminData, createdBy) {
-    const { name, email, password } = adminData;
-
-    // 1️⃣ Check if admin already exists
-    const adminExist = await Admin.findOne({ email });
-    if (adminExist) sendFailResponse('The mail id exist');
-
-    // 2️⃣ Create new admin
-    const newAdminData = { name, email, password };
-    if (createdBy) newAdminData.createdBy = createdBy;
-
-    const admin = await Admin.create(newAdminData);
-
-    // 3️⃣ Generate tokens
-    const { refreshToken, accessToken } = await generateAndSaveToken({
-        adminId: admin._id,
-        email: admin.email,
-    });
-
-    const { password: pw, ...rest } = admin.toObject();
-
-    // 4️⃣ Send Welcome Email
-    const mailOptions = {
-        to: admin.email, // the newly registered admin
-        subject: "Welcome to Hydacon Admin Panel 🎉",
-        text: `Hello ${admin.name},
-
-Your admin account has been created successfully.
-
-Login Credentials:
-Email: ${admin.email}
-Password: ${password}
-
-You can log in at: ${process.env.FRONTEND_URL || "http://localhost:8082"}/admin/login
-
-⚠️ Please change your password after your first login.
-
-Regards,
-Hydacon Team`
-    };
-
-    try {
-        const mailSent = await sendMail(mailOptions);
-        if (mailSent) console.log("📨 Welcome mail sent to:", admin.email);
-    } catch (error) {
-        console.error("⚠️ Failed to send welcome email:", error.message);
-    }
-
-    // 5️⃣ Return response
-    return {
-        message: 'Registration successful',
-        data: { ...rest, accessToken, refreshToken },
-    };
-}
-
-module.exports = { registerAdmin };
-
 // ----------------------
 // Register Admin
 // ----------------------

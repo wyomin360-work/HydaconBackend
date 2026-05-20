@@ -2,6 +2,9 @@ const User = require('../../schemas/user.schema');
 const path = require('path');
 const sharp = require('sharp');
 const fs = require('fs');
+const { sendFcmNotifications } = require('../../functions/fcm');
+const { APP_NOTIFICATIONS } = require('../../constants/notifications');
+const { formatNotification } = require('../../utils/heplers');
 
 async function compressImage(filePath) {
   const parsedPath = path.parse(filePath);
@@ -118,12 +121,13 @@ async function getAdminKycList(filters = {}) {
 }
 
 async function reviewKycDocument(userId, { documentType, status, rejectionReason }) {
-  if (!['aadhaar', 'pan', 'shopPhoto'].includes(documentType)) {
-    throw new Error('Invalid document type. Allowed: aadhaar, pan, shopPhoto');
+  let normalizedStatus = status.toUpperCase();
+  if (normalizedStatus === 'VERIFIED') {
+    normalizedStatus = 'APPROVED';
   }
 
-  if (!['APPROVED', 'REJECTED'].includes(status)) {
-    throw new Error('Invalid review status. Allowed: APPROVED, REJECTED');
+  if (!['APPROVED', 'REJECTED'].includes(normalizedStatus)) {
+    throw new Error('Invalid review status. Allowed: APPROVED, VERIFIED, REJECTED');
   }
 
   const user = await User.findById(userId);
@@ -131,38 +135,85 @@ async function reviewKycDocument(userId, { documentType, status, rejectionReason
     throw new Error('User not found');
   }
 
-  if (!user.kycDocuments || !user.kycDocuments[documentType] || !user.kycDocuments[documentType].originalUrl) {
-    throw new Error(`No upload found for ${documentType} to review`);
-  }
+  if (documentType) {
+    if (!['aadhaar', 'pan', 'shopPhoto'].includes(documentType)) {
+      throw new Error('Invalid document type. Allowed: aadhaar, pan, shopPhoto');
+    }
 
-  user.kycDocuments[documentType].status = status;
-  user.kycDocuments[documentType].rejectionReason = status === 'REJECTED' ? rejectionReason : null;
+    if (!user.kycDocuments || !user.kycDocuments[documentType] || !user.kycDocuments[documentType].originalUrl) {
+      throw new Error(`No upload found for ${documentType} to review`);
+    }
 
-  // Recalculate global kycStatus based on individual documents
-  const docs = user.kycDocuments;
-  
-  const anyRejected = 
-    docs.aadhaar?.status === 'REJECTED' || 
-    docs.pan?.status === 'REJECTED' || 
-    docs.shopPhoto?.status === 'REJECTED';
+    user.kycDocuments[documentType].status = normalizedStatus;
+    user.kycDocuments[documentType].rejectionReason = normalizedStatus === 'REJECTED' ? rejectionReason : null;
 
-  const allApproved = 
-    docs.aadhaar?.status === 'APPROVED' && 
-    docs.pan?.status === 'APPROVED' && 
-    docs.shopPhoto?.status === 'APPROVED';
+    // Recalculate global kycStatus based on individual documents
+    const docs = user.kycDocuments;
+    
+    const anyRejected = 
+      docs.aadhaar?.status === 'REJECTED' || 
+      docs.pan?.status === 'REJECTED' || 
+      docs.shopPhoto?.status === 'REJECTED';
 
-  if (anyRejected) {
-    user.kycStatus = 'REJECTED';
-  } else if (allApproved) {
-    user.kycStatus = 'APPROVED';
+    const allApproved = 
+      docs.aadhaar?.status === 'APPROVED' && 
+      docs.pan?.status === 'APPROVED' && 
+      docs.shopPhoto?.status === 'APPROVED';
+
+    if (anyRejected) {
+      user.kycStatus = 'REJECTED';
+    } else if (allApproved) {
+      user.kycStatus = 'APPROVED';
+    } else {
+      user.kycStatus = 'PENDING';
+    }
   } else {
-    user.kycStatus = 'PENDING';
+    // Global review
+    if (!user.kycDocuments) {
+      user.kycDocuments = {
+        aadhaar: {},
+        pan: {},
+        shopPhoto: {}
+      };
+    }
+
+    const docTypes = ['aadhaar', 'pan', 'shopPhoto'];
+    docTypes.forEach(type => {
+      if (!user.kycDocuments[type]) {
+        user.kycDocuments[type] = {};
+      }
+      user.kycDocuments[type].status = normalizedStatus;
+      user.kycDocuments[type].rejectionReason = normalizedStatus === 'REJECTED' ? rejectionReason : null;
+      if (normalizedStatus === 'APPROVED' && !user.kycDocuments[type].uploadedAt) {
+        user.kycDocuments[type].uploadedAt = new Date();
+      }
+    });
+
+    user.kycStatus = normalizedStatus;
   }
 
   await user.save();
 
+  // Trigger notification integration
+  if (user.fcmTokens?.length && user.enableNotification) {
+    try {
+      if (user.kycStatus === 'APPROVED') {
+        const title = APP_NOTIFICATIONS.kyc.approved.title;
+        const body = APP_NOTIFICATIONS.kyc.approved.body;
+        await sendFcmNotifications(user.fcmTokens, title, body);
+      } else if (user.kycStatus === 'REJECTED') {
+        const title = APP_NOTIFICATIONS.kyc.rejected.title;
+        const body = formatNotification(APP_NOTIFICATIONS.kyc.rejected.body, { reason: rejectionReason || 'Information mismatch' });
+        await sendFcmNotifications(user.fcmTokens, title, body);
+      }
+    } catch (notificationErr) {
+      console.error('Error sending KYC status notification:', notificationErr);
+    }
+  }
+
+  const reviewType = documentType ? documentType.toUpperCase() : 'GLOBAL KYC';
   return {
-    message: `Successfully reviewed and set ${documentType.toUpperCase()} status to ${status}`,
+    message: `Successfully reviewed and set ${reviewType} status to ${normalizedStatus}`,
     kycStatus: user.kycStatus,
     documents: user.kycDocuments
   };

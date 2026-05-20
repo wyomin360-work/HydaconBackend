@@ -36,7 +36,7 @@ const userSchema = new mongoose.Schema({
   },
   kycStatus: {
     type: String,
-    enum: ['NOT_STARTED', 'PENDING', 'APPROVED', 'REJECTED'],
+    enum: ['NOT_STARTED', 'PENDING', 'APPROVED', 'VERIFIED', 'REJECTED'],
     default: 'NOT_STARTED'
   },
   kycDocuments: {
