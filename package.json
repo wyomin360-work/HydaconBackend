@@ -5,7 +5,8 @@
   "scripts": {
     "test": "jest",
     "start:dev": "nodemon server.js",
-    "start:prod": "nodemon server.js"
+    "start:prod": "nodemon server.js",
+    "format": "prettier --write ."
   },
   "author": "",
   "license": "ISC",
@@ -40,6 +41,12 @@
   "devDependencies": {
     "jest": "^30.0.5",
     "nodemon": "^3.1.10",
-    "supertest": "^7.1.4"
+    "supertest": "^7.1.4",
+    "prettier": "^3.3.3"
+  },
+  "jest": {
+    "setupFiles": [
+      "<rootDir>/tests/setup.js"
+    ]
   }
 }

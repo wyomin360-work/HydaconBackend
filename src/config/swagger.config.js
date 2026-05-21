@@ -29,8 +29,8 @@ const options = {
       ...transactionsDoc,
       ...commonDoc,
       ...appDoc,
-      ...rolesDoc
-    }
+      ...rolesDoc,
+    },
   },
   apis: [],
 };
