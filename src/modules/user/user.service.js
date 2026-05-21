@@ -14,7 +14,6 @@ const {
   hashData,
   generateRandomPassword,
 } = require("../../utils/heplers");
-const { sendMail } = require("../../functions/nodemailer");
 const {
   ServiceRequestStatus,
   ServiceRequestType,
@@ -28,6 +27,7 @@ const { AuthTypes } = require("../../constants/user");
 const { encrypt, decrypt } = require("../../utils/encryption");
 const { validateIFSC } = require("../../functions/razorPay");
 const { sendFcmNotifications } = require("../../functions/fcm");
+const { sendSms } = require("../../functions/sms");
 
 async function generateAndSaveToken(payload) {
   const accessToken = generateToken(payload);
@@ -56,7 +56,9 @@ async function generateAndSaveToken(payload) {
 // Register User
 // ----------------------
 async function registerUser(userData) {
-  const { name, email, password, avatarId } = userData;
+  console.log("--- DEBUG: Data received in registerUser ---");
+  console.log(JSON.stringify(userData, null, 2));
+  const { name, email, password, avatarId ,phone} = userData;
 
   const userExist = await User.findOne({ email });
   if (userExist) sendFailResponse("The mail id exist");
@@ -64,6 +66,7 @@ async function registerUser(userData) {
   const user = await User.create({
     name,
     email,
+    phone,
     password,
     authType: AuthTypes.EMAIL,
     avatarId,
@@ -199,45 +202,59 @@ async function logout(userId) {
 // ----------------------
 // verify Email
 // ----------------------
+// ----------------------
+// verify Email (FIXED: Handles Email OR Phone independently)
+// ----------------------
 async function verifyEmail(data) {
-  const { email } = data;
-  const user = await User.findOne({ email: email });
+  const { email, phone } = data;
+
+  if (!email && !phone) {
+    sendFailResponse("Please provide an email or phone number.");
+  }
+
+  // 1. Build Query dynamically based on what was provided
+  let user;
+  if (email) {
+    user = await User.findOne({ email: email.toLowerCase() });
+  } else if (phone) {
+    // This uses your existing robust variant builder
+    user = await User.findOne({ phone: { $in: buildPhoneLookupVariants(phone) } });
+  }
+
+  console.log("DEBUG: Looking for user with:", { email, phone });
   if (!user) sendFailResponse("User not found");
 
+  // 2. Prepare OTP logic
   const token = generateBufferToken();
   const otp = generateOtp(4);
+  const otpHash = await hashData(otp);
+  
+  if (!otpHash) sendFailResponse("Failed to process OTP");
 
   await ServiceRequest.deleteMany({
-    userId: user.id,
+    userId: user._id,
     status: ServiceRequestStatus.PENDING,
     requestType: ServiceRequestType.FORGOT_PASSWORD,
   });
 
-  const otpHash = await hashData(otp);
-  if (!otpHash) sendFailResponse("Failed to save otp");
+  await ServiceRequest.create(
+    buildOtpServiceRequest({
+      userId: user._id,
+      token,
+      otpHash,
+      requestType: ServiceRequestType.FORGOT_PASSWORD,
+    }),
+  );
 
-  await ServiceRequest.create({
-    userId: user.id,
-    token,
-    data: otpHash,
-    status: ServiceRequestStatus.PENDING,
-    requestType: ServiceRequestType.FORGOT_PASSWORD,
-    expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-  });
+  const otpMessage = `Greetings from Hydacon, your verification OTP is: ${otp}`;
+  const phoneToUse = phone || user.phone;
+  await deliverOtpViaSms(phoneToUse, otpMessage);
 
-  const mailOptions = {
-    from: process.env.GOOGLE_USER_MAIL,
-    to: user.email,
-    subject: "Otp for forgot password",
-    text: `Greetings from Hydacon , Here is your verification OTP : ${otp}`,
+  return {
+    message: "OTP has been sent to your mobile number.",
+    data: { otpSent: true, token, smsSent: true },
   };
-
-  const mailSent = await sendMail(mailOptions);
-  if (!mailSent) sendFailResponse("Failed to sent mail , try again");
-
-  return { message: `Otp sent to ${email}`, data: { otpSent: true, token } };
 }
-
 // ----------------------
 // verify Otp
 // ----------------------
@@ -250,7 +267,7 @@ async function verifyOtp(data) {
   });
   if (!verifySR) sendFailResponse("Token not found");
 
-  const isExpired = moment().isAfter(verifySR.expiresIn);
+  const isExpired = moment().isAfter(verifySR.expiresAt);
   if (isExpired) {
     verifySR.status = ServiceRequestStatus.EXPIRED;
     await verifySR.save();
@@ -265,6 +282,22 @@ async function verifyOtp(data) {
   });
 
   const user = await User.findOne({ _id: verifySR.userId });
+  if (!user) sendFailResponse("User not found");
+
+  if (verifySR.requestType === ServiceRequestType.SIMPLE_OTP_LOGIN) {
+    const { refreshToken, accessToken } = await generateAndSaveToken({
+      userId: user._id,
+      email: user.email,
+    });
+
+    const { password: pw, ...rest } = attachId(user.toObject());
+
+    return {
+      message: "Logged in successfully",
+      data: { ...rest, accessToken, refreshToken, otpVerified: true },
+    };
+  }
+
   const resetToken = generateBufferToken();
 
   await ServiceRequest.deleteMany({
@@ -328,6 +361,140 @@ async function getUserDetails(userId) {
   }
 
   return { data: returnData };
+}
+
+function buildOtpServiceRequest({
+  userId,
+  token,
+  otpHash,
+  requestType,
+  expiresInMs = 10 * 60 * 1000,
+}) {
+  return {
+    userId,
+    token,
+    data: otpHash,
+    status: ServiceRequestStatus.PENDING,
+    requestType,
+    expiresAt: new Date(Date.now() + expiresInMs),
+  };
+}
+
+function buildPhoneLookupVariants(phone) {
+  const digits = String(phone).replace(/\D/g, "");
+  const variants = new Set([String(phone).trim()]);
+
+  if (digits.length === 10) {
+    variants.add(digits);
+    variants.add(`+91${digits}`);
+    variants.add(`91${digits}`);
+  } else if (digits.length === 12 && digits.startsWith("91")) {
+    variants.add(digits);
+    variants.add(digits.slice(2));
+    variants.add(`+${digits}`);
+  }
+
+  return [...variants];
+}
+
+function getRegisterUrl() {
+  return (
+    process.env.USER_REGISTER_URL ||
+    process.env.MOBILE_APP_REGISTER_URL ||
+    `${process.env.FRONTEND_URL || "https://hydacon.com"}/register`
+  );
+}
+
+function resolveOtpPhone(user, identity, isEmail) {
+  if (!isEmail) {
+    return user?.phone || identity;
+  }
+  if (!user?.phone) {
+    sendFailResponse(
+      "No mobile number on this account. Log in with your phone number instead of email.",
+    );
+  }
+  return user.phone;
+}
+
+/** Sends OTP via Twilio SMS only. */
+async function deliverOtpViaSms(phoneNumber, message) {
+  if (!phoneNumber) {
+    sendFailResponse("A mobile number is required to send OTP.");
+  }
+
+  const smsSent = await sendSms(phoneNumber, message);
+  if (!smsSent) {
+    sendFailResponse(
+      "Failed to send OTP to your mobile number. On Twilio trial, the recipient number must be verified in your Twilio console.",
+    );
+  }
+
+  return { smsSent: true };
+}
+
+// ----------------------
+// ----------------------
+// ----------------------
+
+
+async function simpleLoginWithOtp(data) {
+  const { identity } = data;
+  
+  // 1. Validation
+  if (!identity) {
+    sendFailResponse("Please provide an email or mobile number.");
+  }
+
+  const cleanIdentity = identity.trim();
+  const isEmail = cleanIdentity.includes("@");
+
+  // 2. Lookup
+  const lookupQuery = isEmail
+    ? { email: cleanIdentity.toLowerCase() }
+    : { phone: { $in: buildPhoneLookupVariants(cleanIdentity) } };
+
+  const user = await User.findOne(lookupQuery);
+
+  // 3. User check (This now triggers an error and stops the function if user is null)
+  if (!user) {
+    sendFailResponse("Account not found. Please register to continue.");
+  }
+
+  // 4. Auth type check
+  if (user.authType !== AuthTypes.EMAIL) {
+    sendFailResponse(`This account is linked with ${user.authType}. Please use that method.`);
+  }
+
+  // 6. Manage Service Requests
+  await ServiceRequest.deleteMany({
+    userId: user._id,
+    status: ServiceRequestStatus.PENDING,
+    requestType: ServiceRequestType.SIMPLE_OTP_LOGIN,
+  });
+
+  const token = generateBufferToken();
+  const otp = generateOtp(4);
+  const otpHash = await hashData(otp);
+  if (!otpHash) sendFailResponse("Failed to process OTP");
+
+  await ServiceRequest.create(
+    buildOtpServiceRequest({
+      userId: user._id,
+      token,
+      otpHash,
+      requestType: ServiceRequestType.SIMPLE_OTP_LOGIN,
+    }),
+  );
+
+  const otpMessage = `Your Hydacon login OTP is: ${otp}. Valid for 10 minutes.`;
+  const phoneToUse = resolveOtpPhone(user, cleanIdentity, isEmail);
+  await deliverOtpViaSms(phoneToUse, otpMessage);
+
+  return {
+    message: "OTP has been sent to your mobile number.",
+    data: { otpSent: true, token, smsSent: true },
+  };
 }
 
 // ----------------------
@@ -562,6 +729,7 @@ module.exports = {
   verifyEmail,
   verifyOtp,
   providerAuth,
+  simpleLoginWithOtp,
   getUserDetails,
   updateUserProfile,
   addFcmToken,

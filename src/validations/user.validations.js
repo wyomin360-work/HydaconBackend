@@ -3,10 +3,20 @@ const userRegisterRequestType = {
   properties: {
     email: { type: "string", format: "email" },
     name: { type: "string" },
+    phone:{type:"string",format:"phone"},
     password: { type: "string", format: "password" },
     avatarId: { type: "string", minLength: 10 },
   },
   required: ["email", "password", "name"],
+  additionalProperties: false,
+};
+
+const userOtpLoginRequestType = {
+  type: "object",
+  properties: {
+    identity: { type: "string", minLength: 5 },
+  },
+  required: ["identity"],
   additionalProperties: false,
 };
 
@@ -73,6 +83,7 @@ const userBankDetailsRequestType = {
 };
 
 module.exports = {
+  userOtpLoginRequestType,
   userLoginRequestType,
   userRegisterRequestType,
   userBankDetailsRequestType,

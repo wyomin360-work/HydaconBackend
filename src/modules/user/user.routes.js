@@ -5,6 +5,7 @@ const userPaths = require("./user.paths");
 const verification = require("../../middlewares/jwtVerification");
 const {
   userLoginRequestType,
+  userOtpLoginRequestType,
   userRegisterRequestType,
   userBankDetailsRequestType,
   userProfileUpdateRequestType,
@@ -32,6 +33,7 @@ router.post(
   handleError(controller.providerAuth),
 );
 
+
 router.post(
   userPaths.auth.logout,
   verification.verifyUser,
@@ -45,6 +47,12 @@ router.post(userPaths.auth.verifyOtp, handleError(controller.verifyOtp));
 router.patch(
   userPaths.auth.resetPassword,
   handleError(controller.resetPassword),
+);
+
+router.post(
+  userPaths.auth.simpleLoginWithOtp,
+  validateRequest(userOtpLoginRequestType),
+  handleError(controller.simpleLoginWithOtp),
 );
 
 // ---------------------------------------------

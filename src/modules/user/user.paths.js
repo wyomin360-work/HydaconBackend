@@ -13,6 +13,7 @@ module.exports = {
     verifyOtp: "/auth/verify-otp",
     resetPassword: "/auth/reset-password",
     authenticateWithProvider: "/auth/external-provider",
+    simpleLoginWithOtp: "/auth/simple-login-with-otp",
   },
   bank: {
     details: "/bank-details",
