@@ -1,4 +1,5 @@
 const { REDEEM_STATUS, LIGHT_CARD_COLORS } = require("../../constants/redeem");
+const { KYC_STATUS } = require("../../constants/user");
 const { APP_NOTIFICATIONS } = require("../../constants/notifications");
 const { sendFcmNotifications } = require("../../functions/fcm");
 const Product = require("../../schemas/product.schema");
@@ -69,6 +70,15 @@ async function createRedeem(redeemData) {
 
   const user = await User.findById(userId).populate('roleId');
   if (!user) sendFailResponse("unable to find user");
+
+  // KYC verification gate - block redemption for unverified users
+  const allowedKycStatuses = [KYC_STATUS.APPROVED, KYC_STATUS.VERIFIED];
+  if (!allowedKycStatuses.includes(user.kycStatus)) {
+    sendFailResponse(
+      "KYC verification is required to redeem points. Your current KYC status: " + (user.kycStatus || KYC_STATUS.NOT_STARTED),
+      403
+    );
+  }
 
   const product = await Product.findById(productId);
   if (!product) sendFailResponse("product not found");
