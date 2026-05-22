@@ -51,10 +51,9 @@ async function sendSms(phone, message) {
   const provider = (process.env.SMS_PROVIDER || "twilio").toLowerCase();
   if (provider !== "twilio") {
     console.error(`[SMS] Unsupported SMS_PROVIDER: ${provider}`);
-    return false;
+    return { success: false, error: `Unsupported SMS_PROVIDER: ${provider}` };
   }
-  const result = await sendTwilioSms(phone, message);
-  return result.success;
+  return sendTwilioSms(phone, message);
 }
 
 module.exports = { sendSms, sendTwilioSms, formatPhoneE164, isSmsConfigured };

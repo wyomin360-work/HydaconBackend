@@ -372,6 +372,7 @@ async function findRecentOtpRequest(userId) {
     status: ServiceRequestStatus.PENDING,
     expiresAt: { $gt: new Date() },
     createdAt: { $gt: new Date(Date.now() - OTP_RESEND_COOLDOWN_MS) },
+    smsSentAt: { $exists: true },
   }).sort({ createdAt: -1 });
 }
 
@@ -404,11 +405,19 @@ async function issueOtpForUser({
   const otpHash = await hashData(otp);
   if (!otpHash) sendFailResponse("Failed to process OTP");
 
-  await ServiceRequest.create(
+  const serviceRequest = await ServiceRequest.create(
     buildOtpServiceRequest({ userId, token, otpHash, requestType }),
   );
 
-  await deliverOtpViaSms(phoneNumber, buildMessage(otp));
+  try {
+    await deliverOtpViaSms(phoneNumber, buildMessage(otp));
+    await ServiceRequest.findByIdAndUpdate(serviceRequest._id, {
+      smsSentAt: new Date(),
+    });
+  } catch (error) {
+    await ServiceRequest.findByIdAndDelete(serviceRequest._id);
+    throw error;
+  }
 
   return { token, alreadySent: false };
 }
@@ -456,11 +465,18 @@ async function deliverOtpViaSms(phoneNumber, message) {
     sendFailResponse("A mobile number is required to send OTP.");
   }
 
-  const smsSent = await sendSms(phoneNumber, message);
+  const smsResult = await sendSms(phoneNumber, message);
+  const smsSent =
+    typeof smsResult === "boolean" ? smsResult : Boolean(smsResult?.success);
+
   if (!smsSent) {
-    sendFailResponse(
-      "Failed to send OTP to your mobile number. On Twilio trial, the recipient number must be verified in your Twilio console.",
-    );
+    const error = smsResult?.error || "";
+    const isTwilioAuthError = error.includes("(20003)");
+    const message = isTwilioAuthError
+      ? "Failed to send OTP because Twilio authentication failed. Please check TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in .env."
+      : "Failed to send OTP to your mobile number. If you are using a Twilio trial account, verify the recipient number in your Twilio console.";
+
+    sendFailResponse(message);
   }
 
   return { smsSent: true };
