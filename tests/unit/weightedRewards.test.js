@@ -33,6 +33,7 @@ describe("Weighted Rewards Calculation", () => {
       save: jest.fn(),
       roleId: "role123",
       fcmTokens: [],
+      kycStatus: "APPROVED",
     };
 
     mockProduct = {
