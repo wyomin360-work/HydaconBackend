@@ -13,6 +13,11 @@ exports.getRoles = async (req, res) => {
   return sendResponse(res, response);
 };
 
+exports.getPublicRoles = async (req, res) => {
+  const response = await roleService.getPublicRoles();
+  return sendResponse(res, response);
+};
+
 exports.updateRole = async (req, res) => {
   const { roleId } = req.params;
   const data = req.body;

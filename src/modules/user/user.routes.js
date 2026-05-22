@@ -2,6 +2,7 @@ const express = require("express");
 const { handleError } = require("../../utils/heplers");
 const controller = require("./user.controller");
 const userPaths = require("./user.paths");
+const roleController = require("../roles/role.controller");
 const verification = require("../../middlewares/jwtVerification");
 const {
   userLoginRequestType,
@@ -46,6 +47,11 @@ router.patch(
   userPaths.auth.resetPassword,
   handleError(controller.resetPassword),
 );
+
+router.get(
+    userPaths.roles,
+    handleError(roleController.getRoles)
+)
 
 // ---------------------------------------------
 // User details
