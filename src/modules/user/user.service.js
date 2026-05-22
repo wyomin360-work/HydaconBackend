@@ -221,37 +221,21 @@ async function verifyEmail(data) {
     user = await User.findOne({ phone: { $in: buildPhoneLookupVariants(phone) } });
   }
 
-  console.log("DEBUG: Looking for user with:", { email, phone });
   if (!user) sendFailResponse("User not found");
 
-  // 2. Prepare OTP logic
-  const token = generateBufferToken();
-  const otp = generateOtp(4);
-  const otpHash = await hashData(otp);
-  
-  if (!otpHash) sendFailResponse("Failed to process OTP");
-
-  await ServiceRequest.deleteMany({
+  const phoneToUse = phone || user.phone;
+  const { token, alreadySent } = await issueOtpForUser({
     userId: user._id,
-    status: ServiceRequestStatus.PENDING,
     requestType: ServiceRequestType.FORGOT_PASSWORD,
+    phoneNumber: phoneToUse,
+    buildMessage: (otp) =>
+      `Greetings from Hydacon, your verification OTP is: ${otp}`,
   });
 
-  await ServiceRequest.create(
-    buildOtpServiceRequest({
-      userId: user._id,
-      token,
-      otpHash,
-      requestType: ServiceRequestType.FORGOT_PASSWORD,
-    }),
-  );
-
-  const otpMessage = `Greetings from Hydacon, your verification OTP is: ${otp}`;
-  const phoneToUse = phone || user.phone;
-  await deliverOtpViaSms(phoneToUse, otpMessage);
-
   return {
-    message: "OTP has been sent to your mobile number.",
+    message: alreadySent
+      ? "OTP already sent. Please check your phone or wait 60 seconds."
+      : "OTP has been sent to your mobile number.",
     data: { otpSent: true, token, smsSent: true },
   };
 }
@@ -363,6 +347,8 @@ async function getUserDetails(userId) {
   return { data: returnData };
 }
 
+const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
+
 function buildOtpServiceRequest({
   userId,
   token,
@@ -378,6 +364,53 @@ function buildOtpServiceRequest({
     requestType,
     expiresAt: new Date(Date.now() + expiresInMs),
   };
+}
+
+async function findRecentOtpRequest(userId) {
+  return ServiceRequest.findOne({
+    userId,
+    status: ServiceRequestStatus.PENDING,
+    expiresAt: { $gt: new Date() },
+    createdAt: { $gt: new Date(Date.now() - OTP_RESEND_COOLDOWN_MS) },
+  }).sort({ createdAt: -1 });
+}
+
+/** Creates one OTP request and sends a single SMS (skips resend within cooldown). */
+async function issueOtpForUser({
+  userId,
+  requestType,
+  phoneNumber,
+  buildMessage,
+}) {
+  const recent = await findRecentOtpRequest(userId);
+
+  if (recent) {
+    if (recent.requestType !== requestType) {
+      sendFailResponse(
+        "OTP was already sent recently. Please wait 60 seconds before requesting again.",
+      );
+    }
+    return { token: recent.token, alreadySent: true };
+  }
+
+  await ServiceRequest.deleteMany({
+    userId,
+    status: ServiceRequestStatus.PENDING,
+    requestType,
+  });
+
+  const token = generateBufferToken();
+  const otp = generateOtp(4);
+  const otpHash = await hashData(otp);
+  if (!otpHash) sendFailResponse("Failed to process OTP");
+
+  await ServiceRequest.create(
+    buildOtpServiceRequest({ userId, token, otpHash, requestType }),
+  );
+
+  await deliverOtpViaSms(phoneNumber, buildMessage(otp));
+
+  return { token, alreadySent: false };
 }
 
 function buildPhoneLookupVariants(phone) {
@@ -466,33 +499,19 @@ async function simpleLoginWithOtp(data) {
     sendFailResponse(`This account is linked with ${user.authType}. Please use that method.`);
   }
 
-  // 6. Manage Service Requests
-  await ServiceRequest.deleteMany({
+  const phoneToUse = resolveOtpPhone(user, cleanIdentity, isEmail);
+  const { token, alreadySent } = await issueOtpForUser({
     userId: user._id,
-    status: ServiceRequestStatus.PENDING,
     requestType: ServiceRequestType.SIMPLE_OTP_LOGIN,
+    phoneNumber: phoneToUse,
+    buildMessage: (otp) =>
+      `Your Hydacon login OTP is: ${otp}. Valid for 10 minutes.`,
   });
 
-  const token = generateBufferToken();
-  const otp = generateOtp(4);
-  const otpHash = await hashData(otp);
-  if (!otpHash) sendFailResponse("Failed to process OTP");
-
-  await ServiceRequest.create(
-    buildOtpServiceRequest({
-      userId: user._id,
-      token,
-      otpHash,
-      requestType: ServiceRequestType.SIMPLE_OTP_LOGIN,
-    }),
-  );
-
-  const otpMessage = `Your Hydacon login OTP is: ${otp}. Valid for 10 minutes.`;
-  const phoneToUse = resolveOtpPhone(user, cleanIdentity, isEmail);
-  await deliverOtpViaSms(phoneToUse, otpMessage);
-
   return {
-    message: "OTP has been sent to your mobile number.",
+    message: alreadySent
+      ? "OTP already sent. Please check your phone or wait 60 seconds."
+      : "OTP has been sent to your mobile number.",
     data: { otpSent: true, token, smsSent: true },
   };
 }

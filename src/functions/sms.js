@@ -32,10 +32,12 @@ async function sendTwilioSms(phoneNumber, message) {
   }
 
   try {
+    const to = formatPhoneE164(phoneNumber);
+    console.log("[SMS] Sending OTP to", to);
     const result = await client.messages.create({
       body: message,
       from: twilioPhoneNumber,
-      to: formatPhoneE164(phoneNumber),
+      to,
     });
     return { success: true, sid: result.sid };
   } catch (error) {
