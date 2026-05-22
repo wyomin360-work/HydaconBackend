@@ -58,7 +58,7 @@ async function generateAndSaveToken(payload) {
 async function registerUser(userData) {
   console.log("--- DEBUG: Data received in registerUser ---");
   console.log(JSON.stringify(userData, null, 2));
-  const { name, email, password, avatarId ,phone} = userData;
+  const { name, email, password, avatarId, phone } = userData;
 
   const userExist = await User.findOne({ email });
   if (userExist) sendFailResponse("The mail id exist");
@@ -200,10 +200,7 @@ async function logout(userId) {
 }
 
 // ----------------------
-// verify Email
-// ----------------------
-// ----------------------
-// verify Email (FIXED: Handles Email OR Phone independently)
+// verify Email 
 // ----------------------
 async function verifyEmail(data) {
   const { email, phone } = data;
@@ -489,7 +486,7 @@ async function deliverOtpViaSms(phoneNumber, message) {
 
 async function simpleLoginWithOtp(data) {
   const { identity } = data;
-  
+
   // 1. Validation
   if (!identity) {
     sendFailResponse("Please provide an email or mobile number.");

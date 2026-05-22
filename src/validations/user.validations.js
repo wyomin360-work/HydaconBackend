@@ -3,7 +3,7 @@ const userRegisterRequestType = {
   properties: {
     email: { type: "string", format: "email" },
     name: { type: "string" },
-    phone:{type:"string",format:"phone"},
+    phone: { type: "string", pattern: "^\\+?[0-9]{10,15}$" },
     password: { type: "string", format: "password" },
     avatarId: { type: "string", minLength: 10 },
   },
