@@ -1,14 +1,15 @@
 const userRegisterRequestType = {
-  type: "object",
+  type: 'object',
   properties: {
-    email: { type: "string", format: "email" },
-    name: { type: "string" },
-    password: { type: "string", format: "password" },
-    avatarId: { type: "string", minLength: 10 },
+    email: { type: 'string', format: 'email' },
+    name: { type: 'string' },
+    password: { type: 'string', format: 'password' },
+    avatarId: { type: 'string', minLength: 10 },
+    roleId: { type: 'string', minLength: 10 },
   },
-  required: ["email", "password", "name"],
-  additionalProperties: false,
-};
+  required: ['email', 'password', 'name'],
+  additionalProperties: false
+}
 
 const userLoginRequestType = {
   type: "object",

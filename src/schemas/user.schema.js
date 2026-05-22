@@ -29,24 +29,50 @@ const userSchema = new mongoose.Schema(
       accountIv: { type: String },
       ifscIv: { type: String },
     },
-  roleId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Role",
-    required: false,
-  },
-  },
-  {
-    timestamps: true,
-    toJSON: {
-      virtuals: true,
-      versionKey: false,
-      transform: (doc, ret) => {
-        ret.id = doc._id;
-        return ret;
-      },
+    roleId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Role",
+      required: false,
     },
-  },
-);
+    kycStatus: {
+      type: String,
+      enum: ['NOT_STARTED', 'PENDING', 'APPROVED', 'VERIFIED', 'REJECTED'],
+      default: 'NOT_STARTED'
+    },
+    kycDocuments: {
+      aadhaar: {
+        originalUrl: { type: String, default: null },
+        compressedUrl: { type: String, default: null },
+        uploadedAt: { type: Date, default: null },
+        status: { type: String, enum: ['PENDING', 'APPROVED', 'REJECTED'], default: 'PENDING' },
+        rejectionReason: { type: String, default: null }
+      },
+      pan: {
+        originalUrl: { type: String, default: null },
+        compressedUrl: { type: String, default: null },
+        uploadedAt: { type: Date, default: null },
+        status: { type: String, enum: ['PENDING', 'APPROVED', 'REJECTED'], default: 'PENDING' },
+        rejectionReason: { type: String, default: null }
+      },
+      shopPhoto: {
+        originalUrl: { type: String, default: null },
+        compressedUrl: { type: String, default: null },
+        uploadedAt: { type: Date, default: null },
+        status: { type: String, enum: ['PENDING', 'APPROVED', 'REJECTED'], default: 'PENDING' },
+        rejectionReason: { type: String, default: null }
+      }
+    }
+  }, {
+  timestamps: true,
+  toJSON: {
+    virtuals: true,
+    versionKey: false,
+    transform: (doc, ret) => {
+      ret.id = doc._id
+      return ret
+    }
+  }
+})
 
 userSchema.pre("save", async function (next) {
   if (this.isModified("password")) {
