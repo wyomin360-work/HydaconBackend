@@ -1,5 +1,6 @@
 const User = require("../schemas/user.schema");
 const { KYC_STATUS } = require("../constants/user");
+const { sendFailResponse } = require("../utils/responseHandlers");
 
 const KYC_RESTRICTION_MESSAGES = {
   [KYC_STATUS.NOT_STARTED]:
@@ -10,7 +11,10 @@ const KYC_RESTRICTION_MESSAGES = {
     "Your KYC verification was rejected. Please re-submit your documents to redeem points.",
 };
 
-const ALLOWED_KYC_STATUSES = [KYC_STATUS.APPROVED, KYC_STATUS.VERIFIED];
+const ALLOWED_KYC_STATUSES = new Set([
+  KYC_STATUS.APPROVED,
+  KYC_STATUS.VERIFIED,
+]);
 
 /**
  * Middleware that blocks access for users whose KYC is not verified.
@@ -18,18 +22,19 @@ const ALLOWED_KYC_STATUSES = [KYC_STATUS.APPROVED, KYC_STATUS.VERIFIED];
  */
 async function requireVerifiedKyc(req, res, next) {
   try {
-    const user = await User.findById(req.userId).select("kycStatus");
+    if (!req.userId) {
+      sendFailResponse("User authentication required", 401);
+    }
+
+    const user = await User.findById(req.userId).select("kycStatus").lean();
 
     if (!user) {
-      return res.status(404).json({
-        status: "fail",
-        message: "User not found",
-      });
+      sendFailResponse("User not found", 404);
     }
 
     const kycStatus = user.kycStatus || KYC_STATUS.NOT_STARTED;
 
-    if (ALLOWED_KYC_STATUSES.includes(kycStatus)) {
+    if (ALLOWED_KYC_STATUSES.has(kycStatus)) {
       return next();
     }
 
