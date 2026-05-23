@@ -12,7 +12,22 @@ const KYC_STATUS = {
   REJECTED: "REJECTED",
 };
 
+const KYC_DOCUMENT_STATUS = {
+  PENDING: "PENDING",
+  APPROVED: "APPROVED",
+  REJECTED: "REJECTED",
+};
+
+const KYC_DOCUMENT_TYPES = {
+  AADHAAR: "aadhaar",
+  PAN: "pan",
+  SHOP_PHOTO: "shopPhoto",
+};
+
 module.exports = {
   AuthTypes,
   KYC_STATUS,
+  KYC_DOCUMENT_STATUS,
+  KYC_DOCUMENT_TYPES,
 };
+

@@ -1,6 +1,6 @@
 const { requireVerifiedKyc } = require("../../src/middlewares/kycVerification");
 const User = require("../../src/schemas/user.schema");
-const { KYC_STATUS } = require("../../src/constants/user");
+const { KYC_STATUS } = User;
 const AppError = require("../../src/utils/appError");
 
 jest.mock("../../src/schemas/user.schema");
