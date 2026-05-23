@@ -3,7 +3,6 @@ const redeemsPath = require("./redeems.path");
 const redeemsController = require("./redeems.controller");
 const { handleError } = require("../../utils/heplers");
 const verification = require("../../middlewares/jwtVerification");
-const { requireVerifiedKyc } = require("../../middlewares/kycVerification");
 const validateRequest = require("../../middlewares/validator");
 const {
   listRedeemsRequestType,
@@ -29,7 +28,6 @@ router.get(
 router.post(
   redeemsPath.create,
   verification.verifyUser,
-  requireVerifiedKyc,
   validateRequest(createRedeemRequestType),
   handleError(redeemsController.createRedeem),
 );
