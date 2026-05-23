@@ -41,8 +41,45 @@ async function uploadDocument(userId, documentType, file) {
     throw new Error('No file uploaded');
   }
 
+  // File type & extension validation
+  const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+  const allowedExtensions = ['.jpg', '.jpeg', '.png', '.pdf'];
+  const ext = path.extname(file.originalname || '').toLowerCase();
+
+  if (!allowedMimeTypes.includes(file.mimetype) || !allowedExtensions.includes(ext)) {
+    if (file.path && fs.existsSync(file.path)) {
+      try {
+        fs.unlinkSync(file.path);
+      } catch (err) {
+        console.error('Error deleting invalid file type:', err);
+      }
+    }
+    throw new Error('Invalid file type. Only JPG, JPEG, PNG, and PDF files are allowed.');
+  }
+
+  // File size validation (5MB max)
+  const maxFileSize = 5 * 1024 * 1024;
+  if (file.size > maxFileSize) {
+    if (file.path && fs.existsSync(file.path)) {
+      try {
+        fs.unlinkSync(file.path);
+      } catch (err) {
+        console.error('Error deleting oversized file:', err);
+      }
+    }
+    throw new Error('File size exceeds the 5MB limit.');
+  }
+
   const user = await User.findById(userId);
   if (!user) {
+    // Also delete file if user not found to prevent orphaned files
+    if (file.path && fs.existsSync(file.path)) {
+      try {
+        fs.unlinkSync(file.path);
+      } catch (err) {
+        console.error('Error deleting orphaned file:', err);
+      }
+    }
     throw new Error('User not found');
   }
 
@@ -86,8 +123,21 @@ async function uploadDocument(userId, documentType, file) {
   return {
     message: `${documentType.toUpperCase()} document uploaded successfully`,
     kycStatus: user.kycStatus,
-    documents: user.kycDocuments
+    documents: normalizeKycDocuments(user.kycDocuments),
   };
+}
+
+function normalizeKycDocuments(kycDocuments) {
+  const docTypes = ['aadhaar', 'pan', 'shopPhoto'];
+  const normalized = {};
+
+  docTypes.forEach((type) => {
+    const doc = kycDocuments?.[type];
+    const hasFile = !!(doc?.originalUrl || doc?.compressedUrl);
+    normalized[type] = hasFile ? doc : null;
+  });
+
+  return normalized;
 }
 
 async function getKycStatus(userId) {
@@ -97,11 +147,7 @@ async function getKycStatus(userId) {
   }
   return {
     kycStatus: user.kycStatus || 'NOT_STARTED',
-    kycDocuments: user.kycDocuments || {
-      aadhaar: null,
-      pan: null,
-      shopPhoto: null
-    }
+    kycDocuments: normalizeKycDocuments(user.kycDocuments),
   };
 }
 
