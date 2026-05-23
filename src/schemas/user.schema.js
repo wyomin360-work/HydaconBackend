@@ -1,6 +1,11 @@
 const { default: mongoose } = require("mongoose");
 const { hashData } = require("../utils/heplers");
-const { AuthTypes } = require("../constants/user");
+const {
+  AuthTypes,
+  KYC_STATUS,
+  KYC_DOCUMENT_STATUS,
+  KYC_DOCUMENT_TYPES,
+} = require("../constants/user");
 
 const userSchema = new mongoose.Schema(
   {
@@ -36,43 +41,57 @@ const userSchema = new mongoose.Schema(
     },
     kycStatus: {
       type: String,
-      enum: ['NOT_STARTED', 'PENDING', 'APPROVED', 'VERIFIED', 'REJECTED'],
-      default: 'NOT_STARTED'
+      enum: Object.values(KYC_STATUS),
+      default: KYC_STATUS.NOT_STARTED,
     },
     kycDocuments: {
       aadhaar: {
         originalUrl: { type: String, default: null },
         compressedUrl: { type: String, default: null },
         uploadedAt: { type: Date, default: null },
-        status: { type: String, enum: ['PENDING', 'APPROVED', 'REJECTED'], default: 'PENDING' },
-        rejectionReason: { type: String, default: null }
+        status: {
+          type: String,
+          enum: Object.values(KYC_DOCUMENT_STATUS),
+          default: KYC_DOCUMENT_STATUS.PENDING,
+        },
+        rejectionReason: { type: String, default: null },
       },
       pan: {
         originalUrl: { type: String, default: null },
         compressedUrl: { type: String, default: null },
         uploadedAt: { type: Date, default: null },
-        status: { type: String, enum: ['PENDING', 'APPROVED', 'REJECTED'], default: 'PENDING' },
-        rejectionReason: { type: String, default: null }
+        status: {
+          type: String,
+          enum: Object.values(KYC_DOCUMENT_STATUS),
+          default: KYC_DOCUMENT_STATUS.PENDING,
+        },
+        rejectionReason: { type: String, default: null },
       },
       shopPhoto: {
         originalUrl: { type: String, default: null },
         compressedUrl: { type: String, default: null },
         uploadedAt: { type: Date, default: null },
-        status: { type: String, enum: ['PENDING', 'APPROVED', 'REJECTED'], default: 'PENDING' },
-        rejectionReason: { type: String, default: null }
-      }
-    }
-  }, {
-  timestamps: true,
-  toJSON: {
-    virtuals: true,
-    versionKey: false,
-    transform: (doc, ret) => {
-      ret.id = doc._id
-      return ret
-    }
-  }
-})
+        status: {
+          type: String,
+          enum: Object.values(KYC_DOCUMENT_STATUS),
+          default: KYC_DOCUMENT_STATUS.PENDING,
+        },
+        rejectionReason: { type: String, default: null },
+      },
+    },
+  },
+  {
+    timestamps: true,
+    toJSON: {
+      virtuals: true,
+      versionKey: false,
+      transform: (doc, ret) => {
+        ret.id = doc._id;
+        return ret;
+      },
+    },
+  },
+);
 
 userSchema.pre("save", async function (next) {
   if (this.isModified("password")) {
@@ -82,4 +101,11 @@ userSchema.pre("save", async function (next) {
 });
 
 const User = mongoose.model("User", userSchema);
+
+// Export enums attached to User class/model
+User.AuthTypes = AuthTypes;
+User.KYC_STATUS = KYC_STATUS;
+User.KYC_DOCUMENT_STATUS = KYC_DOCUMENT_STATUS;
+User.KYC_DOCUMENT_TYPES = KYC_DOCUMENT_TYPES;
+
 module.exports = User;
