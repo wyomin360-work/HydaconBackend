@@ -6,6 +6,7 @@ const roleController = require("../roles/role.controller");
 const verification = require("../../middlewares/jwtVerification");
 const {
   userLoginRequestType,
+  userOtpLoginRequestType,
   userRegisterRequestType,
   userBankDetailsRequestType,
   userProfileUpdateRequestType,
@@ -33,6 +34,7 @@ router.post(
   handleError(controller.providerAuth),
 );
 
+
 router.post(
   userPaths.auth.logout,
   verification.verifyUser,
@@ -52,6 +54,11 @@ router.get(
     userPaths.roles,
     handleError(roleController.getRoles)
 )
+router.post(
+  userPaths.auth.simpleLoginWithOtp,
+  validateRequest(userOtpLoginRequestType),
+  handleError(controller.simpleLoginWithOtp),
+);
 
 // ---------------------------------------------
 // User details

@@ -13,8 +13,9 @@ module.exports = {
     logout: '/auth/logout',
     verifyEmail: '/auth/verify-email',
     verifyOtp: '/auth/verify-otp',
-    resetPassword: '/auth/reset-password',
-    authenticateWithProvider: '/auth/external-provider'
+    resetPassword: "/auth/reset-password",
+    authenticateWithProvider: "/auth/external-provider",
+    simpleLoginWithOtp: "/auth/simple-login-with-otp",
   },
   bank: {
     details: '/bank-details',
