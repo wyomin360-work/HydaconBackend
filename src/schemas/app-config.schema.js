@@ -5,7 +5,7 @@ const platformVersionSchema = new mongoose.Schema(
     android: { type: String, default: "1.0.0" },
     ios: { type: String, default: "1.0.0" },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const platformNotesSchema = new mongoose.Schema(
@@ -13,7 +13,7 @@ const platformNotesSchema = new mongoose.Schema(
     android: { type: String },
     ios: { type: String },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const coinSettingsSchema = new mongoose.Schema(
@@ -23,7 +23,7 @@ const coinSettingsSchema = new mongoose.Schema(
     maxWithdrawAmount: { type: Number, default: 1000 },
     referralBonus: { type: Number, default: 50 },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const appConfigSchema = new mongoose.Schema({

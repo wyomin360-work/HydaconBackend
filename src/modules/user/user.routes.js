@@ -34,7 +34,6 @@ router.post(
   handleError(controller.providerAuth),
 );
 
-
 router.post(
   userPaths.auth.logout,
   verification.verifyUser,
@@ -56,10 +55,7 @@ router.post(
   handleError(controller.simpleLoginWithOtp),
 );
 
-router.get(
-    userPaths.roles,
-    handleError(roleController.getRoles)
-)
+router.get(userPaths.roles, handleError(roleController.getRoles));
 
 // ---------------------------------------------
 // User details

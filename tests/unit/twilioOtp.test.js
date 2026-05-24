@@ -7,8 +7,12 @@ describe("Twilio Real SMS Send Test", () => {
     const message = "Greetings from Hydacon! Your verification OTP is: 1234";
 
     console.log(`[TEST] Sending real Twilio SMS to: ${to}`);
-    console.log(`[TEST] Loaded TWILIO_ACCOUNT_SID: ${process.env.TWILIO_ACCOUNT_SID ? process.env.TWILIO_ACCOUNT_SID.substring(0, 7) + "..." : "undefined"}`);
-    console.log(`[TEST] Loaded TWILIO_PHONE_NUMBER: ${process.env.TWILIO_PHONE_NUMBER || "undefined"}`);
+    console.log(
+      `[TEST] Loaded TWILIO_ACCOUNT_SID: ${process.env.TWILIO_ACCOUNT_SID ? process.env.TWILIO_ACCOUNT_SID.substring(0, 7) + "..." : "undefined"}`,
+    );
+    console.log(
+      `[TEST] Loaded TWILIO_PHONE_NUMBER: ${process.env.TWILIO_PHONE_NUMBER || "undefined"}`,
+    );
     const result = await sendSms(to, message);
     console.log("[TEST] Twilio response result:", result);
 

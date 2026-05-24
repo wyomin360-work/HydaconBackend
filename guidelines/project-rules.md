@@ -18,7 +18,9 @@ The project uses a structured, modular design where logic is partitioned based o
 - **`src/validations/`**: AJV JSON validation schemas.
 
 ### Module Directory Pattern
+
 Every new feature or business domain must be added under `src/modules/<feature-name>/`. A standard module should consist of:
+
 1. **`<feature>.paths.js`**: Contains path mapping constants (no hardcoded path strings inside routing files).
 2. **`<feature>.routes.js`**: Defines the Express router mapping endpoints to controller handlers.
 3. **`<feature>.controller.js`**: Parses requests, invokes services, and constructs HTTP responses.
@@ -37,13 +39,16 @@ To maintain consistency and secure route handling:
 - **Error Wrapping**: Always wrap asynchronous controller functions with the `handleError` helper from `src/utils/heplers.js` to ensure unhandled promise rejections are correctly caught and processed by the global error boundary.
 
 ### Example Route Definition:
+
 ```javascript
 const express = require("express");
 const controller = require("./user.controller");
 const userPaths = require("./user.paths");
 const verification = require("../../middlewares/jwtVerification");
 const validateRequest = require("../../middlewares/validator");
-const { userProfileUpdateRequestType } = require("../../validations/user.validations");
+const {
+  userProfileUpdateRequestType,
+} = require("../../validations/user.validations");
 const { handleError } = require("../../utils/heplers");
 
 const router = express.Router();
@@ -89,5 +94,6 @@ To avoid typos and simplify system updates, never use raw hardcoded strings for 
 ## 5. API Documentation
 
 To ensure documentation matches the actual codebase:
+
 - Every new API route or payload alteration **must** be accompanied by an update to the corresponding Swagger documentation file inside `src/docs/`.
 - Ensure headers, query parameters, request body schemas, and possible HTTP status response codes (e.g., `200`, `400`, `401`, `403`, `404`) are defined clearly.

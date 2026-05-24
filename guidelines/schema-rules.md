@@ -11,32 +11,34 @@ To ensure code readability, reusability, and maintenance, any nested objects con
 ### Example:
 
 **❌ Avoid Inline Definitions:**
+
 ```javascript
 const userSchema = new mongoose.Schema({
   bankDetails: {
     accountNumber: { type: String },
     userName: { type: String },
-    ifscCode: { type: String }
-  }
+    ifscCode: { type: String },
+  },
 });
 ```
 
 **✅ Use Explicit Sub-schemas:**
+
 ```javascript
 const bankDetailsSchema = new mongoose.Schema(
   {
     accountNumber: { type: String },
     userName: { type: String },
-    ifscCode: { type: String }
+    ifscCode: { type: String },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const userSchema = new mongoose.Schema({
   bankDetails: {
     type: bankDetailsSchema,
-    default: () => ({})
-  }
+    default: () => ({}),
+  },
 });
 ```
 
@@ -45,6 +47,7 @@ const userSchema = new mongoose.Schema({
 ## 2. Disable Subdocument IDs (`_id: false`)
 
 By default, Mongoose automatically adds an `_id` field to every subdocument.
+
 - For nested configuration, address, status, or details objects that do not need unique database identifiers, **always** specify `{ _id: false }` in the sub-schema options.
 - Only leave `_id` enabled if the subdocument must be individually queried, referenced, or mutated using its ID.
 

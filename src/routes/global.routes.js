@@ -31,7 +31,7 @@ globalRoutes.use(productPaths.root, verification.verifyAdmin, productRoutes);
 globalRoutes.use(rewardsPath.root, verification.verifyAdmin, rewardRoutes);
 globalRoutes.use(redeemsPath.root, redeemRoutes);
 globalRoutes.use(transactionsPath.root, transactionRoutes);
-globalRoutes.use(rolePaths.root, roleRoutes)
-globalRoutes.use(kycPaths.root, kycRoutes)
+globalRoutes.use(rolePaths.root, roleRoutes);
+globalRoutes.use(kycPaths.root, kycRoutes);
 
 module.exports = globalRoutes;

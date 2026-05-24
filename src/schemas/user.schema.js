@@ -19,7 +19,7 @@ const kycDocumentSchema = new mongoose.Schema(
     },
     rejectionReason: { type: String, default: null },
   },
-  { _id: false }
+  { _id: false },
 );
 const bankDetailsSchema = new mongoose.Schema(
   {
@@ -31,7 +31,7 @@ const bankDetailsSchema = new mongoose.Schema(
     accountIv: { type: String },
     ifscIv: { type: String },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const userSchema = new mongoose.Schema(

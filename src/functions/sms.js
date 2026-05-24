@@ -17,12 +17,13 @@ const accountSid = trimEnv(process.env.TWILIO_ACCOUNT_SID);
 const authToken = trimEnv(process.env.TWILIO_AUTH_TOKEN);
 const twilioPhoneNumber = trimEnv(process.env.TWILIO_PHONE_NUMBER);
 
-const client =
-  accountSid && authToken ? twilio(accountSid, authToken) : null;
+const client = accountSid && authToken ? twilio(accountSid, authToken) : null;
 
 function isSmsConfigured() {
   const provider = (process.env.SMS_PROVIDER || "").toLowerCase();
-  return provider === "twilio" && !!(accountSid && authToken && twilioPhoneNumber);
+  return (
+    provider === "twilio" && !!(accountSid && authToken && twilioPhoneNumber)
+  );
 }
 
 async function sendTwilioSms(phoneNumber, message) {
@@ -41,7 +42,9 @@ async function sendTwilioSms(phoneNumber, message) {
     });
     return { success: true, sid: result.sid };
   } catch (error) {
-    const detail = error.code ? `${error.message} (${error.code})` : error.message;
+    const detail = error.code
+      ? `${error.message} (${error.code})`
+      : error.message;
     console.error("[SMS] Twilio error:", detail);
     return { success: false, error: detail };
   }

@@ -30,7 +30,9 @@ const transporter = createTransporter();
 
 const sendMail = async (data) => {
   if (!transporter) {
-    console.error("[Mail] No transport configured (set GOOGLE_APP_PASSWORD or SEND_GRID_API_KEY)");
+    console.error(
+      "[Mail] No transport configured (set GOOGLE_APP_PASSWORD or SEND_GRID_API_KEY)",
+    );
     return false;
   }
 

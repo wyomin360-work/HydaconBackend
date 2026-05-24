@@ -7,7 +7,7 @@ const locationSchema = new mongoose.Schema(
     state: { type: String, required: true },
     country: { type: String, required: true },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const redeemSchema = new mongoose.Schema(

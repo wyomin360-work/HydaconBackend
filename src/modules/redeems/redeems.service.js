@@ -68,15 +68,16 @@ async function createRedeem(redeemData) {
   const bgColor =
     LIGHT_CARD_COLORS[Math.floor(Math.random() * LIGHT_CARD_COLORS.length)];
 
-  const user = await User.findById(userId).populate('roleId');
+  const user = await User.findById(userId).populate("roleId");
   if (!user) sendFailResponse("unable to find user");
 
   // KYC verification gate - block redemption for unverified users
   const allowedKycStatuses = [KYC_STATUS.APPROVED, KYC_STATUS.VERIFIED];
   if (!allowedKycStatuses.includes(user.kycStatus)) {
     sendFailResponse(
-      "KYC verification is required to redeem points. Your current KYC status: " + (user.kycStatus || KYC_STATUS.NOT_STARTED),
-      403
+      "KYC verification is required to redeem points. Your current KYC status: " +
+        (user.kycStatus || KYC_STATUS.NOT_STARTED),
+      403,
     );
   }
 
@@ -92,9 +93,9 @@ async function createRedeem(redeemData) {
   if (new Date(reward.expiresAt) < now) sendFailResponse("reward is expired");
   if (reward.isRedeemed) sendFailResponse("reward already redeemed");
 
-    // Weighted Rewards Logic
-    const multiplier = user.roleId?.pointMultiplier || 1
-    const weightedPoints = (reward?.point || 0) * multiplier
+  // Weighted Rewards Logic
+  const multiplier = user.roleId?.pointMultiplier || 1;
+  const weightedPoints = (reward?.point || 0) * multiplier;
 
   const newRedeem = await Redeem.create({
     userId,
