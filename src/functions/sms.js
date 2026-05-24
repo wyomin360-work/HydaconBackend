@@ -45,7 +45,13 @@ async function sendTwilioSms(phoneNumber, message) {
     const detail = error.code
       ? `${error.message} (${error.code})`
       : error.message;
-    console.error("[SMS] Twilio error:", detail);
+    console.log(
+      " 🔴 [SMS] Twilio error:",
+      detail,
+      accountSid,
+      authToken,
+      twilioPhoneNumber,
+    );
     return { success: false, error: detail };
   }
 }
@@ -53,7 +59,7 @@ async function sendTwilioSms(phoneNumber, message) {
 async function sendSms(phone, message) {
   const provider = (process.env.SMS_PROVIDER || "twilio").toLowerCase();
   if (provider !== "twilio") {
-    console.error(`[SMS] Unsupported SMS_PROVIDER: ${provider}`);
+    console.log(`🔴 [SMS] Unsupported SMS_PROVIDER: ${provider}`);
     return { success: false, error: `Unsupported SMS_PROVIDER: ${provider}` };
   }
   return sendTwilioSms(phone, message);
