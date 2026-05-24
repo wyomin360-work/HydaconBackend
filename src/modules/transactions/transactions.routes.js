@@ -3,6 +3,7 @@ const transactionsPath = require("./transactions.path");
 const verification = require("../../middlewares/jwtVerification");
 const { handleError } = require("../../utils/heplers");
 const controller = require("./transactions.controller");
+const { requireVerifiedKyc } = require("../../middlewares/kycVerification");
 
 const router = express.Router();
 
@@ -21,6 +22,7 @@ router.get(
 router.post(
   transactionsPath.create,
   verification.verifyUser,
+  requireVerifiedKyc,
   handleError(controller.createTransaction),
 );
 

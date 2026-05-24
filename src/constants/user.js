@@ -4,6 +4,30 @@ const AuthTypes = {
   APPLE: "APPLE",
 };
 
+const KYC_STATUS = {
+  NOT_STARTED: "NOT_STARTED",
+  PENDING: "PENDING",
+  APPROVED: "APPROVED",
+  VERIFIED: "VERIFIED",
+  REJECTED: "REJECTED",
+};
+
+const KYC_DOCUMENT_STATUS = {
+  PENDING: "PENDING",
+  APPROVED: "APPROVED",
+  REJECTED: "REJECTED",
+};
+
+const KYC_DOCUMENT_TYPES = {
+  AADHAAR: "aadhaar",
+  PAN: "pan",
+  SHOP_PHOTO: "shopPhoto",
+};
+
 module.exports = {
   AuthTypes,
+  KYC_STATUS,
+  KYC_DOCUMENT_STATUS,
+  KYC_DOCUMENT_TYPES,
 };
+

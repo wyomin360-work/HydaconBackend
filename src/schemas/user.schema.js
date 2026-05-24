@@ -1,6 +1,38 @@
 const { default: mongoose } = require("mongoose");
 const { hashData } = require("../utils/heplers");
-const { AuthTypes } = require("../constants/user");
+const {
+  AuthTypes,
+  KYC_STATUS,
+  KYC_DOCUMENT_STATUS,
+  KYC_DOCUMENT_TYPES,
+} = require("../constants/user");
+
+const kycDocumentSchema = new mongoose.Schema(
+  {
+    originalUrl: { type: String, default: null },
+    compressedUrl: { type: String, default: null },
+    uploadedAt: { type: Date, default: null },
+    status: {
+      type: String,
+      enum: Object.values(KYC_DOCUMENT_STATUS),
+      default: KYC_DOCUMENT_STATUS.PENDING,
+    },
+    rejectionReason: { type: String, default: null },
+  },
+  { _id: false }
+);
+const bankDetailsSchema = new mongoose.Schema(
+  {
+    accountNumber: { type: String },
+    userName: { type: String },
+    ifscCode: { type: String },
+    bankName: { type: String },
+    branchName: { type: String },
+    accountIv: { type: String },
+    ifscIv: { type: String },
+  },
+  { _id: false }
+);
 
 const userSchema = new mongoose.Schema(
   {
@@ -22,19 +54,24 @@ const userSchema = new mongoose.Schema(
       default: AuthTypes.EMAIL,
     },
     bankDetails: {
-      accountNumber: { type: String },
-      userName: { type: String },
-      ifscCode: { type: String },
-      bankName: { type: String },
-      branchName: { type: String },
-      accountIv: { type: String },
-      ifscIv: { type: String },
+      type: bankDetailsSchema,
+      default: () => ({}),
     },
-  roleId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Role",
-    required: false,
-  },
+    roleId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Role",
+      required: false,
+    },
+    kycStatus: {
+      type: String,
+      enum: Object.values(KYC_STATUS),
+      default: KYC_STATUS.NOT_STARTED,
+    },
+    kycDocuments: {
+      aadhaar: { type: kycDocumentSchema, default: () => ({}) },
+      pan: { type: kycDocumentSchema, default: () => ({}) },
+      shopPhoto: { type: kycDocumentSchema, default: () => ({}) },
+    },
   },
   {
     timestamps: true,
@@ -57,4 +94,11 @@ userSchema.pre("save", async function (next) {
 });
 
 const User = mongoose.model("User", userSchema);
+
+// Export enums attached to User class/model
+User.AuthTypes = AuthTypes;
+User.KYC_STATUS = KYC_STATUS;
+User.KYC_DOCUMENT_STATUS = KYC_DOCUMENT_STATUS;
+User.KYC_DOCUMENT_TYPES = KYC_DOCUMENT_TYPES;
+
 module.exports = User;

@@ -58,7 +58,7 @@ async function generateAndSaveToken(payload) {
 async function registerUser(userData) {
   console.log("--- DEBUG: Data received in registerUser ---");
   console.log(JSON.stringify(userData, null, 2));
-  const { name, email, password, avatarId, phone } = userData;
+  const { name, email, password, avatarId, phone, roleId } = userData
 
   const userExist = await User.findOne({ email });
   if (userExist) sendFailResponse("The mail id exist");
@@ -70,14 +70,16 @@ async function registerUser(userData) {
     password,
     authType: AuthTypes.EMAIL,
     avatarId,
-  });
+    roleId
+  })
 
   const { refreshToken, accessToken } = await generateAndSaveToken({
     userId: user?._id,
     email: user?.email,
   });
 
-  const { password: pw, ...rest } = user.toObject();
+  const populatedUser = await User.findById(user._id).populate('roleId');
+  const { password: pw, ...rest } = populatedUser.toObject();
 
   return {
     message: "Registration successful",
@@ -91,8 +93,8 @@ async function registerUser(userData) {
 async function login(userData) {
   const { email, password } = userData;
 
-  const userExist = await User.findOne({ email }).lean();
-  if (!userExist) sendFailResponse("Invalid Data");
+  const userExist = await User.findOne({ email }).populate('roleId').lean()
+  if (!userExist) sendFailResponse('Invalid Data')
 
   if (userExist && userExist.authType !== AuthTypes.EMAIL) {
     sendFailResponse(`This email is already registered with 
@@ -142,7 +144,7 @@ async function providerAuth(data) {
     ? providerData?.name
     : `${firstName ?? "User"} ${lastName ?? ""}`;
 
-  const userExist = await User.findOne({ email }).lean();
+  const userExist = await User.findOne({ email }).populate('roleId').lean()
 
   if (!userExist) {
     const newUser = await User.create({
@@ -152,14 +154,16 @@ async function providerAuth(data) {
       authType: provider,
       name: userName,
       avatarId,
-    });
+      roleId: data.roleId
+    })
 
     const { refreshToken, accessToken } = await generateAndSaveToken({
       userId: newUser?._id,
       email: newUser?.email,
     });
 
-    const cleanData = newUser.toObject({ getters: true, virtuals: false });
+    const populatedNewUser = await User.findById(newUser._id).populate('roleId');
+    const cleanData = populatedNewUser.toObject({ getters: true, virtuals: false });
 
     const { password: pw, ...rest } = attachId(cleanData);
 
@@ -330,9 +334,9 @@ async function updatePassword(data) {
 // User Details
 // ----------------------
 async function getUserDetails(userId) {
-  const user = await User.findById(userId).lean();
-  if (!user) sendFailResponse("User not found");
-  let returnData = {};
+  const user = await User.findById(userId).populate('roleId').lean()
+  if (!user) sendFailResponse('User not found')
+  let returnData = {}
 
   if (user.bankDetails) {
     const { bankDetails, ...rest } = attachId(user);

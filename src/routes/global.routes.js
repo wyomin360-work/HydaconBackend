@@ -18,6 +18,8 @@ const verification = require("../middlewares/jwtVerification");
 const transactionsPath = require("../modules/transactions/transactions.path");
 const roleRoutes = require("../modules/roles/role.routes");
 const rolePaths = require("../modules/roles/role.paths");
+const kycRoutes = require("../modules/kyc/kyc.routes");
+const kycPaths = require("../modules/kyc/kyc.paths");
 
 const globalRoutes = express.Router();
 
@@ -30,5 +32,6 @@ globalRoutes.use(rewardsPath.root, verification.verifyAdmin, rewardRoutes);
 globalRoutes.use(redeemsPath.root, redeemRoutes);
 globalRoutes.use(transactionsPath.root, transactionRoutes);
 globalRoutes.use(rolePaths.root, roleRoutes)
+globalRoutes.use(kycPaths.root, kycRoutes)
 
 module.exports = globalRoutes;
