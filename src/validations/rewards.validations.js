@@ -1,3 +1,5 @@
+const { search } = require("../modules/rewards/rewards.routes");
+
 const createRewardRequestType = {
   type: "object",
   properties: {

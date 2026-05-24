@@ -40,9 +40,6 @@ const srSchema = new mongoose.Schema(
     usedAt: {
       type: Date,
     },
-    smsSentAt: {
-      type: Date,
-    },
   },
   {
     timestamps: true,

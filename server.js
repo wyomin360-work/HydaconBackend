@@ -1,7 +1,5 @@
 require("dotenv").config();
 
-const { isSmsConfigured } = require("./src/functions/sms");
-
 const app = require("./src/app");
 const Database = require("./src/config/mongodb.config");
 const { logger } = require("./src/config/pino.config");
@@ -33,11 +31,6 @@ const startServer = async () => {
     await db.connectDb();
     app.listen(PORT, () => {
       console.log(`🚀 Server is running on port ${PORT}`);
-      if (!isSmsConfigured()) {
-        console.warn(
-          "⚠️  SMS not configured — mobile OTP will fail until you set SMS_PROVIDER and API keys in .env (see Fast2SMS / MSG91 / Twilio)",
-        );
-      }
     });
   } catch (error) {
     console.error("❌ Failed to start server:", error);

@@ -2,7 +2,7 @@ const bcrypt = require("bcrypt");
 const { randomBytes } = require("crypto");
 const jwt = require("jsonwebtoken");
 
-// const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET;
 
 const handleError = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -28,14 +28,13 @@ const compareHash = async (rawData, hashedData) => {
 };
 
 // JWT
-
 const generateToken = (payload, expiresIn = "1d") => {
-  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn });
+  return jwt.sign(payload, JWT_SECRET, { expiresIn });
 };
 
 const verifyToken = (token) => {
   try {
-    const verified = jwt.verify(token, process.env.JWT_SECRET);
+    const verified = jwt.verify(token, JWT_SECRET);
     return verified;
   } catch (err) {
     return false;
