@@ -1,6 +1,15 @@
 const { default: mongoose } = require("mongoose");
 const { REDEEM_STATUS } = require("../constants/redeem");
 
+const locationSchema = new mongoose.Schema(
+  {
+    city: { type: String, required: true },
+    state: { type: String, required: true },
+    country: { type: String, required: true },
+  },
+  { _id: false }
+);
+
 const redeemSchema = new mongoose.Schema(
   {
     userId: {
@@ -26,9 +35,8 @@ const redeemSchema = new mongoose.Schema(
       enum: Object.values(REDEEM_STATUS),
     },
     location: {
-      city: { type: String, required: true },
-      state: { type: String, required: true },
-      country: { type: String, required: true },
+      type: locationSchema,
+      required: true,
     },
 
     cardBg: { type: String },
