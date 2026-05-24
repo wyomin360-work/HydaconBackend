@@ -18,7 +18,7 @@ describe("User Profile Completion Percentage Calculation", () => {
     jest.clearAllMocks();
   });
 
-  it("should calculate 100% completion for Contractor (6 fields filled)", async () => {
+  it("should calculate 100% completion for Contractor (10 fields filled)", async () => {
     mockRoleFindById.mockResolvedValue({
       name: "Contractor"
     });
@@ -31,6 +31,14 @@ describe("User Profile Completion Percentage Calculation", () => {
       experience: 10,
       areaOfOperation: "Zone A",
       kycStatus: "PENDING",
+      email: "contractor@example.com",
+      mobileNumber: "1234567890",
+      bankDetails: {
+        accountNumber: "123456789",
+        ifscCode: "ABCD0123456",
+        userName: "John Contractor"
+      },
+      agreedToTerms: true,
       shopName: null // Shop name is N/A for Contractor
     });
 
@@ -39,7 +47,7 @@ describe("User Profile Completion Percentage Calculation", () => {
     expect(user.profileCompletionPercentage).toBe(100);
   });
 
-  it("should calculate 100% completion for Retailer (7 fields filled, including shopName)", async () => {
+  it("should calculate 100% completion for Retailer (11 fields filled, including shopName)", async () => {
     mockRoleFindById.mockResolvedValue({
       name: "Retailer"
     });
@@ -52,6 +60,14 @@ describe("User Profile Completion Percentage Calculation", () => {
       experience: 15,
       areaOfOperation: "Zone B",
       kycStatus: "APPROVED",
+      email: "retailer@example.com",
+      mobileNumber: "9876543210",
+      bankDetails: {
+        accountNumber: "987654321",
+        ifscCode: "XYZB0123456",
+        userName: "Shopkeeper Joe"
+      },
+      agreedToTerms: true,
       shopName: "Joe's hardware store"
     });
 
@@ -73,13 +89,21 @@ describe("User Profile Completion Percentage Calculation", () => {
       experience: 15,
       areaOfOperation: "Zone B",
       kycStatus: "APPROVED",
+      email: "retailer@example.com",
+      mobileNumber: "9876543210",
+      bankDetails: {
+        accountNumber: "987654321",
+        ifscCode: "XYZB0123456",
+        userName: "Shopkeeper Joe"
+      },
+      agreedToTerms: true,
       shopName: null // Missing shopName
     });
 
     await user.calculateCompletionPercentage();
 
-    // 6 out of 7 fields filled => 6/7 = 86%
-    expect(user.profileCompletionPercentage).toBe(86);
+    // 10 out of 11 fields filled => 10/11 = 91%
+    expect(user.profileCompletionPercentage).toBe(91);
   });
 
   it("should calculate correct percentage for partially filled profile", async () => {
@@ -94,12 +118,16 @@ describe("User Profile Completion Percentage Calculation", () => {
       profilePhoto: null, // missing
       experience: 4,
       areaOfOperation: "Zone C",
-      kycStatus: "NOT_STARTED" // counts as missing
+      kycStatus: "NOT_STARTED", // counts as missing
+      email: null, // missing
+      mobileNumber: null, // missing
+      bankDetails: null, // missing
+      agreedToTerms: false // missing
     });
 
     await user.calculateCompletionPercentage();
 
-    // Fields filled: name, experience, areaOfOperation (3 out of 6) => 50%
-    expect(user.profileCompletionPercentage).toBe(50);
+    // Fields filled: name, experience, areaOfOperation (3 out of 10) => 30%
+    expect(user.profileCompletionPercentage).toBe(30);
   });
 });
