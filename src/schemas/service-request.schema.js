@@ -15,6 +15,10 @@ const srSchema = new mongoose.Schema(
       type: String,
       required: false,
     },
+    payload: {
+      type: mongoose.Schema.Types.Mixed,
+      required: false,
+    },
     token: {
       type: String,
       required: true,
@@ -38,6 +42,9 @@ const srSchema = new mongoose.Schema(
       type: Date,
     },
     usedAt: {
+      type: Date,
+    },
+    smsSentAt: {
       type: Date,
     },
   },

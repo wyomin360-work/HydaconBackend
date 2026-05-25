@@ -1,6 +1,8 @@
 const User = require("../../schemas/user.schema");
 const ServiceRequest = require("../../schemas/service-request.schema");
 const RefreshToken = require("../../schemas/refreshtoken.schema");
+const AuditLog = require("../../schemas/audit-log.schema");
+const mongoose = require("mongoose");
 const {
   sendFailResponse,
   sendResponse,
@@ -355,21 +357,24 @@ function buildOtpServiceRequest({
   token,
   otpHash,
   requestType,
+  payload,
   expiresInMs = 10 * 60 * 1000,
 }) {
   return {
     userId,
     token,
     data: otpHash,
+    payload,
     status: ServiceRequestStatus.PENDING,
     requestType,
     expiresAt: new Date(Date.now() + expiresInMs),
   };
 }
 
-async function findRecentOtpRequest(userId) {
+async function findRecentOtpRequest(userId, requestType) {
   return ServiceRequest.findOne({
     userId,
+    requestType,
     status: ServiceRequestStatus.PENDING,
     expiresAt: { $gt: new Date() },
     createdAt: { $gt: new Date(Date.now() - OTP_RESEND_COOLDOWN_MS) },
@@ -383,15 +388,11 @@ async function issueOtpForUser({
   requestType,
   phoneNumber,
   buildMessage,
+  payload,
 }) {
-  const recent = await findRecentOtpRequest(userId);
+  const recent = await findRecentOtpRequest(userId, requestType);
 
   if (recent) {
-    if (recent.requestType !== requestType) {
-      sendFailResponse(
-        "OTP was already sent recently. Please wait 60 seconds before requesting again.",
-      );
-    }
     return { token: recent.token, alreadySent: true };
   }
 
@@ -407,7 +408,7 @@ async function issueOtpForUser({
   if (!otpHash) sendFailResponse("Failed to process OTP");
 
   const serviceRequest = await ServiceRequest.create(
-    buildOtpServiceRequest({ userId, token, otpHash, requestType }),
+    buildOtpServiceRequest({ userId, token, otpHash, requestType, payload }),
   );
 
   try {
@@ -438,6 +439,305 @@ function buildPhoneLookupVariants(phone) {
   }
 
   return [...variants];
+}
+
+function normalizePhone(phone) {
+  return String(phone || "").trim();
+}
+
+function requirePhoneNumber(phone) {
+  const normalizedPhone = normalizePhone(phone);
+  if (!normalizedPhone) sendFailResponse("New mobile number is required.");
+  return normalizedPhone;
+}
+
+function buildRequestTypeQuery(requestType, allowedRequestTypes) {
+  const requestTypes = allowedRequestTypes || [requestType];
+  return requestTypes.length === 1 ? requestTypes[0] : { $in: requestTypes };
+}
+
+async function consumeOtpRequest({
+  token,
+  otp,
+  userId,
+  requestType,
+  allowedRequestTypes,
+}) {
+  const cleanToken = String(token || "").trim();
+  const cleanOtp = String(otp || "").trim();
+  const requestTypeQuery = buildRequestTypeQuery(requestType, allowedRequestTypes);
+
+  const verifySR = await ServiceRequest.findOne({
+    token: cleanToken,
+    userId,
+    requestType: requestTypeQuery,
+    status: ServiceRequestStatus.PENDING,
+  });
+
+  if (!verifySR) {
+    const tokenRequest = await ServiceRequest.findOne({
+      token: cleanToken,
+      userId,
+    }).sort({ createdAt: -1 });
+
+    if (!tokenRequest) {
+      sendFailResponse("OTP token not found. Please request a new OTP.");
+    }
+
+    const validRequestTypes = allowedRequestTypes || [requestType];
+    if (!validRequestTypes.includes(tokenRequest.requestType)) {
+      sendFailResponse("This OTP token is not valid for this verification step.");
+    }
+
+    if (tokenRequest.status === ServiceRequestStatus.USED) {
+      sendFailResponse("OTP already verified. Please continue to the next step.");
+    }
+
+    if (tokenRequest.status === ServiceRequestStatus.EXPIRED) {
+      sendFailResponse("Otp expired");
+    }
+
+    sendFailResponse("OTP token not found. Please request a new OTP.");
+  }
+
+  const isExpired = moment().isAfter(verifySR.expiresAt);
+  if (isExpired) {
+    verifySR.status = ServiceRequestStatus.EXPIRED;
+    await verifySR.save();
+    sendFailResponse("Otp expired");
+  }
+
+  const isCorrectOtp = await compareHash(cleanOtp, verifySR.data);
+  if (!isCorrectOtp) sendFailResponse("Otp mismatch");
+
+  verifySR.status = ServiceRequestStatus.USED;
+  verifySR.usedAt = new Date();
+  await verifySR.save();
+
+  return verifySR;
+}
+
+async function getValidOldPhoneVerification(userId, oldVerificationToken, session) {
+  const query = {
+    userId,
+    requestType: ServiceRequestType.CHANGE_PHONE_OLD_VERIFIED,
+    status: ServiceRequestStatus.PENDING,
+    expiresAt: { $gt: new Date() },
+  };
+
+  if (oldVerificationToken) {
+    query.token = oldVerificationToken;
+  }
+
+  const oldVerification = await ServiceRequest.findOne(query)
+    .sort({ createdAt: -1 })
+    .session(session || null);
+
+  if (!oldVerification) {
+    sendFailResponse("Please verify your current mobile number first.");
+  }
+
+  return oldVerification;
+}
+
+async function verifyOldNumber(data, userId) {
+  const user = await User.findById(userId);
+  if (!user) sendFailResponse("User not found");
+  if (!user.phone) {
+    sendFailResponse("No mobile number is linked to this account.");
+  }
+
+  const { otp, token } = data;
+
+  if (Boolean(otp) !== Boolean(token)) {
+    sendFailResponse("Both OTP and token are required to verify current mobile number.");
+  }
+
+  if (otp && token) {
+    await consumeOtpRequest({
+      token,
+      otp,
+      userId,
+      requestType: ServiceRequestType.CHANGE_PHONE_OLD_OTP,
+      allowedRequestTypes: [
+        ServiceRequestType.CHANGE_PHONE_OLD_OTP,
+        ServiceRequestType.SIMPLE_OTP_LOGIN,
+      ],
+    });
+
+    await ServiceRequest.deleteMany({
+      userId,
+      status: ServiceRequestStatus.PENDING,
+      requestType: ServiceRequestType.CHANGE_PHONE_OLD_VERIFIED,
+    });
+
+    const oldVerificationToken = generateBufferToken();
+    await ServiceRequest.create({
+      userId,
+      token: oldVerificationToken,
+      requestType: ServiceRequestType.CHANGE_PHONE_OLD_VERIFIED,
+      status: ServiceRequestStatus.PENDING,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      payload: { phone: user.phone },
+    });
+
+    return {
+      message: "Current mobile number verified",
+      data: { oldNumberVerified: true, token: oldVerificationToken },
+    };
+  }
+
+  const otpResponse = await issueOtpForUser({
+    userId: user._id,
+    requestType: ServiceRequestType.CHANGE_PHONE_OLD_OTP,
+    phoneNumber: user.phone,
+    buildMessage: (otp) =>
+      `Your Hydacon mobile number change OTP is: ${otp}. Valid for 10 minutes.`,
+  });
+
+  return {
+    message: otpResponse.alreadySent
+      ? "OTP already sent. Please check your phone or wait 60 seconds."
+      : "OTP has been sent to your current mobile number.",
+    data: { otpSent: true, token: otpResponse.token, smsSent: true },
+  };
+}
+
+async function verifyNewNumber(data, userId, ipAddress) {
+  const { phone, otp, token, oldVerificationToken } = data;
+  const user = await User.findById(userId);
+  if (!user) sendFailResponse("User not found");
+
+  if (Boolean(otp) !== Boolean(token)) {
+    sendFailResponse("Both OTP and token are required to verify new mobile number.");
+  }
+
+  console.log("VerifyNewNumber received:", { phone, token, oldVerificationToken });
+
+  if (!oldVerificationToken) {
+     // Check if your new fallback logic successfully finds the previous session
+     const latestOldVerify = await ServiceRequest.findOne({
+        userId,
+        requestType: ServiceRequestType.CHANGE_PHONE_OLD_VERIFIED,
+        status: ServiceRequestStatus.PENDING
+     }).sort({ createdAt: -1 });
+     
+     console.log("Fallback search for oldVerification:", latestOldVerify ? "Found" : "Not Found");
+  }
+  if (otp && token) {
+    const newOtpRequest = await consumeOtpRequest({
+      token,
+      otp,
+      userId,
+      requestType: ServiceRequestType.CHANGE_PHONE_NEW_OTP,
+    });
+
+    const newPhone = newOtpRequest.payload?.phone;
+    const response = await finalizeNumberChange({
+      userId,
+      newPhone,
+      ipAddress,
+      oldVerificationToken: newOtpRequest.payload?.oldVerificationToken,
+    });
+
+    return response;
+  }
+
+  const newPhone = requirePhoneNumber(phone);
+
+  let oldVerification = null;
+  if (user.phone) {
+    oldVerification = await getValidOldPhoneVerification(userId, oldVerificationToken);
+  }
+
+  if (user.phone && buildPhoneLookupVariants(newPhone).includes(user.phone)) {
+    sendFailResponse("New mobile number must be different from the current number.");
+  }
+
+  const otpResponse = await issueOtpForUser({
+    userId: user._id,
+    requestType: ServiceRequestType.CHANGE_PHONE_NEW_OTP,
+    phoneNumber: newPhone,
+    payload: {
+      phone: newPhone,
+      oldVerificationToken: oldVerification?.token || oldVerificationToken,
+    },
+    buildMessage: (otp) =>
+      `Your Hydacon new mobile number OTP is: ${otp}. Valid for 10 minutes.`,
+  });
+
+  return {
+    message: otpResponse.alreadySent
+      ? "OTP already sent. Please check your phone or wait 60 seconds."
+      : "OTP has been sent to your new mobile number.",
+    data: { otpSent: true, token: otpResponse.token, smsSent: true },
+  };
+}
+
+async function finalizeNumberChange({
+  userId,
+  newPhone,
+  ipAddress,
+  oldVerificationToken,
+}) {
+  const normalizedPhone = requirePhoneNumber(newPhone);
+  const session = await mongoose.startSession();
+
+  try {
+    let updatedUser;
+
+    await session.withTransaction(async () => {
+      const user = await User.findById(userId).session(session);
+      if (!user) sendFailResponse("User not found");
+
+      if (user.phone) {
+        await getValidOldPhoneVerification(userId, oldVerificationToken, session);
+      }
+
+      const oldPhone = user.phone || null;
+      user.phone = normalizedPhone;
+      updatedUser = await user.save({ session });
+
+      await AuditLog.create(
+        [
+          {
+            user_id: user._id,
+            old_value: oldPhone,
+            new_value: normalizedPhone,
+            timestamp: new Date(),
+            ip_address: ipAddress || null,
+          },
+        ],
+        { session },
+      );
+
+      await ServiceRequest.updateMany(
+        {
+          userId,
+          requestType: {
+            $in: [
+              ServiceRequestType.CHANGE_PHONE_OLD_VERIFIED,
+              ServiceRequestType.CHANGE_PHONE_NEW_OTP,
+            ],
+          },
+          status: ServiceRequestStatus.PENDING,
+        },
+        { status: ServiceRequestStatus.USED, usedAt: new Date() },
+        { session },
+      );
+    });
+
+    return {
+      message: "Mobile number updated successfully",
+      data: {
+        phoneUpdated: true,
+        userId: updatedUser._id,
+        phone: updatedUser.phone,
+      },
+    };
+  } finally {
+    await session.endSession();
+  }
 }
 
 function getRegisterUrl() {
@@ -764,6 +1064,9 @@ module.exports = {
   updatePassword,
   verifyEmail,
   verifyOtp,
+  verifyOldNumber,
+  verifyNewNumber,
+  finalizeNumberChange,
   providerAuth,
   simpleLoginWithOtp,
   getUserDetails,

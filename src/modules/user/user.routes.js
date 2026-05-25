@@ -11,6 +11,8 @@ const {
   userBankDetailsRequestType,
   userProfileUpdateRequestType,
   userFcmRequestType,
+  verifyOldNumberRequestType,
+  verifyNewNumberRequestType,
 } = require("../../validations/user.validations");
 const validateRequest = require("../../middlewares/validator");
 
@@ -86,6 +88,20 @@ router.post(
   verification.verifyUser,
   validateRequest(userFcmRequestType),
   handleError(controller.addFcmToken),
+);
+
+router.post(
+  userPaths.phone.verifyOldNumber,
+  verification.verifyUser,
+  validateRequest(verifyOldNumberRequestType),
+  handleError(controller.verifyOldNumber),
+);
+
+router.post(
+  userPaths.phone.verifyNewNumber,
+  verification.verifyUser,
+  validateRequest(verifyNewNumberRequestType),
+  handleError(controller.verifyNewNumber),
 );
 
 // ---------------------------------------------
