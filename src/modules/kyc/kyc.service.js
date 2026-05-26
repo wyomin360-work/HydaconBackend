@@ -192,7 +192,20 @@ async function getAdminKycList(filters = {}) {
     .select('name email kycStatus kycDocuments updatedAt')
     .sort({ updatedAt: -1 });
 
-  return users;
+  const allCount = await User.countDocuments({ kycStatus: { $ne: 'NOT_STARTED' } });
+  const pendingCount = await User.countDocuments({ kycStatus: 'PENDING' });
+  const approvedCount = await User.countDocuments({ kycStatus: { $in: ['APPROVED', 'VERIFIED'] } });
+  const rejectedCount = await User.countDocuments({ kycStatus: 'REJECTED' });
+
+  return {
+    users,
+    counts: {
+      all: allCount,
+      PENDING: pendingCount,
+      APPROVED: approvedCount,
+      REJECTED: rejectedCount
+    }
+  };
 }
 
 async function reviewKycDocument(userId, { documentType, status, rejectionReason }) {
