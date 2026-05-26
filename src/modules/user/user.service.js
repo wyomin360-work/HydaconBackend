@@ -401,6 +401,7 @@ async function issueOtpForUser({
   userId,
   requestType,
   phoneNumber,
+  payload,
   buildMessage,
   payload,
 }) {

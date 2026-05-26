@@ -53,6 +53,17 @@ app.use(
   }),
 );
 
+app.use((req, res, next) => {
+  if (req.path.includes('/api/v1/user/auth/simple-login-with-otp')) {
+    console.log("--- DEBUG LOG ---");
+    console.log("Method:", req.method);
+    console.log("Path:", req.path);
+    console.log("Body Content:", JSON.stringify(req.body, null, 2));
+    console.log("-----------------");
+  }
+  next();
+});
+
 // Serve Swagger docs
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
