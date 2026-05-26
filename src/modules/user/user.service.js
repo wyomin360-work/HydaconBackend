@@ -399,9 +399,10 @@ async function issueOtpForUser({
   userId,
   requestType,
   phoneNumber,
+  payload,
   buildMessage,
 }) {
-  const recent = await findRecentOtpRequest(userId);
+  const recent = await findRecentOtpRequest(userId, requestType);
 
   if (recent) {
     if (recent.requestType !== requestType) {
