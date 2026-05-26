@@ -6,6 +6,7 @@ const {
   KYC_DOCUMENT_STATUS,
   KYC_DOCUMENT_TYPES,
 } = require("../constants/user");
+const { DEFAULT_PHONE_COUNTRY_CODE } = require("../constants/common");
 
 const kycDocumentSchema = new mongoose.Schema(
   {
@@ -39,6 +40,7 @@ const userSchema = new mongoose.Schema(
     name: { type: String, required: false },
     email: { type: String, required: false, unique: true, lowercase: true },
     phone: { type: String, default: null },
+    phoneCountryCode: { type: String, default: DEFAULT_PHONE_COUNTRY_CODE },
     password: { type: String, required: true },
     fcmTokens: { type: [String], default: [] },
     totalPoints: { type: Number, default: 0 },

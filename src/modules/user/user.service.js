@@ -13,6 +13,7 @@ const {
   generateBufferToken,
   hashData,
   generateRandomPassword,
+  buildPhoneLookupVariants,
 } = require("../../utils/heplers");
 const {
   ServiceRequestStatus,
@@ -255,21 +256,19 @@ async function verifyOtp(data) {
     token,
     status: ServiceRequestStatus.PENDING,
   });
+
   if (!verifySR) sendFailResponse("Token not found");
 
   const isExpired = moment().isAfter(verifySR.expiresAt);
   if (isExpired) {
-    verifySR.status = ServiceRequestStatus.EXPIRED;
-    await verifySR.save();
+    await ServiceRequest.findByIdAndDelete(verifySR._id);
     sendFailResponse("Otp expired");
   }
 
   const isCorrectOtp = await compareHash(otp, verifySR.data);
   if (!isCorrectOtp) sendFailResponse("Otp mismatch");
 
-  await ServiceRequest.findByIdAndUpdate(verifySR._id, {
-    status: ServiceRequestStatus.USED,
-  });
+  await ServiceRequest.findByIdAndDelete(verifySR._id);
 
   const user = await User.findOne({ _id: verifySR.userId });
   if (!user) sendFailResponse("User not found");
@@ -428,23 +427,6 @@ async function issueOtpForUser({
   return { token, alreadySent: false };
 }
 
-function buildPhoneLookupVariants(phone) {
-  const digits = String(phone).replace(/\D/g, "");
-  const variants = new Set([String(phone).trim()]);
-
-  if (digits.length === 10) {
-    variants.add(digits);
-    variants.add(`+91${digits}`);
-    variants.add(`91${digits}`);
-  } else if (digits.length === 12 && digits.startsWith("91")) {
-    variants.add(digits);
-    variants.add(digits.slice(2));
-    variants.add(`+${digits}`);
-  }
-
-  return [...variants];
-}
-
 function getRegisterUrl() {
   return (
     process.env.USER_REGISTER_URL ||
@@ -488,16 +470,12 @@ async function deliverOtpViaSms(phoneNumber, message) {
   return { smsSent: true };
 }
 
-// ----------------------
-// ----------------------
-// ----------------------
-
 async function simpleLoginWithOtp(data) {
   const { identity } = data;
 
   // 1. Validation
   if (!identity) {
-    sendFailResponse("Please provide an email or mobile number.");
+    sendFailResponse("Please provide a mobile number.");
   }
 
   const cleanIdentity = identity.trim();
@@ -512,15 +490,15 @@ async function simpleLoginWithOtp(data) {
 
   // 3. User check (This now triggers an error and stops the function if user is null)
   if (!user) {
-    sendFailResponse("Account not found. Please register to continue.");
+    sendFailResponse("Account not found with given mobile number");
   }
 
   // 4. Auth type check
-  if (user.authType !== AuthTypes.EMAIL) {
-    sendFailResponse(
-      `This account is linked with ${user.authType}. Please use that method.`,
-    );
-  }
+  // if (user.authType !== AuthTypes.EMAIL) {
+  //   sendFailResponse(
+  //     `This account is linked with ${user.authType}. Please use that method.`,
+  //   );
+  // }
 
   const phoneToUse = resolveOtpPhone(user, cleanIdentity, isEmail);
   const { token, alreadySent } = await issueOtpForUser({
