@@ -84,12 +84,12 @@ const APP_NOTIFICATIONS = {
 
   kyc: {
     approved: {
-      title: 'KYC Verified! 🎉',
-      body: 'Your identity verification is successful. All premium features are now unlocked!',
+      title: "KYC Verified! 🎉",
+      body: "Your identity verification is successful. All premium features are now unlocked!",
     },
     rejected: {
-      title: 'KYC Verification Failed ⚠️',
-      body: 'Your KYC submission was rejected. Reason: {{reason}}',
+      title: "KYC Verification Failed ⚠️",
+      body: "Your KYC submission was rejected. Reason: {{reason}}",
     },
   },
 };

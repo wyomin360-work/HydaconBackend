@@ -15,7 +15,7 @@ const bankDetailsSchema = new mongoose.Schema(
     accountIv: { type: String, required: true },
     ifscIv: { type: String, required: true },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const transactionSchema = new mongoose.Schema(

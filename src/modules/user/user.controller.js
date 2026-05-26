@@ -49,6 +49,12 @@ exports.resetPassword = async (req, res, next) => {
   return sendResponse(res, response);
 };
 
+exports.simpleLoginWithOtp = async (req, res, next) => {
+  const data = req?.body;
+  const response = await userService.simpleLoginWithOtp(data);
+  return sendResponse(res, response);
+};
+
 // ------------------------------------------------------
 
 exports.userDetails = async (req, res, next) => {

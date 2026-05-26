@@ -1,15 +1,25 @@
 const userRegisterRequestType = {
-  type: 'object',
+  type: "object",
   properties: {
-    email: { type: 'string', format: 'email' },
-    name: { type: 'string' },
-    password: { type: 'string', format: 'password' },
-    avatarId: { type: 'string', minLength: 10 },
-    roleId: { type: 'string', minLength: 10 },
+    email: { type: "string", format: "email" },
+    name: { type: "string" },
+    phone: { type: "string", pattern: "^\\+?[0-9]{10,15}$" },
+    password: { type: "string", format: "password" },
+    avatarId: { type: "string", minLength: 10 },
+    roleId: { type: "string", minLength: 10 },
   },
-  required: ['email', 'password', 'name'],
-  additionalProperties: false
-}
+  required: ["email", "password", "name"],
+  additionalProperties: false,
+};
+
+const userOtpLoginRequestType = {
+  type: "object",
+  properties: {
+    identity: { type: "string", minLength: 5 },
+  },
+  required: ["identity"],
+  additionalProperties: false,
+};
 
 const userLoginRequestType = {
   type: "object",
@@ -74,6 +84,7 @@ const userBankDetailsRequestType = {
 };
 
 module.exports = {
+  userOtpLoginRequestType,
   userLoginRequestType,
   userRegisterRequestType,
   userBankDetailsRequestType,

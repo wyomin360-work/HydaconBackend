@@ -1,14 +1,21 @@
 const kycService = require("./kyc.service");
-const { sendResponse, sendFailResponse } = require("../../utils/responseHandlers");
+const {
+  sendResponse,
+  sendFailResponse,
+} = require("../../utils/responseHandlers");
 
 exports.uploadKycDocument = async (req, res) => {
   const userId = req.userId;
   const { documentType } = req.body;
   // Support both single file uploads (req.file) and field uploads (req.files)
-  const file = req.file || (req.files && (req.files['document']?.[0] || req.files['image']?.[0]));
+  const file =
+    req.file ||
+    (req.files && (req.files["document"]?.[0] || req.files["image"]?.[0]));
 
   if (!documentType) {
-    return sendFailResponse("documentType is required in the request body (aadhaar, pan, or shopPhoto)");
+    return sendFailResponse(
+      "documentType is required in the request body (aadhaar, pan, or shopPhoto)",
+    );
   }
   if (!file) {
     return sendFailResponse("Please select a document file to upload");
@@ -35,17 +42,27 @@ exports.reviewKycDocument = async (req, res) => {
   const { documentType, status, rejectionReason } = req.body;
 
   if (!status) {
-    return sendFailResponse("status is required in request body (APPROVED, VERIFIED, REJECTED)");
+    return sendFailResponse(
+      "status is required in request body (APPROVED, VERIFIED, REJECTED)",
+    );
   }
 
-  if (documentType && !['aadhaar', 'pan', 'shopPhoto'].includes(documentType)) {
-    return sendFailResponse("Invalid documentType. Allowed: aadhaar, pan, shopPhoto");
+  if (documentType && !["aadhaar", "pan", "shopPhoto"].includes(documentType)) {
+    return sendFailResponse(
+      "Invalid documentType. Allowed: aadhaar, pan, shopPhoto",
+    );
   }
 
-  if (status === 'REJECTED' && !rejectionReason) {
-    return sendFailResponse("rejectionReason is required when status is REJECTED");
+  if (status === "REJECTED" && !rejectionReason) {
+    return sendFailResponse(
+      "rejectionReason is required when status is REJECTED",
+    );
   }
 
-  const result = await kycService.reviewKycDocument(userId, { documentType, status, rejectionReason });
+  const result = await kycService.reviewKycDocument(userId, {
+    documentType,
+    status,
+    rejectionReason,
+  });
   return sendResponse(res, result);
 };

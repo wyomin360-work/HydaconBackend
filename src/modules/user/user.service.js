@@ -13,8 +13,8 @@ const {
   generateBufferToken,
   hashData,
   generateRandomPassword,
+  buildPhoneLookupVariants,
 } = require("../../utils/heplers");
-const { sendMail } = require("../../functions/nodemailer");
 const {
   ServiceRequestStatus,
   ServiceRequestType,
@@ -28,6 +28,7 @@ const { AuthTypes } = require("../../constants/user");
 const { encrypt, decrypt } = require("../../utils/encryption");
 const { validateIFSC } = require("../../functions/razorPay");
 const { sendFcmNotifications } = require("../../functions/fcm");
+const { sendSms } = require("../../functions/sms");
 
 async function generateAndSaveToken(payload) {
   const accessToken = generateToken(payload);
@@ -56,7 +57,7 @@ async function generateAndSaveToken(payload) {
 // Register User
 // ----------------------
 async function registerUser(userData) {
-  const { name, email, password, avatarId, roleId } = userData
+  const { name, email, password, avatarId, phone, roleId } = userData;
 
   const userExist = await User.findOne({ email });
   if (userExist) sendFailResponse("The mail id exist");
@@ -64,18 +65,19 @@ async function registerUser(userData) {
   const user = await User.create({
     name,
     email,
+    phone,
     password,
     authType: AuthTypes.EMAIL,
     avatarId,
-    roleId
-  })
+    roleId,
+  });
 
   const { refreshToken, accessToken } = await generateAndSaveToken({
     userId: user?._id,
     email: user?.email,
   });
 
-  const populatedUser = await User.findById(user._id).populate('roleId');
+  const populatedUser = await User.findById(user._id).populate("roleId");
   const { password: pw, ...rest } = populatedUser.toObject();
 
   return {
@@ -90,8 +92,8 @@ async function registerUser(userData) {
 async function login(userData) {
   const { email, password } = userData;
 
-  const userExist = await User.findOne({ email }).populate('roleId').lean()
-  if (!userExist) sendFailResponse('Invalid Data')
+  const userExist = await User.findOne({ email }).populate("roleId").lean();
+  if (!userExist) sendFailResponse("Invalid Data");
 
   if (userExist && userExist.authType !== AuthTypes.EMAIL) {
     sendFailResponse(`This email is already registered with 
@@ -141,7 +143,7 @@ async function providerAuth(data) {
     ? providerData?.name
     : `${firstName ?? "User"} ${lastName ?? ""}`;
 
-  const userExist = await User.findOne({ email }).populate('roleId').lean()
+  const userExist = await User.findOne({ email }).populate("roleId").lean();
 
   if (!userExist) {
     const newUser = await User.create({
@@ -151,16 +153,21 @@ async function providerAuth(data) {
       authType: provider,
       name: userName,
       avatarId,
-      roleId: data.roleId
-    })
+      roleId: data.roleId,
+    });
 
     const { refreshToken, accessToken } = await generateAndSaveToken({
       userId: newUser?._id,
       email: newUser?.email,
     });
 
-    const populatedNewUser = await User.findById(newUser._id).populate('roleId');
-    const cleanData = populatedNewUser.toObject({ getters: true, virtuals: false });
+    const populatedNewUser = await User.findById(newUser._id).populate(
+      "roleId",
+    );
+    const cleanData = populatedNewUser.toObject({
+      getters: true,
+      virtuals: false,
+    });
 
     const { password: pw, ...rest } = attachId(cleanData);
 
@@ -204,44 +211,41 @@ async function logout(userId) {
 // verify Email
 // ----------------------
 async function verifyEmail(data) {
-  const { email } = data;
-  const user = await User.findOne({ email: email });
+  const { email, phone } = data;
+
+  if (!email && !phone) {
+    sendFailResponse("Please provide an email or phone number.");
+  }
+
+  // 1. Build Query dynamically based on what was provided
+  let user;
+  if (email) {
+    user = await User.findOne({ email: email.toLowerCase() });
+  } else if (phone) {
+    // This uses your existing robust variant builder
+    user = await User.findOne({
+      phone: { $in: buildPhoneLookupVariants(phone) },
+    });
+  }
+
   if (!user) sendFailResponse("User not found");
 
-  const token = generateBufferToken();
-  const otp = generateOtp(4);
-
-  await ServiceRequest.deleteMany({
-    userId: user.id,
-    status: ServiceRequestStatus.PENDING,
+  const phoneToUse = phone || user.phone;
+  const { token, alreadySent } = await issueOtpForUser({
+    userId: user._id,
     requestType: ServiceRequestType.FORGOT_PASSWORD,
+    phoneNumber: phoneToUse,
+    buildMessage: (otp) =>
+      `Greetings from Hydacon, your verification OTP is: ${otp}`,
   });
 
-  const otpHash = await hashData(otp);
-  if (!otpHash) sendFailResponse("Failed to save otp");
-
-  await ServiceRequest.create({
-    userId: user.id,
-    token,
-    data: otpHash,
-    status: ServiceRequestStatus.PENDING,
-    requestType: ServiceRequestType.FORGOT_PASSWORD,
-    expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-  });
-
-  const mailOptions = {
-    from: process.env.GOOGLE_USER_MAIL,
-    to: user.email,
-    subject: "Otp for forgot password",
-    text: `Greetings from Hydacon , Here is your verification OTP : ${otp}`,
+  return {
+    message: alreadySent
+      ? "OTP already sent. Please check your phone or wait 60 seconds."
+      : "OTP has been sent to your mobile number.",
+    data: { otpSent: true, token, smsSent: true },
   };
-
-  const mailSent = await sendMail(mailOptions);
-  if (!mailSent) sendFailResponse("Failed to sent mail , try again");
-
-  return { message: `Otp sent to ${email}`, data: { otpSent: true, token } };
 }
-
 // ----------------------
 // verify Otp
 // ----------------------
@@ -252,23 +256,37 @@ async function verifyOtp(data) {
     token,
     status: ServiceRequestStatus.PENDING,
   });
+
   if (!verifySR) sendFailResponse("Token not found");
 
-  const isExpired = moment().isAfter(verifySR.expiresIn);
+  const isExpired = moment().isAfter(verifySR.expiresAt);
   if (isExpired) {
-    verifySR.status = ServiceRequestStatus.EXPIRED;
-    await verifySR.save();
+    await ServiceRequest.findByIdAndDelete(verifySR._id);
     sendFailResponse("Otp expired");
   }
 
   const isCorrectOtp = await compareHash(otp, verifySR.data);
   if (!isCorrectOtp) sendFailResponse("Otp mismatch");
 
-  await ServiceRequest.findByIdAndUpdate(verifySR._id, {
-    status: ServiceRequestStatus.USED,
-  });
+  await ServiceRequest.findByIdAndDelete(verifySR._id);
 
   const user = await User.findOne({ _id: verifySR.userId });
+  if (!user) sendFailResponse("User not found");
+
+  if (verifySR.requestType === ServiceRequestType.SIMPLE_OTP_LOGIN) {
+    const { refreshToken, accessToken } = await generateAndSaveToken({
+      userId: user._id,
+      email: user.email,
+    });
+
+    const { password: pw, ...rest } = attachId(user.toObject());
+
+    return {
+      message: "Logged in successfully",
+      data: { ...rest, accessToken, refreshToken, otpVerified: true },
+    };
+  }
+
   const resetToken = generateBufferToken();
 
   await ServiceRequest.deleteMany({
@@ -320,9 +338,9 @@ async function updatePassword(data) {
 // User Details
 // ----------------------
 async function getUserDetails(userId) {
-  const user = await User.findById(userId).populate('roleId').lean()
-  if (!user) sendFailResponse('User not found')
-  let returnData = {}
+  const user = await User.findById(userId).populate("roleId").lean();
+  if (!user) sendFailResponse("User not found");
+  let returnData = {};
 
   if (user.bankDetails) {
     const { bankDetails, ...rest } = attachId(user);
@@ -332,6 +350,171 @@ async function getUserDetails(userId) {
   }
 
   return { data: returnData };
+}
+
+const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
+
+function buildOtpServiceRequest({
+  userId,
+  token,
+  otpHash,
+  requestType,
+  expiresInMs = 10 * 60 * 1000,
+}) {
+  return {
+    userId,
+    token,
+    data: otpHash,
+    status: ServiceRequestStatus.PENDING,
+    requestType,
+    expiresAt: new Date(Date.now() + expiresInMs),
+  };
+}
+
+async function findRecentOtpRequest(userId) {
+  return ServiceRequest.findOne({
+    userId,
+    status: ServiceRequestStatus.PENDING,
+    expiresAt: { $gt: new Date() },
+    createdAt: { $gt: new Date(Date.now() - OTP_RESEND_COOLDOWN_MS) },
+    smsSentAt: { $exists: true },
+  }).sort({ createdAt: -1 });
+}
+
+/** Creates one OTP request and sends a single SMS (skips resend within cooldown). */
+async function issueOtpForUser({
+  userId,
+  requestType,
+  phoneNumber,
+  buildMessage,
+}) {
+  const recent = await findRecentOtpRequest(userId);
+
+  if (recent) {
+    if (recent.requestType !== requestType) {
+      sendFailResponse(
+        "OTP was already sent recently. Please wait 60 seconds before requesting again.",
+      );
+    }
+    return { token: recent.token, alreadySent: true };
+  }
+
+  await ServiceRequest.deleteMany({
+    userId,
+    status: ServiceRequestStatus.PENDING,
+    requestType,
+  });
+
+  const token = generateBufferToken();
+  const otp = generateOtp(4);
+  const otpHash = await hashData(otp);
+  if (!otpHash) sendFailResponse("Failed to process OTP");
+
+  const serviceRequest = await ServiceRequest.create(
+    buildOtpServiceRequest({ userId, token, otpHash, requestType }),
+  );
+
+  try {
+    await deliverOtpViaSms(phoneNumber, buildMessage(otp));
+    await ServiceRequest.findByIdAndUpdate(serviceRequest._id, {
+      smsSentAt: new Date(),
+    });
+  } catch (error) {
+    await ServiceRequest.findByIdAndDelete(serviceRequest._id);
+    throw error;
+  }
+
+  return { token, alreadySent: false };
+}
+
+function getRegisterUrl() {
+  return (
+    process.env.USER_REGISTER_URL ||
+    process.env.MOBILE_APP_REGISTER_URL ||
+    `${process.env.FRONTEND_URL || "https://hydacon.com"}/register`
+  );
+}
+
+function resolveOtpPhone(user, identity, isEmail) {
+  if (!isEmail) {
+    return user?.phone || identity;
+  }
+  if (!user?.phone) {
+    sendFailResponse(
+      "No mobile number on this account. Log in with your phone number instead of email.",
+    );
+  }
+  return user.phone;
+}
+
+/** Sends OTP via Twilio SMS only. */
+async function deliverOtpViaSms(phoneNumber, message) {
+  if (!phoneNumber) {
+    sendFailResponse("A mobile number is required to send OTP.");
+  }
+
+  const smsResult = await sendSms(phoneNumber, message);
+  const smsSent =
+    typeof smsResult === "boolean" ? smsResult : Boolean(smsResult?.success);
+
+  if (!smsSent) {
+    const error = smsResult?.error || "";
+    const isTwilioAuthError = error.includes("(20003)");
+    const message = isTwilioAuthError
+      ? "Failed to send OTP because Twilio authentication failed. Please check TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in .env."
+      : "Failed to send OTP to your mobile number. If you are using a Twilio trial account, verify the recipient number in your Twilio console.";
+
+    sendFailResponse(message);
+  }
+
+  return { smsSent: true };
+}
+
+async function simpleLoginWithOtp(data) {
+  const { identity } = data;
+
+  // 1. Validation
+  if (!identity) {
+    sendFailResponse("Please provide a mobile number.");
+  }
+
+  const cleanIdentity = identity.trim();
+  const isEmail = cleanIdentity.includes("@");
+
+  // 2. Lookup
+  const lookupQuery = isEmail
+    ? { email: cleanIdentity.toLowerCase() }
+    : { phone: { $in: buildPhoneLookupVariants(cleanIdentity) } };
+
+  const user = await User.findOne(lookupQuery);
+
+  // 3. User check (This now triggers an error and stops the function if user is null)
+  if (!user) {
+    sendFailResponse("Account not found with given mobile number");
+  }
+
+  // 4. Auth type check
+  // if (user.authType !== AuthTypes.EMAIL) {
+  //   sendFailResponse(
+  //     `This account is linked with ${user.authType}. Please use that method.`,
+  //   );
+  // }
+
+  const phoneToUse = resolveOtpPhone(user, cleanIdentity, isEmail);
+  const { token, alreadySent } = await issueOtpForUser({
+    userId: user._id,
+    requestType: ServiceRequestType.SIMPLE_OTP_LOGIN,
+    phoneNumber: phoneToUse,
+    buildMessage: (otp) =>
+      `Your Hydacon login OTP is: ${otp}. Valid for 10 minutes.`,
+  });
+
+  return {
+    message: alreadySent
+      ? "OTP already sent. Please check your phone or wait 60 seconds."
+      : "OTP has been sent to your mobile number.",
+    data: { otpSent: true, token, smsSent: true },
+  };
 }
 
 // ----------------------
@@ -566,6 +749,7 @@ module.exports = {
   verifyEmail,
   verifyOtp,
   providerAuth,
+  simpleLoginWithOtp,
   getUserDetails,
   updateUserProfile,
   addFcmToken,

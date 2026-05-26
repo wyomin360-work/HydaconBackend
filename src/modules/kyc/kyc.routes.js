@@ -12,29 +12,29 @@ router.post(
   kycPaths.upload,
   verification.verifyUser,
   upload.fields([
-    { name: 'document', maxCount: 1 },
-    { name: 'image', maxCount: 1 }
+    { name: "document", maxCount: 1 },
+    { name: "image", maxCount: 1 },
   ]),
-  handleError(controller.uploadKycDocument)
+  handleError(controller.uploadKycDocument),
 );
 
 router.get(
   kycPaths.status,
   verification.verifyUser,
-  handleError(controller.getKycStatus)
+  handleError(controller.getKycStatus),
 );
 
 // Admin-facing endpoints
 router.get(
   kycPaths.adminList,
   verification.verifyAdmin,
-  handleError(controller.getAdminKycList)
+  handleError(controller.getAdminKycList),
 );
 
 router.patch(
   kycPaths.adminReview,
   verification.verifyAdmin,
-  handleError(controller.reviewKycDocument)
+  handleError(controller.reviewKycDocument),
 );
 
 module.exports = router;
