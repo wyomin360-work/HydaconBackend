@@ -16,8 +16,9 @@ const userOtpLoginRequestType = {
   type: "object",
   properties: {
     identity: { type: "string", minLength: 5 },
+    requestType: { type: "string" },
   },
-  required: ["identity"],
+  required: ["identity","requestType"],
   additionalProperties: false,
 };
 
