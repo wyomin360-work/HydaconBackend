@@ -2,7 +2,8 @@ const Role = require("../../schemas/role.schema");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 
 async function createRole(roleData) {
-  const { name, description, isActive, pointMultiplier, permissions } = roleData;
+  const { name, description, isActive, pointMultiplier, permissions } =
+    roleData;
 
   const roleExist = await Role.findOne({ name });
   if (roleExist) sendFailResponse("Role with this name already exists");
@@ -54,11 +55,16 @@ async function updateRole(roleId, updateData) {
   if (!role) sendFailResponse("Role not found");
 
   if (updateData.name) {
-    const roleExist = await Role.findOne({ name: updateData.name, _id: { $ne: roleId } });
+    const roleExist = await Role.findOne({
+      name: updateData.name,
+      _id: { $ne: roleId },
+    });
     if (roleExist) sendFailResponse("Role with this name already exists");
   }
 
-  const updatedRole = await Role.findByIdAndUpdate(roleId, updateData, { new: true });
+  const updatedRole = await Role.findByIdAndUpdate(roleId, updateData, {
+    new: true,
+  });
 
   return {
     message: "Role updated successfully",
