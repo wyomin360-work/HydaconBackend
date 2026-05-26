@@ -35,7 +35,7 @@ const roleSchema = new mongoose.Schema(
         return ret;
       },
     },
-  }
+  },
 );
 
 const Role = mongoose.model("Role", roleSchema);

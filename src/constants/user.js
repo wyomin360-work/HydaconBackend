@@ -30,4 +30,3 @@ module.exports = {
   KYC_DOCUMENT_STATUS,
   KYC_DOCUMENT_TYPES,
 };
-

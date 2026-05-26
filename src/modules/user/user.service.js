@@ -15,6 +15,7 @@ const {
   generateBufferToken,
   hashData,
   generateRandomPassword,
+  buildPhoneLookupVariants,
 } = require("../../utils/heplers");
 const {
   ServiceRequestStatus,
@@ -58,9 +59,7 @@ async function generateAndSaveToken(payload) {
 // Register User
 // ----------------------
 async function registerUser(userData) {
-  
-  console.log(JSON.stringify(userData, null, 2));
-  const { name, email, password, avatarId, phone ,roleId} = userData;
+  const { name, email, password, avatarId, phone, roleId } = userData;
 
   const userExist = await User.findOne({ email });
   if (userExist) sendFailResponse("The mail id exist");
@@ -72,15 +71,15 @@ async function registerUser(userData) {
     password,
     authType: AuthTypes.EMAIL,
     avatarId,
-    roleId
-  })
+    roleId,
+  });
 
   const { refreshToken, accessToken } = await generateAndSaveToken({
     userId: user?._id,
     email: user?.email,
   });
 
-  const populatedUser = await User.findById(user._id).populate('roleId');
+  const populatedUser = await User.findById(user._id).populate("roleId");
   const { password: pw, ...rest } = populatedUser.toObject();
 
   return {
@@ -95,8 +94,8 @@ async function registerUser(userData) {
 async function login(userData) {
   const { email, password } = userData;
 
-  const userExist = await User.findOne({ email }).populate('roleId').lean()
-  if (!userExist) sendFailResponse('Invalid Data')
+  const userExist = await User.findOne({ email }).populate("roleId").lean();
+  if (!userExist) sendFailResponse("Invalid Data");
 
   if (userExist && userExist.authType !== AuthTypes.EMAIL) {
     sendFailResponse(`This email is already registered with 
@@ -146,7 +145,7 @@ async function providerAuth(data) {
     ? providerData?.name
     : `${firstName ?? "User"} ${lastName ?? ""}`;
 
-  const userExist = await User.findOne({ email }).populate('roleId').lean()
+  const userExist = await User.findOne({ email }).populate("roleId").lean();
 
   if (!userExist) {
     const newUser = await User.create({
@@ -156,16 +155,21 @@ async function providerAuth(data) {
       authType: provider,
       name: userName,
       avatarId,
-      roleId: data.roleId
-    })
+      roleId: data.roleId,
+    });
 
     const { refreshToken, accessToken } = await generateAndSaveToken({
       userId: newUser?._id,
       email: newUser?.email,
     });
 
-    const populatedNewUser = await User.findById(newUser._id).populate('roleId');
-    const cleanData = populatedNewUser.toObject({ getters: true, virtuals: false });
+    const populatedNewUser = await User.findById(newUser._id).populate(
+      "roleId",
+    );
+    const cleanData = populatedNewUser.toObject({
+      getters: true,
+      virtuals: false,
+    });
 
     const { password: pw, ...rest } = attachId(cleanData);
 
@@ -252,21 +256,29 @@ async function verifyOtp(data) {
     token,
     status: ServiceRequestStatus.PENDING,
   });
+
   if (!verifySR) sendFailResponse("Token not found");
 
   const isExpired = moment().isAfter(verifySR.expiresAt);
   if (isExpired) {
-    verifySR.status = ServiceRequestStatus.EXPIRED;
-    await verifySR.save();
+    await ServiceRequest.findByIdAndDelete(verifySR._id);
     sendFailResponse("Otp expired");
   }
 
   const isCorrectOtp = await compareHash(otp, verifySR.data);
-  if (!isCorrectOtp) sendFailResponse("Otp mismatch");
+  if (!isCorrectOtp) {
+    const nextAttempts = (verifySR.attempts || 0) + 1;
+    if (nextAttempts >= 5) {
+      await ServiceRequest.findByIdAndDelete(verifySR._id);
+      sendFailResponse("Too many failed attempts. Please request a new OTP.");
+    } else {
+      verifySR.attempts = nextAttempts;
+      await verifySR.save();
+      sendFailResponse(`Otp mismatch. ${5 - nextAttempts} attempts remaining.`);
+    }
+  }
 
-  await ServiceRequest.findByIdAndUpdate(verifySR._id, {
-    status: ServiceRequestStatus.USED,
-  });
+  await ServiceRequest.findByIdAndDelete(verifySR._id);
 
   const user = await User.findOne({ _id: verifySR.userId });
   if (!user) sendFailResponse("User not found");
@@ -336,9 +348,9 @@ async function updatePassword(data) {
 // User Details
 // ----------------------
 async function getUserDetails(userId) {
-  const user = await User.findById(userId).populate('roleId').lean()
-  if (!user) sendFailResponse('User not found')
-  let returnData = {}
+  const user = await User.findById(userId).populate("roleId").lean();
+  if (!user) sendFailResponse("User not found");
+  let returnData = {};
 
   if (user.bankDetails) {
     const { bankDetails, ...rest } = attachId(user);
@@ -388,11 +400,15 @@ async function issueOtpForUser({
   requestType,
   phoneNumber,
   buildMessage,
-  payload,
 }) {
-  const recent = await findRecentOtpRequest(userId, requestType);
+  const recent = await findRecentOtpRequest(userId);
 
   if (recent) {
+    if (recent.requestType !== requestType) {
+      sendFailResponse(
+        "OTP was already sent recently. Please wait 60 seconds before requesting again.",
+      );
+    }
     return { token: recent.token, alreadySent: true };
   }
 
@@ -782,11 +798,6 @@ async function deliverOtpViaSms(phoneNumber, message) {
 
   return { smsSent: true };
 }
-
-// ----------------------
-// ----------------------
-// ----------------------
-
 
 async function simpleLoginWithOtp(data) {
   const { identity } = data;

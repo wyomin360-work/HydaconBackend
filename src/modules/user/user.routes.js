@@ -15,6 +15,13 @@ const {
   verifyNewNumberRequestType,
 } = require("../../validations/user.validations");
 const validateRequest = require("../../middlewares/validator");
+const rateLimiter = require("../../middlewares/rateLimiter");
+
+const otpRateLimiter = rateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: "Too many OTP requests. Please try again after 15 minutes.",
+});
 
 const router = express.Router();
 
@@ -43,7 +50,11 @@ router.post(
   handleError(controller.logout),
 );
 
-router.post(userPaths.auth.verifyEmail, handleError(controller.verifyEmail));
+router.post(
+  userPaths.auth.verifyEmail,
+  otpRateLimiter,
+  handleError(controller.verifyEmail),
+);
 
 router.post(userPaths.auth.verifyOtp, handleError(controller.verifyOtp));
 
