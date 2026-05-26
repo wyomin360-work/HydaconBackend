@@ -1,5 +1,36 @@
+const fs = require("fs");
 const kycService = require("./kyc.service");
 const { sendResponse, sendFailResponse } = require("../../utils/responseHandlers");
+
+/**
+ * Deletes any files uploaded by multer from disk.
+ * Called when validation fails or the service throws an error to prevent orphaned uploads.
+ */
+const deleteUploadedFiles = (req) => {
+  if (req.file && req.file.path && fs.existsSync(req.file.path)) {
+    try {
+      fs.unlinkSync(req.file.path);
+    } catch (err) {
+      console.error("Error deleting file:", err);
+    }
+  }
+  if (req.files) {
+    Object.keys(req.files).forEach((key) => {
+      const files = req.files[key];
+      if (Array.isArray(files)) {
+        files.forEach((file) => {
+          if (file.path && fs.existsSync(file.path)) {
+            try {
+              fs.unlinkSync(file.path);
+            } catch (err) {
+              console.error("Error deleting file:", err);
+            }
+          }
+        });
+      }
+    });
+  }
+};
 
 exports.uploadKycDocument = async (req, res) => {
   const userId = req.userId;
@@ -7,15 +38,21 @@ exports.uploadKycDocument = async (req, res) => {
   // Support both single file uploads (req.file) and field uploads (req.files)
   const file = req.file || (req.files && (req.files['document']?.[0] || req.files['image']?.[0]));
 
-  if (!documentType) {
-    return sendFailResponse("documentType is required in the request body (aadhaar, pan, or shopPhoto)");
-  }
-  if (!file) {
-    return sendFailResponse("Please select a document file to upload");
-  }
+  try {
+    if (!documentType) {
+      sendFailResponse("documentType is required in the request body (aadhaar, pan, or shopPhoto)");
+    }
+    if (!file) {
+      sendFailResponse("Please select a document file to upload");
+    }
 
-  const result = await kycService.uploadDocument(userId, documentType, file);
-  return sendResponse(res, result);
+    const result = await kycService.uploadDocument(userId, documentType, file);
+    return sendResponse(res, result);
+  } catch (error) {
+    // Cleanup any uploaded files on failure (Bug 1 fix)
+    deleteUploadedFiles(req);
+    throw error;
+  }
 };
 
 exports.getKycStatus = async (req, res) => {
