@@ -89,6 +89,23 @@ function formatNotification(template, data) {
   });
 }
 
+function buildPhoneLookupVariants(phone) {
+  const digits = String(phone).replace(/\D/g, "");
+  const variants = new Set([String(phone).trim()]);
+
+  if (digits.length === 10) {
+    variants.add(digits);
+    variants.add(`+91${digits}`);
+    variants.add(`91${digits}`);
+  } else if (digits.length === 12 && digits.startsWith("91")) {
+    variants.add(digits);
+    variants.add(digits.slice(2));
+    variants.add(`+${digits}`);
+  }
+
+  return [...variants];
+}
+
 module.exports = {
   handleError,
   hashData,
@@ -101,4 +118,5 @@ module.exports = {
   generateBufferToken,
   generateRandomPassword,
   formatNotification,
+  buildPhoneLookupVariants,
 };

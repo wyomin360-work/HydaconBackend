@@ -6,6 +6,7 @@ const {
   KYC_DOCUMENT_STATUS,
   KYC_DOCUMENT_TYPES,
 } = require("../constants/user");
+const { DEFAULT_PHONE_COUNTRY_CODE } = require("../constants/common");
 
 const kycDocumentSchema = new mongoose.Schema(
   {
@@ -19,7 +20,7 @@ const kycDocumentSchema = new mongoose.Schema(
     },
     rejectionReason: { type: String, default: null },
   },
-  { _id: false }
+  { _id: false },
 );
 const bankDetailsSchema = new mongoose.Schema(
   {
@@ -31,7 +32,7 @@ const bankDetailsSchema = new mongoose.Schema(
     accountIv: { type: String },
     ifscIv: { type: String },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const userSchema = new mongoose.Schema(
@@ -39,6 +40,10 @@ const userSchema = new mongoose.Schema(
     name: { type: String, required: false },
     email: { type: String, required: false, unique: true, lowercase: true },
     phone: { type: String, default: null },
+<<<<<<< HEAD
+=======
+    phoneCountryCode: { type: String, default: DEFAULT_PHONE_COUNTRY_CODE },
+>>>>>>> 5c6138b5601ec21dd1926e514d5eb43ffebd87b2
     password: { type: String, required: true },
     fcmTokens: { type: [String], default: [] },
     totalPoints: { type: Number, default: 0 },

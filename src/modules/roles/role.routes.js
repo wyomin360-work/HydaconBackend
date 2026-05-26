@@ -17,7 +17,7 @@ router.use(verification.verifyAdmin);
 router.post(
   rolePaths.create,
   validateRequest(createRoleRequestType),
-  handleError(controller.createRole)
+  handleError(controller.createRole),
 );
 
 router.get(rolePaths.list, handleError(controller.getRoles));
@@ -25,7 +25,7 @@ router.get(rolePaths.list, handleError(controller.getRoles));
 router.patch(
   rolePaths.update,
   validateRequest(updateRoleRequestType),
-  handleError(controller.updateRole)
+  handleError(controller.updateRole),
 );
 
 router.delete(rolePaths.delete, handleError(controller.deleteRole));
