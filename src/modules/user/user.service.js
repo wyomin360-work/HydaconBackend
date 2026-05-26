@@ -266,7 +266,17 @@ async function verifyOtp(data) {
   }
 
   const isCorrectOtp = await compareHash(otp, verifySR.data);
-  if (!isCorrectOtp) sendFailResponse("Otp mismatch");
+  if (!isCorrectOtp) {
+    const nextAttempts = (verifySR.attempts || 0) + 1;
+    if (nextAttempts >= 5) {
+      await ServiceRequest.findByIdAndDelete(verifySR._id);
+      sendFailResponse("Too many failed attempts. Please request a new OTP.");
+    } else {
+      verifySR.attempts = nextAttempts;
+      await verifySR.save();
+      sendFailResponse(`Otp mismatch. ${5 - nextAttempts} attempts remaining.`);
+    }
+  }
 
   await ServiceRequest.findByIdAndDelete(verifySR._id);
 

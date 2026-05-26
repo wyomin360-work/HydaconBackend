@@ -43,6 +43,10 @@ const srSchema = new mongoose.Schema(
     smsSentAt: {
       type: Date,
     },
+    attempts: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,
