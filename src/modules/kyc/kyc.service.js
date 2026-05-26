@@ -34,6 +34,13 @@ async function compressImage(filePath) {
 
 async function uploadDocument(userId, documentType, file) {
   if (!['aadhaar', 'pan', 'shopPhoto'].includes(documentType)) {
+    if (file && file.path && fs.existsSync(file.path)) {
+      try {
+        fs.unlinkSync(file.path);
+      } catch (err) {
+        console.error('Error deleting file:', err);
+      }
+    }
     throw new Error('Invalid document type. Allowed: aadhaar, pan, shopPhoto');
   }
 
@@ -70,61 +77,83 @@ async function uploadDocument(userId, documentType, file) {
     throw new Error('File size exceeds the 5MB limit.');
   }
 
-  const user = await User.findById(userId);
-  if (!user) {
-    // Also delete file if user not found to prevent orphaned files
-    if (file.path && fs.existsSync(file.path)) {
+  let compressedPath = null;
+  try {
+    // Compress the image
+    const originalFilename = file.filename;
+    const compressedFilename = await compressImage(file.path);
+
+    if (compressedFilename !== file.filename) {
+      const parsedPath = path.parse(file.path);
+      compressedPath = path.join(parsedPath.dir, compressedFilename);
+    }
+
+    const originalUrl = `/uploads/images/${originalFilename}`;
+    const compressedUrl = `/uploads/images/${compressedFilename}`;
+
+    // Fetch user after compression completes to prevent race conditions
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Initialize kycDocuments if not already present
+    if (!user.kycDocuments) {
+      user.kycDocuments = {};
+    }
+
+    // Set the document details
+    user.kycDocuments[documentType] = {
+      originalUrl,
+      compressedUrl,
+      uploadedAt: new Date(),
+      status: 'PENDING',
+      rejectionReason: null
+    };
+
+    // Update overall status.
+    const docs = user.kycDocuments;
+    const allUploaded = docs.aadhaar?.originalUrl && docs.pan?.originalUrl && docs.shopPhoto?.originalUrl;
+
+    const anyRejected =
+      docs.aadhaar?.status === 'REJECTED' ||
+      docs.pan?.status === 'REJECTED' ||
+      docs.shopPhoto?.status === 'REJECTED';
+
+    if (anyRejected) {
+      user.kycStatus = 'REJECTED';
+    } else if (allUploaded) {
+      user.kycStatus = 'PENDING';
+    } else {
+      if (!user.kycStatus || user.kycStatus === 'NOT_STARTED') {
+        user.kycStatus = 'NOT_STARTED';
+      }
+    }
+
+    await user.save();
+
+    return {
+      message: `${documentType.toUpperCase()} document uploaded successfully`,
+      kycStatus: user.kycStatus,
+      documents: normalizeKycDocuments(user.kycDocuments),
+    };
+  } catch (error) {
+    if (file && file.path && fs.existsSync(file.path)) {
       try {
         fs.unlinkSync(file.path);
       } catch (err) {
-        console.error('Error deleting orphaned file:', err);
+        console.error('Error deleting original file on error:', err);
       }
     }
-    throw new Error('User not found');
-  }
-
-  // Compress the image
-  const originalFilename = file.filename;
-  const compressedFilename = await compressImage(file.path);
-
-  const originalUrl = `/uploads/images/${originalFilename}`;
-  const compressedUrl = `/uploads/images/${compressedFilename}`;
-
-  // Initialize kycDocuments if not already present
-  if (!user.kycDocuments) {
-    user.kycDocuments = {};
-  }
-
-  // Set the document details
-  user.kycDocuments[documentType] = {
-    originalUrl,
-    compressedUrl,
-    uploadedAt: new Date(),
-    status: 'PENDING',
-    rejectionReason: null
-  };
-
-  // Update overall status. 
-  // It should be 'PENDING' if all required documents are successfully uploaded.
-  const docs = user.kycDocuments;
-  const allUploaded = docs.aadhaar?.originalUrl && docs.pan?.originalUrl && docs.shopPhoto?.originalUrl;
-
-  if (allUploaded) {
-    user.kycStatus = 'PENDING';
-  } else {
-    // If not all are uploaded, and it isn't REJECTED or APPROVED yet, mark as NOT_STARTED or keep PENDING
-    if (!user.kycStatus || user.kycStatus === 'NOT_STARTED') {
-      user.kycStatus = 'NOT_STARTED'; // Still incomplete
+    if (compressedPath && fs.existsSync(compressedPath)) {
+      try {
+        fs.unlinkSync(compressedPath);
+      } catch (err) {
+        console.error('Error deleting compressed file on error:', err);
+      }
     }
+    throw error;
   }
-
-  await user.save();
-
-  return {
-    message: `${documentType.toUpperCase()} document uploaded successfully`,
-    kycStatus: user.kycStatus,
-    documents: normalizeKycDocuments(user.kycDocuments),
-  };
 }
 
 function normalizeKycDocuments(kycDocuments) {
@@ -195,6 +224,7 @@ async function reviewKycDocument(userId, { documentType, status, rejectionReason
 
     // Recalculate global kycStatus based on individual documents
     const docs = user.kycDocuments;
+    const allUploaded = docs.aadhaar?.originalUrl && docs.pan?.originalUrl && docs.shopPhoto?.originalUrl;
     
     const anyRejected = 
       docs.aadhaar?.status === 'REJECTED' || 
@@ -210,8 +240,10 @@ async function reviewKycDocument(userId, { documentType, status, rejectionReason
       user.kycStatus = 'REJECTED';
     } else if (allApproved) {
       user.kycStatus = 'APPROVED';
-    } else {
+    } else if (allUploaded) {
       user.kycStatus = 'PENDING';
+    } else {
+      user.kycStatus = 'NOT_STARTED';
     }
   } else {
     // Global review
@@ -221,6 +253,18 @@ async function reviewKycDocument(userId, { documentType, status, rejectionReason
         pan: {},
         shopPhoto: {}
       };
+    }
+
+    const docs = user.kycDocuments;
+    const allUploaded = docs.aadhaar?.originalUrl && docs.pan?.originalUrl && docs.shopPhoto?.originalUrl;
+    const hasAtLeastOneDoc = docs.aadhaar?.originalUrl || docs.pan?.originalUrl || docs.shopPhoto?.originalUrl;
+
+    if (normalizedStatus === 'APPROVED' && !hasAtLeastOneDoc) {
+      throw new Error('Cannot approve KYC entirely because no documents have been uploaded');
+    }
+
+    if (normalizedStatus === 'REJECTED' && !allUploaded) {
+      throw new Error('Cannot reject KYC entirely because not all documents have been uploaded');
     }
 
     const docTypes = ['aadhaar', 'pan', 'shopPhoto'];
