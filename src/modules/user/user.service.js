@@ -225,7 +225,9 @@ async function verifyEmail(data) {
     user = await User.findOne({ email: email.toLowerCase() });
   } else if (phone) {
     // This uses your existing robust variant builder
-    user = await User.findOne({ phone: { $in: buildPhoneLookupVariants(phone) } });
+    user = await User.findOne({
+      phone: { $in: buildPhoneLookupVariants(phone) },
+    });
   }
 
   if (!user) sendFailResponse("User not found");
