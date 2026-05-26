@@ -6,11 +6,41 @@ const {
   KYC_DOCUMENT_STATUS,
   KYC_DOCUMENT_TYPES,
 } = require("../constants/user");
+const { DEFAULT_PHONE_COUNTRY_CODE } = require("../constants/common");
+
+const kycDocumentSchema = new mongoose.Schema(
+  {
+    originalUrl: { type: String, default: null },
+    compressedUrl: { type: String, default: null },
+    uploadedAt: { type: Date, default: null },
+    status: {
+      type: String,
+      enum: Object.values(KYC_DOCUMENT_STATUS),
+      default: KYC_DOCUMENT_STATUS.PENDING,
+    },
+    rejectionReason: { type: String, default: null },
+  },
+  { _id: false },
+);
+const bankDetailsSchema = new mongoose.Schema(
+  {
+    accountNumber: { type: String },
+    userName: { type: String },
+    ifscCode: { type: String },
+    bankName: { type: String },
+    branchName: { type: String },
+    accountIv: { type: String },
+    ifscIv: { type: String },
+  },
+  { _id: false },
+);
 
 const userSchema = new mongoose.Schema(
   {
     name: { type: String, required: false },
     email: { type: String, required: false, unique: true, lowercase: true },
+    phone: { type: String, default: null },
+    phoneCountryCode: { type: String, default: DEFAULT_PHONE_COUNTRY_CODE },
     password: { type: String, required: true },
     fcmTokens: { type: [String], default: [] },
     totalPoints: { type: Number, default: 0 },
@@ -35,13 +65,8 @@ const userSchema = new mongoose.Schema(
       default: AuthTypes.EMAIL,
     },
     bankDetails: {
-      accountNumber: { type: String },
-      userName: { type: String },
-      ifscCode: { type: String },
-      bankName: { type: String },
-      branchName: { type: String },
-      accountIv: { type: String },
-      ifscIv: { type: String },
+      type: bankDetailsSchema,
+      default: () => ({}),
     },
     roleId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -54,39 +79,9 @@ const userSchema = new mongoose.Schema(
       default: KYC_STATUS.NOT_STARTED,
     },
     kycDocuments: {
-      aadhaar: {
-        originalUrl: { type: String, default: null },
-        compressedUrl: { type: String, default: null },
-        uploadedAt: { type: Date, default: null },
-        status: {
-          type: String,
-          enum: Object.values(KYC_DOCUMENT_STATUS),
-          default: KYC_DOCUMENT_STATUS.PENDING,
-        },
-        rejectionReason: { type: String, default: null },
-      },
-      pan: {
-        originalUrl: { type: String, default: null },
-        compressedUrl: { type: String, default: null },
-        uploadedAt: { type: Date, default: null },
-        status: {
-          type: String,
-          enum: Object.values(KYC_DOCUMENT_STATUS),
-          default: KYC_DOCUMENT_STATUS.PENDING,
-        },
-        rejectionReason: { type: String, default: null },
-      },
-      shopPhoto: {
-        originalUrl: { type: String, default: null },
-        compressedUrl: { type: String, default: null },
-        uploadedAt: { type: Date, default: null },
-        status: {
-          type: String,
-          enum: Object.values(KYC_DOCUMENT_STATUS),
-          default: KYC_DOCUMENT_STATUS.PENDING,
-        },
-        rejectionReason: { type: String, default: null },
-      },
+      aadhaar: { type: kycDocumentSchema, default: () => ({}) },
+      pan: { type: kycDocumentSchema, default: () => ({}) },
+      shopPhoto: { type: kycDocumentSchema, default: () => ({}) },
     },
   },
   {

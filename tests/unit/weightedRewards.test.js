@@ -54,7 +54,7 @@ describe("Weighted Rewards Calculation", () => {
 
     // Default implementations
     User.findById.mockReturnValue({
-        populate: jest.fn().mockImplementation(() => Promise.resolve(mockUser))
+      populate: jest.fn().mockImplementation(() => Promise.resolve(mockUser)),
     });
     Product.findById.mockResolvedValue(mockProduct);
     Reward.findOne.mockResolvedValue(mockReward);
@@ -63,8 +63,8 @@ describe("Weighted Rewards Calculation", () => {
 
   it("should award 50 points to a Mason (5 points * 10 multiplier)", async () => {
     // Override user to have the Mason role populated
-    mockUser.roleId = mockRole; 
-    
+    mockUser.roleId = mockRole;
+
     const redeemData = {
       userId: "user123",
       productId: "prod123",

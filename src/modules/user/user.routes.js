@@ -6,6 +6,7 @@ const roleController = require("../roles/role.controller");
 const verification = require("../../middlewares/jwtVerification");
 const {
   userLoginRequestType,
+  userOtpLoginRequestType,
   userRegisterRequestType,
   userBankDetailsRequestType,
   userProfileUpdateRequestType,
@@ -13,6 +14,13 @@ const {
 } = require("../../validations/user.validations");
 const validateRequest = require("../../middlewares/validator");
 const upload = require("../../middlewares/multer");
+const rateLimiter = require("../../middlewares/rateLimiter");
+
+const otpRateLimiter = rateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: "Too many OTP requests. Please try again after 15 minutes.",
+});
 
 const router = express.Router();
 
@@ -40,7 +48,11 @@ router.post(
   handleError(controller.logout),
 );
 
-router.post(userPaths.auth.verifyEmail, handleError(controller.verifyEmail));
+router.post(
+  userPaths.auth.verifyEmail,
+  otpRateLimiter,
+  handleError(controller.verifyEmail),
+);
 
 router.post(userPaths.auth.verifyOtp, handleError(controller.verifyOtp));
 
@@ -49,10 +61,14 @@ router.patch(
   handleError(controller.resetPassword),
 );
 
-router.get(
-    userPaths.roles,
-    handleError(roleController.getRoles)
-)
+router.post(
+  userPaths.auth.simpleLoginWithOtp,
+  validateRequest(userOtpLoginRequestType),
+  otpRateLimiter,
+  handleError(controller.simpleLoginWithOtp),
+);
+
+router.get(userPaths.roles, handleError(roleController.getRoles));
 
 // ---------------------------------------------
 // User details
