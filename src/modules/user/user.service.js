@@ -403,7 +403,6 @@ async function issueOtpForUser({
   phoneNumber,
   payload,
   buildMessage,
-  payload,
 }) {
   const recent = await findRecentOtpRequest(userId, requestType);
 
