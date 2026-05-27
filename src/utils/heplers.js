@@ -89,22 +89,52 @@ function formatNotification(template, data) {
   });
 }
 
-function buildPhoneLookupVariants(phone) {
-  const digits = String(phone).replace(/\D/g, "");
-  const variants = new Set([String(phone).trim()]);
+const calculateProfileCompletion = (user, roleName = "") => {
+  let totalFields = 10;
+  let filledFields = 0;
 
-  if (digits.length === 10) {
-    variants.add(digits);
-    variants.add(`+91${digits}`);
-    variants.add(`91${digits}`);
-  } else if (digits.length === 12 && digits.startsWith("91")) {
-    variants.add(digits);
-    variants.add(digits.slice(2));
-    variants.add(`+${digits}`);
+  // 1. Email
+  if (user.email) filledFields++;
+  
+  // 2. Name
+  if (user.name) filledFields++;
+  
+  // 3. Mobile Number (phonenumber)
+  if (user.mobileNumber) filledFields++;
+  
+  // 4. Date of Birth
+  if (user.dob) filledFields++;
+  
+  // 5. Profile Photo
+  if (user.profilePhoto) filledFields++;
+  
+  // 6. Experience
+  if (user.experience !== undefined && user.experience !== null) filledFields++;
+  
+  // 7. Area of Operation
+  if (user.areaOfOperation) filledFields++;
+  
+  // 8. KYC Status
+  if (user.kycStatus && user.kycStatus !== 'NOT_STARTED') filledFields++;
+  
+  // 9. Bank Details (must contain accountNumber, ifscCode, and userName)
+  const hasBankDetails = user.bankDetails && 
+                         user.bankDetails.accountNumber && 
+                         user.bankDetails.ifscCode && 
+                         user.bankDetails.userName;
+  if (hasBankDetails) filledFields++;
+  
+  // 10. Agreed to Terms
+  if (user.agreedToTerms === true) filledFields++;
+
+  if (roleName === 'retailer') {
+    totalFields = 11;
+    // 11. Shop Name
+    if (user.shopName) filledFields++;
   }
 
-  return [...variants];
-}
+  return Math.round((filledFields / totalFields) * 100);
+};
 
 module.exports = {
   handleError,
@@ -118,5 +148,5 @@ module.exports = {
   generateBufferToken,
   generateRandomPassword,
   formatNotification,
-  buildPhoneLookupVariants,
+  calculateProfileCompletion,
 };

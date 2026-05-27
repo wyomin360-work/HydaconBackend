@@ -1,5 +1,5 @@
 const { default: mongoose } = require("mongoose");
-const { hashData } = require("../utils/heplers");
+const { hashData, calculateProfileCompletion } = require("../utils/heplers");
 const {
   AuthTypes,
   KYC_STATUS,
@@ -108,22 +108,7 @@ userSchema.methods.calculateCompletionPercentage = async function () {
       }
     }
 
-    let totalFields = 6;
-    let filledFields = 0;
-
-    if (this.name) filledFields++;
-    if (this.dob) filledFields++;
-    if (this.profilePhoto) filledFields++;
-    if (this.experience !== undefined && this.experience !== null) filledFields++;
-    if (this.areaOfOperation) filledFields++;
-    if (this.kycStatus && this.kycStatus !== 'NOT_STARTED') filledFields++;
-
-    if (roleName === 'retailer') {
-      totalFields = 7;
-      if (this.shopName) filledFields++;
-    }
-
-    this.profileCompletionPercentage = Math.round((filledFields / totalFields) * 100);
+    this.profileCompletionPercentage = calculateProfileCompletion(this, roleName);
   } catch (err) {
     console.error("Error calculating profile completion percentage:", err);
   }
