@@ -5,6 +5,7 @@ const fs = require("fs");
 const { sendFcmNotifications } = require("../../functions/fcm");
 const { APP_NOTIFICATIONS } = require("../../constants/notifications");
 const { formatNotification } = require("../../utils/heplers");
+const { KYC_STATUS, KYC_DOCUMENT_STATUS, KYC_DOCUMENT_TYPES } = require("../../constants/user");
 
 async function compressImage(filePath) {
   const parsedPath = path.parse(filePath);
@@ -47,9 +48,9 @@ function safeUnlink(filePath) {
 
 async function uploadDocument(userId, documentType, file) {
   // Bug 1: Validate documentType first and clean up file on failure
-  if (!['aadhaar', 'pan', 'shopPhoto'].includes(documentType)) {
+  if (!Object.values(KYC_DOCUMENT_TYPES).includes(documentType)) {
     safeUnlink(file?.path);
-    throw new Error('Invalid document type. Allowed: aadhaar, pan, shopPhoto');
+    throw new Error(`Invalid document type. Allowed: ${Object.values(KYC_DOCUMENT_TYPES).join(', ')}`);
   }
 
   if (!file) {
@@ -104,7 +105,7 @@ async function uploadDocument(userId, documentType, file) {
       originalUrl,
       compressedUrl,
       uploadedAt: new Date(),
-      status: 'PENDING',
+      status: KYC_DOCUMENT_STATUS.PENDING,
       rejectionReason: null
     };
 
@@ -115,17 +116,17 @@ async function uploadDocument(userId, documentType, file) {
     const allUploaded = docs.aadhaar?.originalUrl && docs.pan?.originalUrl && docs.shopPhoto?.originalUrl;
 
     const anyRejected =
-      docs.aadhaar?.status === 'REJECTED' ||
-      docs.pan?.status === 'REJECTED' ||
-      docs.shopPhoto?.status === 'REJECTED';
+      docs.aadhaar?.status === KYC_DOCUMENT_STATUS.REJECTED ||
+      docs.pan?.status === KYC_DOCUMENT_STATUS.REJECTED ||
+      docs.shopPhoto?.status === KYC_DOCUMENT_STATUS.REJECTED;
 
     if (anyRejected) {
-      user.kycStatus = 'REJECTED';
+      user.kycStatus = KYC_STATUS.REJECTED;
     } else if (allUploaded) {
-      user.kycStatus = 'PENDING';
+      user.kycStatus = KYC_STATUS.PENDING;
     } else {
-      if (!user.kycStatus || user.kycStatus === 'NOT_STARTED') {
-        user.kycStatus = 'NOT_STARTED';
+      if (!user.kycStatus || user.kycStatus === KYC_STATUS.NOT_STARTED) {
+        user.kycStatus = KYC_STATUS.NOT_STARTED;
       }
     }
 
@@ -147,7 +148,7 @@ async function uploadDocument(userId, documentType, file) {
 }
 
 function normalizeKycDocuments(kycDocuments) {
-  const docTypes = ['aadhaar', 'pan', 'shopPhoto'];
+  const docTypes = Object.values(KYC_DOCUMENT_TYPES);
   const normalized = {};
 
   docTypes.forEach((type) => {
@@ -165,7 +166,7 @@ async function getKycStatus(userId) {
     throw new Error("User not found");
   }
   return {
-    kycStatus: user.kycStatus || 'NOT_STARTED',
+    kycStatus: user.kycStatus || KYC_STATUS.NOT_STARTED,
     kycDocuments: normalizeKycDocuments(user.kycDocuments),
   };
 }
@@ -175,17 +176,17 @@ async function getAdminKycList(filters = {}) {
   if (filters.status) {
     query.kycStatus = filters.status;
   } else {
-    query.kycStatus = { $ne: "NOT_STARTED" };
+    query.kycStatus = { $ne: KYC_STATUS.NOT_STARTED };
   }
 
   const users = await User.find(query)
     .select("name email kycStatus kycDocuments updatedAt")
     .sort({ updatedAt: -1 });
 
-  const allCount = await User.countDocuments({ kycStatus: { $ne: 'NOT_STARTED' } });
-  const pendingCount = await User.countDocuments({ kycStatus: 'PENDING' });
-  const approvedCount = await User.countDocuments({ kycStatus: { $in: ['APPROVED', 'VERIFIED'] } });
-  const rejectedCount = await User.countDocuments({ kycStatus: 'REJECTED' });
+  const allCount = await User.countDocuments({ kycStatus: { $ne: KYC_STATUS.NOT_STARTED } });
+  const pendingCount = await User.countDocuments({ kycStatus: KYC_STATUS.PENDING });
+  const approvedCount = await User.countDocuments({ kycStatus: { $in: [KYC_STATUS.APPROVED, KYC_STATUS.VERIFIED] } });
+  const rejectedCount = await User.countDocuments({ kycStatus: KYC_STATUS.REJECTED });
 
   return {
     users,
@@ -203,13 +204,13 @@ async function reviewKycDocument(
   { documentType, status, rejectionReason },
 ) {
   let normalizedStatus = status.toUpperCase();
-  if (normalizedStatus === "VERIFIED") {
-    normalizedStatus = "APPROVED";
+  if (normalizedStatus === KYC_STATUS.VERIFIED) {
+    normalizedStatus = KYC_DOCUMENT_STATUS.APPROVED;
   }
 
-  if (!["APPROVED", "REJECTED"].includes(normalizedStatus)) {
+  if (![KYC_DOCUMENT_STATUS.APPROVED, KYC_DOCUMENT_STATUS.REJECTED].includes(normalizedStatus)) {
     throw new Error(
-      "Invalid review status. Allowed: APPROVED, VERIFIED, REJECTED",
+      `Invalid review status. Allowed: ${KYC_DOCUMENT_STATUS.APPROVED}, ${KYC_STATUS.VERIFIED}, ${KYC_DOCUMENT_STATUS.REJECTED}`,
     );
   }
 
@@ -220,8 +221,8 @@ async function reviewKycDocument(
 
   if (documentType) {
     // --- Per-document review ---
-    if (!['aadhaar', 'pan', 'shopPhoto'].includes(documentType)) {
-      throw new Error('Invalid document type. Allowed: aadhaar, pan, shopPhoto');
+    if (!Object.values(KYC_DOCUMENT_TYPES).includes(documentType)) {
+      throw new Error(`Invalid document type. Allowed: ${Object.values(KYC_DOCUMENT_TYPES).join(', ')}`);
     }
 
     if (
@@ -234,7 +235,7 @@ async function reviewKycDocument(
 
     user.kycDocuments[documentType].status = normalizedStatus;
     user.kycDocuments[documentType].rejectionReason =
-      normalizedStatus === "REJECTED" ? rejectionReason : null;
+      normalizedStatus === KYC_DOCUMENT_STATUS.REJECTED ? rejectionReason : null;
 
     // Bug 4 fix: Recalculate global kycStatus correctly for per-document reviews.
     // Only fall back to PENDING if all three documents are uploaded;
@@ -242,23 +243,23 @@ async function reviewKycDocument(
     const docs = user.kycDocuments;
     const allUploaded = docs.aadhaar?.originalUrl && docs.pan?.originalUrl && docs.shopPhoto?.originalUrl;
     const anyRejected =
-      docs.aadhaar?.status === 'REJECTED' ||
-      docs.pan?.status === 'REJECTED' ||
-      docs.shopPhoto?.status === 'REJECTED';
+      docs.aadhaar?.status === KYC_DOCUMENT_STATUS.REJECTED ||
+      docs.pan?.status === KYC_DOCUMENT_STATUS.REJECTED ||
+      docs.shopPhoto?.status === KYC_DOCUMENT_STATUS.REJECTED;
 
     const allApproved =
-      docs.aadhaar?.status === 'APPROVED' &&
-      docs.pan?.status === 'APPROVED' &&
-      docs.shopPhoto?.status === 'APPROVED';
+      docs.aadhaar?.status === KYC_DOCUMENT_STATUS.APPROVED &&
+      docs.pan?.status === KYC_DOCUMENT_STATUS.APPROVED &&
+      docs.shopPhoto?.status === KYC_DOCUMENT_STATUS.APPROVED;
 
     if (anyRejected) {
-      user.kycStatus = "REJECTED";
+      user.kycStatus = KYC_STATUS.REJECTED;
     } else if (allApproved) {
-      user.kycStatus = 'APPROVED';
+      user.kycStatus = KYC_STATUS.APPROVED;
     } else if (allUploaded) {
-      user.kycStatus = 'PENDING';
+      user.kycStatus = KYC_STATUS.PENDING;
     } else {
-      user.kycStatus = 'NOT_STARTED';
+      user.kycStatus = KYC_STATUS.NOT_STARTED;
     }
   } else {
     // --- Global review (no documentType provided) ---
@@ -275,25 +276,25 @@ async function reviewKycDocument(
     const hasAtLeastOneDoc = docs.aadhaar?.originalUrl || docs.pan?.originalUrl || docs.shopPhoto?.originalUrl;
 
     // New Bug fix: Admin cannot approve KYC entirely if no documents have been uploaded
-    if (normalizedStatus === 'APPROVED' && !hasAtLeastOneDoc) {
+    if (normalizedStatus === KYC_DOCUMENT_STATUS.APPROVED && !hasAtLeastOneDoc) {
       throw new Error('Cannot approve KYC entirely because no documents have been uploaded');
     }
 
     // New Bug fix: Admin cannot reject KYC entirely unless all documents are uploaded
-    if (normalizedStatus === 'REJECTED' && !allUploaded) {
+    if (normalizedStatus === KYC_DOCUMENT_STATUS.REJECTED && !allUploaded) {
       throw new Error('Cannot reject KYC entirely because not all documents have been uploaded');
     }
 
-    const docTypes = ['aadhaar', 'pan', 'shopPhoto'];
+    const docTypes = Object.values(KYC_DOCUMENT_TYPES);
     docTypes.forEach(type => {
       if (!user.kycDocuments[type]) {
         user.kycDocuments[type] = {};
       }
       user.kycDocuments[type].status = normalizedStatus;
       user.kycDocuments[type].rejectionReason =
-        normalizedStatus === "REJECTED" ? rejectionReason : null;
+        normalizedStatus === KYC_DOCUMENT_STATUS.REJECTED ? rejectionReason : null;
       if (
-        normalizedStatus === "APPROVED" &&
+        normalizedStatus === KYC_DOCUMENT_STATUS.APPROVED &&
         !user.kycDocuments[type].uploadedAt
       ) {
         user.kycDocuments[type].uploadedAt = new Date();
@@ -308,11 +309,11 @@ async function reviewKycDocument(
   // Trigger FCM notification
   if (user.fcmTokens?.length && user.enableNotification) {
     try {
-      if (user.kycStatus === "APPROVED") {
+      if (user.kycStatus === KYC_STATUS.APPROVED) {
         const title = APP_NOTIFICATIONS.kyc.approved.title;
         const body = APP_NOTIFICATIONS.kyc.approved.body;
         await sendFcmNotifications(user.fcmTokens, title, body);
-      } else if (user.kycStatus === "REJECTED") {
+      } else if (user.kycStatus === KYC_STATUS.REJECTED) {
         const title = APP_NOTIFICATIONS.kyc.rejected.title;
         const body = formatNotification(APP_NOTIFICATIONS.kyc.rejected.body, {
           reason: rejectionReason || "Information mismatch",
