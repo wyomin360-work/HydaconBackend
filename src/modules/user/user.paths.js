@@ -1,12 +1,12 @@
 module.exports = {
-  root: '/user',
-  details: '/details',
-  list: '/list',
-  roles: '/roles',
-  onboardingRoles: '/onboarding/roles',
-  updateProfile: '/profile/update',
-  updatePreferences: '/preference/update',
-  fcmToken: '/fcm-token',
+  root: "/user",
+  details: "/details",
+  list: "/list",
+  roles: "/roles",
+  onboardingRoles: "/onboarding/roles",
+  updateProfile: "/profile/update",
+  updatePreferences: "/preference/update",
+  fcmToken: "/fcm-token",
   phone: {
     verifyOldNumber: "/phone/verify-old-number",
     verifyNewNumber: "/phone/verify-new-number",
@@ -22,9 +22,9 @@ module.exports = {
     simpleLoginWithOtp: "/auth/simple-login-with-otp",
   },
   bank: {
-    details: '/bank-details',
-    create: '/bank-details/create',
-    update: '/bank-details/update',
-    delete: '/bank-details/delete'
-  }
-}
+    details: "/bank-details",
+    create: "/bank-details/create",
+    update: "/bank-details/update",
+    delete: "/bank-details/delete",
+  },
+};

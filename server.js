@@ -28,7 +28,6 @@ process.on("unhandledRejection", (err) => {
   });
 });
 
-
 // Add this in src/app.js, right after your 'app' constant is defined
 app.use((req, res, next) => {
   // This will print to your terminal every time ANY request hits the server
@@ -53,4 +52,3 @@ const startServer = async () => {
 };
 
 startServer();
-
