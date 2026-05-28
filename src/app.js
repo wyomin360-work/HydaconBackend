@@ -54,7 +54,7 @@ app.use(
 );
 
 app.use((req, res, next) => {
-  if (req.path.includes('/api/v1/user/auth/simple-login-with-otp')) {
+  if (req.path.includes("/api/v1/user/auth/simple-login-with-otp")) {
     console.log("--- DEBUG LOG ---");
     console.log("Method:", req.method);
     console.log("Path:", req.path);

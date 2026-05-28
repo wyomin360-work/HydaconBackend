@@ -18,10 +18,9 @@ const userOtpLoginRequestType = {
     identity: { type: "string", minLength: 5 },
     requestType: { type: "string" },
   },
-  required: ["identity","requestType"],
+  required: ["identity", "requestType"],
   additionalProperties: false,
 };
-
 
 const userLoginRequestType = {
   type: "object",
@@ -69,10 +68,7 @@ const verifyNewNumberRequestType = {
     otp: { type: "string", pattern: "^[0-9]{4,6}$" },
     oldVerificationToken: { type: "string", minLength: 10 },
   },
-  anyOf: [
-    { required: ["phone"] },
-    { required: ["token", "otp"] },
-  ],
+  anyOf: [{ required: ["phone"] }, { required: ["token", "otp"] }],
   additionalProperties: false,
 };
 

@@ -43,7 +43,6 @@ router.post(
   handleError(controller.providerAuth),
 );
 
-
 router.post(
   userPaths.auth.logout,
   verification.verifyUser,
@@ -63,10 +62,7 @@ router.patch(
   handleError(controller.resetPassword),
 );
 
-router.get(
-    userPaths.roles,
-    handleError(roleController.getRoles)
-)
+router.get(userPaths.roles, handleError(roleController.getRoles));
 router.post(
   userPaths.auth.simpleLoginWithOtp,
   validateRequest(userOtpLoginRequestType),

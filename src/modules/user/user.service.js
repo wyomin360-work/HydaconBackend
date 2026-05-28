@@ -210,7 +210,7 @@ async function logout(userId) {
 }
 
 // ----------------------
-// verify Email 
+// verify Email
 // ----------------------
 async function verifyEmail(data) {
   const { email, phone } = data;
@@ -443,7 +443,6 @@ async function issueOtpForUser({
   return { token, alreadySent: false };
 }
 
-
 function normalizePhone(phone) {
   return String(phone || "").trim();
 }
@@ -468,7 +467,10 @@ async function consumeOtpRequest({
 }) {
   const cleanToken = String(token || "").trim();
   const cleanOtp = String(otp || "").trim();
-  const requestTypeQuery = buildRequestTypeQuery(requestType, allowedRequestTypes);
+  const requestTypeQuery = buildRequestTypeQuery(
+    requestType,
+    allowedRequestTypes,
+  );
 
   const verifySR = await ServiceRequest.findOne({
     token: cleanToken,
@@ -489,11 +491,15 @@ async function consumeOtpRequest({
 
     const validRequestTypes = allowedRequestTypes || [requestType];
     if (!validRequestTypes.includes(tokenRequest.requestType)) {
-      sendFailResponse("This OTP token is not valid for this verification step.");
+      sendFailResponse(
+        "This OTP token is not valid for this verification step.",
+      );
     }
 
     if (tokenRequest.status === ServiceRequestStatus.USED) {
-      sendFailResponse("OTP already verified. Please continue to the next step.");
+      sendFailResponse(
+        "OTP already verified. Please continue to the next step.",
+      );
     }
 
     if (tokenRequest.status === ServiceRequestStatus.EXPIRED) {
@@ -520,7 +526,11 @@ async function consumeOtpRequest({
   return verifySR;
 }
 
-async function getValidOldPhoneVerification(userId, oldVerificationToken, session) {
+async function getValidOldPhoneVerification(
+  userId,
+  oldVerificationToken,
+  session,
+) {
   const query = {
     userId,
     requestType: ServiceRequestType.CHANGE_PHONE_OLD_VERIFIED,
@@ -553,7 +563,9 @@ async function verifyOldNumber(data, userId) {
   const { otp, token } = data;
 
   if (Boolean(otp) !== Boolean(token)) {
-    sendFailResponse("Both OTP and token are required to verify current mobile number.");
+    sendFailResponse(
+      "Both OTP and token are required to verify current mobile number.",
+    );
   }
 
   if (otp && token) {
@@ -612,20 +624,29 @@ async function verifyNewNumber(data, userId, ipAddress) {
   if (!user) sendFailResponse("User not found");
 
   if (Boolean(otp) !== Boolean(token)) {
-    sendFailResponse("Both OTP and token are required to verify new mobile number.");
+    sendFailResponse(
+      "Both OTP and token are required to verify new mobile number.",
+    );
   }
 
-  console.log("VerifyNewNumber received:", { phone, token, oldVerificationToken });
+  console.log("VerifyNewNumber received:", {
+    phone,
+    token,
+    oldVerificationToken,
+  });
 
   if (!oldVerificationToken) {
-     // Check if your new fallback logic successfully finds the previous session
-     const latestOldVerify = await ServiceRequest.findOne({
-        userId,
-        requestType: ServiceRequestType.CHANGE_PHONE_OLD_VERIFIED,
-        status: ServiceRequestStatus.PENDING
-     }).sort({ createdAt: -1 });
-     
-     console.log("Fallback search for oldVerification:", latestOldVerify ? "Found" : "Not Found");
+    // Check if your new fallback logic successfully finds the previous session
+    const latestOldVerify = await ServiceRequest.findOne({
+      userId,
+      requestType: ServiceRequestType.CHANGE_PHONE_OLD_VERIFIED,
+      status: ServiceRequestStatus.PENDING,
+    }).sort({ createdAt: -1 });
+
+    console.log(
+      "Fallback search for oldVerification:",
+      latestOldVerify ? "Found" : "Not Found",
+    );
   }
   if (otp && token) {
     const newOtpRequest = await consumeOtpRequest({
@@ -650,11 +671,16 @@ async function verifyNewNumber(data, userId, ipAddress) {
 
   let oldVerification = null;
   if (user.phone) {
-    oldVerification = await getValidOldPhoneVerification(userId, oldVerificationToken);
+    oldVerification = await getValidOldPhoneVerification(
+      userId,
+      oldVerificationToken,
+    );
   }
 
   if (user.phone && buildPhoneLookupVariants(newPhone).includes(user.phone)) {
-    sendFailResponse("New mobile number must be different from the current number.");
+    sendFailResponse(
+      "New mobile number must be different from the current number.",
+    );
   }
 
   const otpResponse = await issueOtpForUser({
@@ -694,7 +720,11 @@ async function finalizeNumberChange({
       if (!user) sendFailResponse("User not found");
 
       if (user.phone) {
-        await getValidOldPhoneVerification(userId, oldVerificationToken, session);
+        await getValidOldPhoneVerification(
+          userId,
+          oldVerificationToken,
+          session,
+        );
       }
 
       const oldPhone = user.phone || null;
@@ -810,9 +840,9 @@ async function simpleLoginWithOtp(data) {
   }
 
   // 4. Auth type check
-  if (user.authType !== AuthTypes.EMAIL) {
-    sendFailResponse(`This account is linked with ${user.authType}. Please use that method.`);
-  }
+  // if (user.authType !== AuthTypes.EMAIL) {
+  //   sendFailResponse(`This account is linked with ${user.authType}. Please use that method.`);
+  // }
 
   const phoneToUse = resolveOtpPhone(user, cleanIdentity, isEmail);
   const { token, alreadySent } = await issueOtpForUser({
