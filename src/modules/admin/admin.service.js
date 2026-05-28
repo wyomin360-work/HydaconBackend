@@ -1,12 +1,15 @@
 const crypto = require("crypto");
+const mongoose = require("mongoose");
 const nodemailer = require("nodemailer");
 const Admin = require("../../schemas/admin.schema");
+const AuditLog = require("../../schemas/audit-log.schema");
 const RefreshToken = require("../../schemas/refreshtoken.schema");
+const User = require("../../schemas/user.schema");
 const {
   sendFailResponse,
   sendResponse,
 } = require("../../utils/responseHandlers");
-const { compareHash, generateToken } = require("../../utils/heplers");
+const { compareHash, generateToken, parseUserAgent } = require("../../utils/heplers");
 const { sendMail } = require("../../functions/nodemailer");
 
 async function generateAndSaveToken(payload) {
@@ -307,6 +310,141 @@ async function adminDelete(adminId) {
   return { message: "reward deleted", data: { adminDeleted: true } };
 }
 
+// ----------------------
+// Phone Number Change Audit Logs
+// ----------------------
+async function phoneNumberChangeAuditLogs(data = {}) {
+  const {
+    page = 1,
+    limit = 10,
+    search = "",
+    sortBy = "timestamp",
+    sortOrder = "desc",
+    filters = {},
+  } = data;
+
+  const currentPage = Math.max(Number(page) || 1, 1);
+  const pageSize = Math.min(Math.max(Number(limit) || 10, 1), 100);
+  const safeFilters = filters || {};
+  const skip = (currentPage - 1) * pageSize;
+
+  // 1. Define base action requirements
+  const baseConditions = {
+    $or: [
+      { action: "PHONE_NUMBER_CHANGE" },
+      { action: { $exists: false } },
+      { action: null },
+    ],
+  };
+
+  // 2. Initialize query with base conditions
+  const query = { $and: [baseConditions] };
+
+  // 3. Add Search
+  if (search) {
+    const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const emailRegex = search.includes("@")
+      ? new RegExp(escapedSearch, "i")
+      : new RegExp(escapedSearch + "[^@]*@", "i");
+
+    const matchingUsers = await User.find({
+      $or: [
+        { name: { $regex: search, $options: "i" } },
+        { email: emailRegex },
+        { phone: { $regex: search, $options: "i" } },
+      ],
+    }).select("_id").lean();
+
+    const userIds = matchingUsers.map((u) => u._id);
+
+    const searchConditions = [
+      { old_number: { $regex: search, $options: "i" } },
+      { new_number: { $regex: search, $options: "i" } },
+      { old_value: { $regex: search, $options: "i" } },
+      { new_value: { $regex: search, $options: "i" } },
+    ];
+
+    if (userIds.length > 0) {
+      searchConditions.push({ user_id: { $in: userIds } });
+    }
+
+    query.$and.push({ $or: searchConditions });
+  }
+
+  // 4. Add additional filters
+  if (safeFilters.userId && mongoose.Types.ObjectId.isValid(safeFilters.userId)) {
+    query.$and.push({ user_id: safeFilters.userId });
+  }
+  if (safeFilters.oldNumber) {
+    query.$and.push({ $or: [{ old_number: safeFilters.oldNumber }, { old_value: safeFilters.oldNumber }] });
+  }
+  if (safeFilters.newNumber) {
+    query.$and.push({ $or: [{ new_number: safeFilters.newNumber }, { new_value: safeFilters.newNumber }] });
+  }
+  if (safeFilters.ipAddress) {
+    query.$and.push({ ip_address: safeFilters.ipAddress });
+  }
+  if (safeFilters.dateFrom || safeFilters.dateTo) {
+    const dateRange = {};
+    if (safeFilters.dateFrom) dateRange.$gte = new Date(safeFilters.dateFrom);
+    if (safeFilters.dateTo) dateRange.$lte = new Date(safeFilters.dateTo);
+    query.$and.push({ timestamp: dateRange });
+  }
+
+  // 5. Execution
+  const sortableFields = new Set(["timestamp", "createdAt", "updatedAt"]);
+  const sort = {};
+  sort[sortableFields.has(sortBy) ? sortBy : "timestamp"] = sortOrder === "asc" ? 1 : -1;
+
+  const auditLogs = await AuditLog.find(query)
+    .populate("user_id", "name email phone")
+    .sort(sort)
+    .skip(skip)
+    .limit(pageSize)
+    .lean();
+
+  const totalLogs = await AuditLog.countDocuments(query);
+
+  // 6. Return mapped response
+  return {
+    auditLogs: auditLogs.map((log) => {
+      const u = log.user_id;
+      return {
+        id: log._id,
+        action: log.action || "PHONE_NUMBER_CHANGE",
+        oldNumber: log.old_number ?? log.old_value ?? null,
+        newNumber: log.new_number ?? log.new_value ?? null,
+        user: u ? {
+          id: u._id,
+          userId: u._id,
+          name: u.name || null,
+          username: u.name || null,
+          email: u.email || null,
+          useremail: u.email || null,
+          phone: u.phone || null,
+        } : null,
+        ipAddress: log.ip_address || null,
+        deviceInfo: log.device_info ? (() => {
+          const userAgent = log.device_info.user_agent || "";
+          const parsed = parseUserAgent(userAgent);
+          return {
+            userAgent: userAgent || null,
+            deviceId: log.device_info.device_id || parsed.deviceId || null,
+            deviceName: log.device_info.device_name || parsed.deviceName || null,
+            platform: log.device_info.platform || parsed.platform || null,
+            appVersion: log.device_info.app_version || parsed.appVersion || null,
+          };
+        })() : null,
+        timestamp: log.timestamp || log.createdAt || null,
+      };
+    }),
+    limit: pageSize,
+    totalPages: Math.ceil(totalLogs / pageSize),
+    total: totalLogs,
+    page: currentPage,
+  };
+}
+
 module.exports = {
   registerAdmin,
   login,
@@ -316,4 +454,5 @@ module.exports = {
   updateDetails,
   adminList,
   adminDelete,
+  phoneNumberChangeAuditLogs,
 };

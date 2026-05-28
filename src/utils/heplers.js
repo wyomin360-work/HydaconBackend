@@ -105,6 +105,72 @@ function buildPhoneLookupVariants(phone) {
 
   return [...variants];
 }
+function parseUserAgent(userAgent, headers = {}) {
+  const info = {
+    userAgent: userAgent || null,
+    deviceId: headers["x-device-id"] || headers["device-id"] || null,
+    platform: headers["x-platform"] || headers["sec-ch-ua-platform"] || null,
+    appVersion: headers["x-app-version"] || null,
+    deviceName: null,
+  };
+
+  if (!userAgent) return info;
+
+  const appVersionMatch = userAgent.match(/(?:Hybeck-[a-zA-Z]+|App)\/([\d.]+)/i);
+  if (appVersionMatch && !info.appVersion) {
+    info.appVersion = appVersionMatch[1];
+  }
+
+  const parenMatch = userAgent.match(/\(([^)]+)\)/);
+  if (parenMatch) {
+    const parts = parenMatch[1].split(";").map(p => p.trim());
+    const isAndroid = parts.some(p => /android/i.test(p)) || /android/i.test(userAgent);
+    const isIOS = parts.some(p => /iphone|ipad|ipod/i.test(p)) || /iphone|ipad|ipod/i.test(userAgent);
+
+    if (isAndroid) {
+      if (!info.platform) info.platform = "Android";
+      const devicePart = parts.find(p => 
+        !/linux/i.test(p) && 
+        !/android/i.test(p) && 
+        !/build/i.test(p) &&
+        !/applewebkit/i.test(p)
+      );
+      if (devicePart) {
+        info.deviceName = devicePart;
+      }
+    } else if (isIOS) {
+      if (!info.platform) info.platform = "iOS";
+      const devicePart = parts.find(p => /iphone|ipad|ipod/i.test(p));
+      if (devicePart) {
+        info.deviceName = devicePart;
+      }
+    } else {
+      if (/macintosh/i.test(userAgent)) {
+        if (!info.platform) info.platform = "macOS";
+        info.deviceName = "Macintosh";
+      } else if (/windows/i.test(userAgent)) {
+        if (!info.platform) info.platform = "Windows";
+        info.deviceName = "Windows PC";
+      } else if (/linux/i.test(userAgent)) {
+        if (!info.platform) info.platform = "Linux";
+        info.deviceName = "Linux PC";
+      }
+    }
+  }
+
+  if (!info.deviceName) {
+    const modelMatch = userAgent.match(/(RMX\d+|SM-\w+|iPhone\d+,\d+|iPad\d+,\d+)/i);
+    if (modelMatch) {
+      info.deviceName = modelMatch[1];
+    }
+  }
+
+  if (!info.deviceId && info.deviceName) {
+    info.deviceId = `DEV-${info.deviceName.replace(/\s+/g, '-')}`;
+  }
+
+  return info;
+}
 
 module.exports = {
   handleError,
@@ -119,4 +185,5 @@ module.exports = {
   generateRandomPassword,
   formatNotification,
   buildPhoneLookupVariants,
+  parseUserAgent,
 };

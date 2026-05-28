@@ -613,7 +613,7 @@ async function verifyOldNumber(data, userId) {
   };
 }
 
-async function verifyNewNumber(data, userId, ipAddress) {
+async function verifyNewNumber(data, userId, ipAddress, deviceInfo = {}) {
   const { phone, otp, token, oldVerificationToken } = data;
   const user = await User.findById(userId);
   if (!user) sendFailResponse("User not found");
@@ -624,25 +624,6 @@ async function verifyNewNumber(data, userId, ipAddress) {
     );
   }
 
-  console.log("VerifyNewNumber received:", {
-    phone,
-    token,
-    oldVerificationToken,
-  });
-
-  if (!oldVerificationToken) {
-    // Check if your new fallback logic successfully finds the previous session
-    const latestOldVerify = await ServiceRequest.findOne({
-      userId,
-      requestType: ServiceRequestType.CHANGE_PHONE_OLD_VERIFIED,
-      status: ServiceRequestStatus.PENDING,
-    }).sort({ createdAt: -1 });
-
-    console.log(
-      "Fallback search for oldVerification:",
-      latestOldVerify ? "Found" : "Not Found",
-    );
-  }
   if (otp && token) {
     const newOtpRequest = await consumeOtpRequest({
       token,
@@ -656,6 +637,7 @@ async function verifyNewNumber(data, userId, ipAddress) {
       userId,
       newPhone,
       ipAddress,
+      deviceInfo,
       oldVerificationToken: newOtpRequest.payload?.oldVerificationToken,
     });
 
@@ -702,6 +684,7 @@ async function finalizeNumberChange({
   userId,
   newPhone,
   ipAddress,
+  deviceInfo = {},
   oldVerificationToken,
 }) {
   const normalizedPhone = requirePhoneNumber(newPhone);
@@ -726,18 +709,22 @@ async function finalizeNumberChange({
       user.phone = normalizedPhone;
       updatedUser = await user.save({ session });
 
-      await AuditLog.create(
-        [
-          {
-            user_id: user._id,
-            old_value: oldPhone,
-            new_value: normalizedPhone,
-            timestamp: new Date(),
-            ip_address: ipAddress || null,
-          },
-        ],
-        { session },
-      );
+      const auditLog = new AuditLog({
+        user_id: user._id,
+        action: "PHONE_NUMBER_CHANGE",
+        old_number: oldPhone,
+        new_number: normalizedPhone,
+        timestamp: new Date(),
+        ip_address: ipAddress || null,
+        device_info: {
+          user_agent: deviceInfo?.user_agent || null,
+          device_id: deviceInfo?.device_id || null,
+          device_name: deviceInfo?.device_name || null,
+          platform: deviceInfo?.platform || null,
+          app_version: deviceInfo?.app_version || null,
+        },
+      });
+      await auditLog.save({ session });
 
       await ServiceRequest.updateMany(
         {

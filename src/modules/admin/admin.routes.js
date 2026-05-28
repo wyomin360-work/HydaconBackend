@@ -51,6 +51,13 @@ router.post(
   verification.verifyAdmin,
   handleError(controller.adminList),
 );
+
+router.post(
+  adminPaths.auditLogs.phoneNumberChanges,
+  verification.verifyAdmin,
+  handleError(controller.phoneNumberChangeAuditLogs),
+);
+
 router.delete(
   adminPaths.delete,
   verification.verifyAdmin,
