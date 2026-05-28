@@ -3,6 +3,11 @@ jest.mock("bcrypt", () => ({
   compare: jest.fn(),
 }));
 
+jest.mock("../../src/functions/nodemailer", () => ({
+  sendMail: jest.fn().mockResolvedValue(true),
+  sendTemplateEmail: jest.fn().mockResolvedValue(true),
+}));
+
 const kycService = require("../../src/modules/kyc/kyc.service");
 const User = require("../../src/schemas/user.schema");
 const fs = require("fs");
@@ -330,6 +335,98 @@ describe("kyc.service unit tests", () => {
       });
 
       expect(mockUser.kycStatus).toBe("REJECTED");
+    });
+
+    it("should send approval email if user.email is set and KYC is APPROVED", async () => {
+      const mockUser = {
+        email: "user@example.com",
+        name: "Test User",
+        kycDocuments: {
+          aadhaar: { originalUrl: "/uploads/images/aadhaar.jpg", status: "APPROVED" },
+          pan: { originalUrl: "/uploads/images/pan.jpg", status: "PENDING" },
+          shopPhoto: { originalUrl: "/uploads/images/shop.jpg", status: "APPROVED" },
+        },
+        kycStatus: "PENDING",
+        save: jest.fn().mockResolvedValue(true),
+      };
+      User.findById.mockResolvedValue(mockUser);
+
+      const { sendTemplateEmail } = require("../../src/functions/nodemailer");
+      sendTemplateEmail.mockClear();
+
+      await kycService.reviewKycDocument("userId123", {
+        documentType: "pan",
+        status: "APPROVED",
+      });
+
+      expect(sendTemplateEmail).toHaveBeenCalledTimes(1);
+      expect(sendTemplateEmail).toHaveBeenCalledWith(
+        "user@example.com",
+        "users/kycApproved",
+        "KYC Verified Successfully 🎉",
+        expect.objectContaining({
+          userName: "Test User",
+        })
+      );
+    });
+
+    it("should send rejection email if user.email is set and KYC is REJECTED", async () => {
+      const mockUser = {
+        email: "user@example.com",
+        name: "Test User",
+        kycDocuments: {
+          aadhaar: { originalUrl: "/uploads/images/aadhaar.jpg", status: "APPROVED" },
+          pan: { originalUrl: "/uploads/images/pan.jpg", status: "PENDING" },
+          shopPhoto: { originalUrl: "/uploads/images/shop.jpg", status: "APPROVED" },
+        },
+        kycStatus: "PENDING",
+        save: jest.fn().mockResolvedValue(true),
+      };
+      User.findById.mockResolvedValue(mockUser);
+
+      const { sendTemplateEmail } = require("../../src/functions/nodemailer");
+      sendTemplateEmail.mockClear();
+
+      await kycService.reviewKycDocument("userId123", {
+        documentType: "pan",
+        status: "REJECTED",
+        rejectionReason: "ID blurry",
+      });
+
+      expect(sendTemplateEmail).toHaveBeenCalledTimes(1);
+      expect(sendTemplateEmail).toHaveBeenCalledWith(
+        "user@example.com",
+        "users/kycRejected",
+        "KYC Verification Failed ⚠️",
+        expect.objectContaining({
+          userName: "Test User",
+          rejectionReason: "ID blurry",
+        })
+      );
+    });
+
+    it("should not send email if user.email is not set", async () => {
+      const mockUser = {
+        name: "Test User",
+        kycDocuments: {
+          aadhaar: { originalUrl: "/uploads/images/aadhaar.jpg", status: "APPROVED" },
+          pan: { originalUrl: "/uploads/images/pan.jpg", status: "PENDING" },
+          shopPhoto: { originalUrl: "/uploads/images/shop.jpg", status: "APPROVED" },
+        },
+        kycStatus: "PENDING",
+        save: jest.fn().mockResolvedValue(true),
+      };
+      User.findById.mockResolvedValue(mockUser);
+
+      const { sendTemplateEmail } = require("../../src/functions/nodemailer");
+      sendTemplateEmail.mockClear();
+
+      await kycService.reviewKycDocument("userId123", {
+        documentType: "pan",
+        status: "APPROVED",
+      });
+
+      expect(sendTemplateEmail).not.toHaveBeenCalled();
     });
   });
 });

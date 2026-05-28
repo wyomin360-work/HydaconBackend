@@ -23,6 +23,7 @@
     "express": "^5.1.0",
     "firebase-admin": "^13.4.0",
     "google-auth-library": "^10.3.0",
+    "handlebars": "^4.7.9",
     "jsonwebtoken": "^9.0.3",
     "jwk-to-pem": "^2.0.7",
     "moment": "^2.30.1",
