@@ -108,7 +108,10 @@ userSchema.methods.calculateCompletionPercentage = async function () {
       }
     }
 
-    this.profileCompletionPercentage = calculateProfileCompletion(this, roleName);
+    this.profileCompletionPercentage = calculateProfileCompletion(
+      this,
+      roleName,
+    );
   } catch (err) {
     console.error("Error calculating profile completion percentage:", err);
   }

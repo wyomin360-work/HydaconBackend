@@ -543,12 +543,13 @@ async function updateUserProfile(data, userId) {
   if (data.mobileNumber !== undefined) user.mobileNumber = data.mobileNumber;
   if (data.shopName !== undefined) user.shopName = data.shopName;
   if (data.experience !== undefined) user.experience = data.experience;
-  if (data.areaOfOperation !== undefined) user.areaOfOperation = data.areaOfOperation;
+  if (data.areaOfOperation !== undefined)
+    user.areaOfOperation = data.areaOfOperation;
   if (data.profilePhoto !== undefined) user.profilePhoto = data.profilePhoto;
 
   await user.save();
 
-  const populatedUser = await User.findById(userId).populate('roleId');
+  const populatedUser = await User.findById(userId).populate("roleId");
   const { password, ...rest } = populatedUser.toObject();
 
   return {
@@ -778,36 +779,41 @@ async function compressProfileImage(filePath) {
 
   try {
     await sharp(filePath)
-      .resize(400, 400, { fit: 'cover' })
+      .resize(400, 400, { fit: "cover" })
       .jpeg({ quality: 80, force: false })
       .png({ quality: 80, force: false })
       .toFile(compressedPath);
 
     return compressedFilename;
   } catch (error) {
-    console.error('Error compressing profile image:', error);
+    console.error("Error compressing profile image:", error);
     return parsedPath.base;
   }
 }
 
 async function uploadProfilePhoto(userId, file) {
   if (!file) {
-    throw new Error('No file uploaded');
+    throw new Error("No file uploaded");
   }
 
-  const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/jpg'];
-  const allowedExtensions = ['.jpg', '.jpeg', '.png'];
-  const ext = path.extname(file.originalname || '').toLowerCase();
+  const allowedMimeTypes = ["image/jpeg", "image/png", "image/jpg"];
+  const allowedExtensions = [".jpg", ".jpeg", ".png"];
+  const ext = path.extname(file.originalname || "").toLowerCase();
 
-  if (!allowedMimeTypes.includes(file.mimetype) || !allowedExtensions.includes(ext)) {
+  if (
+    !allowedMimeTypes.includes(file.mimetype) ||
+    !allowedExtensions.includes(ext)
+  ) {
     if (file.path && fs.existsSync(file.path)) {
       try {
         fs.unlinkSync(file.path);
       } catch (err) {
-        console.error('Error deleting invalid file type:', err);
+        console.error("Error deleting invalid file type:", err);
       }
     }
-    throw new Error('Invalid file type. Only JPG, JPEG, and PNG files are allowed.');
+    throw new Error(
+      "Invalid file type. Only JPG, JPEG, and PNG files are allowed.",
+    );
   }
 
   const maxFileSize = 5 * 1024 * 1024;
@@ -816,10 +822,10 @@ async function uploadProfilePhoto(userId, file) {
       try {
         fs.unlinkSync(file.path);
       } catch (err) {
-        console.error('Error deleting oversized file:', err);
+        console.error("Error deleting oversized file:", err);
       }
     }
-    throw new Error('File size exceeds the 5MB limit.');
+    throw new Error("File size exceeds the 5MB limit.");
   }
 
   const user = await User.findById(userId);
@@ -828,19 +834,19 @@ async function uploadProfilePhoto(userId, file) {
       try {
         fs.unlinkSync(file.path);
       } catch (err) {
-        console.error('Error deleting orphaned file:', err);
+        console.error("Error deleting orphaned file:", err);
       }
     }
-    throw new Error('User not found');
+    throw new Error("User not found");
   }
 
   if (user.profilePhoto) {
-    const prevPhotoPath = path.join(__dirname, '../..', user.profilePhoto);
+    const prevPhotoPath = path.join(__dirname, "../..", user.profilePhoto);
     if (fs.existsSync(prevPhotoPath)) {
       try {
         fs.unlinkSync(prevPhotoPath);
       } catch (err) {
-        console.error('Error deleting previous profile photo:', err);
+        console.error("Error deleting previous profile photo:", err);
       }
     }
   }
@@ -852,7 +858,7 @@ async function uploadProfilePhoto(userId, file) {
   user.profilePhoto = profilePhotoUrl;
   await user.save();
 
-  const populatedUser = await User.findById(userId).populate('roleId');
+  const populatedUser = await User.findById(userId).populate("roleId");
   const { password, ...rest } = populatedUser.toObject();
 
   return {
@@ -874,8 +880,10 @@ async function flagUser(userId, data) {
   await user.save();
 
   return {
-    message: isFlagged ? "User flagged successfully" : "User unflagged successfully",
-    data: { isFlagged: user.isFlagged, flaggedReason: user.flaggedReason }
+    message: isFlagged
+      ? "User flagged successfully"
+      : "User unflagged successfully",
+    data: { isFlagged: user.isFlagged, flaggedReason: user.flaggedReason },
   };
 }
 
