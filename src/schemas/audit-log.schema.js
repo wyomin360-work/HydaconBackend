@@ -22,14 +22,6 @@ const auditLogSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
-    old_value: {
-      type: String,
-      default: null,
-    },
-    new_value: {
-      type: String,
-      default: null,
-    },
     timestamp: {
       type: Date,
       default: Date.now,

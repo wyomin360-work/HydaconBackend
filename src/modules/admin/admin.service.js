@@ -360,8 +360,6 @@ async function phoneNumberChangeAuditLogs(data = {}) {
     const searchConditions = [
       { old_number: { $regex: search, $options: "i" } },
       { new_number: { $regex: search, $options: "i" } },
-      { old_value: { $regex: search, $options: "i" } },
-      { new_value: { $regex: search, $options: "i" } },
     ];
 
     if (userIds.length > 0) {
@@ -376,10 +374,10 @@ async function phoneNumberChangeAuditLogs(data = {}) {
     query.$and.push({ user_id: safeFilters.userId });
   }
   if (safeFilters.oldNumber) {
-    query.$and.push({ $or: [{ old_number: safeFilters.oldNumber }, { old_value: safeFilters.oldNumber }] });
+    query.$and.push({ $or: [{ old_number: safeFilters.oldNumber }] });
   }
   if (safeFilters.newNumber) {
-    query.$and.push({ $or: [{ new_number: safeFilters.newNumber }, { new_value: safeFilters.newNumber }] });
+    query.$and.push({ $or: [{ new_number: safeFilters.newNumber }] });
   }
   if (safeFilters.ipAddress) {
     query.$and.push({ ip_address: safeFilters.ipAddress });
@@ -412,23 +410,20 @@ async function phoneNumberChangeAuditLogs(data = {}) {
       return {
         id: log._id,
         action: log.action || "PHONE_NUMBER_CHANGE",
-        oldNumber: log.old_number ?? log.old_value ?? null,
-        newNumber: log.new_number ?? log.new_value ?? null,
+        oldNumber: log.old_number ?? null,
+        newNumber: log.new_number ?? null,
         user: u ? {
           id: u._id,
-          userId: u._id,
           name: u.name || null,
           username: u.name || null,
           email: u.email || null,
           useremail: u.email || null,
-          phone: u.phone || null,
         } : null,
         ipAddress: log.ip_address || null,
         deviceInfo: log.device_info ? (() => {
           const userAgent = log.device_info.user_agent || "";
           const parsed = parseUserAgent(userAgent);
           return {
-            userAgent: userAgent || null,
             deviceId: log.device_info.device_id || parsed.deviceId || null,
             deviceName: log.device_info.device_name || parsed.deviceName || null,
             platform: log.device_info.platform || parsed.platform || null,
