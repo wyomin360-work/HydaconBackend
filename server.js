@@ -28,6 +28,12 @@ process.on("unhandledRejection", (err) => {
   });
 });
 
+// Add this in src/app.js, right after your 'app' constant is defined
+app.use((req, res, next) => {
+  // This will print to your terminal every time ANY request hits the server
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next(); // This is required, otherwise the app will hang
+});
 const startServer = async () => {
   try {
     await db.connectDb();
