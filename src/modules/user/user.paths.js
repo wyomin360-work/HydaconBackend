@@ -9,6 +9,10 @@ module.exports = {
   flagUser: "/flag/:id",
   updatePreferences: "/preference/update",
   fcmToken: "/fcm-token",
+  phone: {
+    verifyOldNumber: "/phone/verify-old-number",
+    verifyNewNumber: "/phone/verify-new-number",
+  },
   auth: {
     login: "/auth/login",
     register: "/auth/register",

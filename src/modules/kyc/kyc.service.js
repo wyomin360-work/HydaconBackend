@@ -10,6 +10,7 @@ const {
   KYC_DOCUMENT_STATUS,
   KYC_DOCUMENT_TYPES,
 } = require("../../constants/user");
+const { sendTemplateEmail } = require("../../functions/nodemailer");
 
 async function compressImage(filePath) {
   const parsedPath = path.parse(filePath);
@@ -375,6 +376,32 @@ async function reviewKycDocument(
       }
     } catch (notificationErr) {
       console.error("Error sending KYC status notification:", notificationErr);
+    }
+  }
+
+  // Trigger email notification integration
+  if (user.email) {
+    try {
+      if (user.kycStatus === "APPROVED") {
+        await sendTemplateEmail(
+          user.email,
+          "users/kycApproved",
+          "KYC Verified Successfully 🎉",
+          { userName: user.name },
+        );
+      } else if (user.kycStatus === "REJECTED") {
+        await sendTemplateEmail(
+          user.email,
+          "users/kycRejected",
+          "KYC Verification Failed ⚠️",
+          {
+            userName: user.name,
+            rejectionReason: rejectionReason || "Information mismatch",
+          },
+        );
+      }
+    } catch (emailErr) {
+      console.error("Error sending KYC status email:", emailErr);
     }
   }
 

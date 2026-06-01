@@ -16,8 +16,9 @@ const userOtpLoginRequestType = {
   type: "object",
   properties: {
     identity: { type: "string", minLength: 5 },
+    requestType: { type: "string" },
   },
-  required: ["identity"],
+  required: ["identity", "requestType"],
   additionalProperties: false,
 };
 
@@ -52,6 +53,27 @@ const userFcmRequestType = {
     fcmToken: { type: "string", minLength: 5 },
   },
   required: ["fcmToken"],
+  additionalProperties: false,
+};
+
+const verifyOldNumberRequestType = {
+  type: "object",
+  properties: {
+    token: { type: "string", minLength: 10 },
+    otp: { type: "string", pattern: "^[0-9]{4,6}$" },
+  },
+  additionalProperties: false,
+};
+
+const verifyNewNumberRequestType = {
+  type: "object",
+  properties: {
+    phone: { type: "string", pattern: "^\\+?[0-9]{10,15}$" },
+    token: { type: "string", minLength: 10 },
+    otp: { type: "string", pattern: "^[0-9]{4,6}$" },
+    oldVerificationToken: { type: "string", minLength: 10 },
+  },
+  anyOf: [{ required: ["phone"] }, { required: ["token", "otp"] }],
   additionalProperties: false,
 };
 
@@ -95,4 +117,6 @@ module.exports = {
   userBankDetailsRequestType,
   userProfileUpdateRequestType,
   userFcmRequestType,
+  verifyOldNumberRequestType,
+  verifyNewNumberRequestType,
 };

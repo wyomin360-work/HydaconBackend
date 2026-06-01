@@ -40,7 +40,10 @@ module.exports = {
             },
           },
         },
-        400: { description: "Invalid amount or missing bank details" },
+        400: {
+          description:
+            "Invalid amount, missing bank details, or KYC not verified",
+        },
       },
     },
   },
