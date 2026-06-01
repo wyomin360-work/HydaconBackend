@@ -6,6 +6,7 @@ const validateRequest = require("../../middlewares/validator");
 const {
   adminRegisterRequestType,
   adminLoginRequestType,
+  adminAuditLogsRequestType,
 } = require("../../validations/admin.validations");
 const verification = require("../../middlewares/jwtVerification");
 
@@ -51,6 +52,14 @@ router.post(
   verification.verifyAdmin,
   handleError(controller.adminList),
 );
+
+router.post(
+  adminPaths.auditLogs.phoneNumberChanges,
+  verification.verifyAdmin,
+  validateRequest(adminAuditLogsRequestType),
+  handleError(controller.phoneNumberChangeAuditLogs),
+);
+
 router.delete(
   adminPaths.delete,
   verification.verifyAdmin,

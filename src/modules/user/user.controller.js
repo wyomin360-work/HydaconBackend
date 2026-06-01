@@ -1,5 +1,6 @@
 const { sendResponse } = require("../../utils/responseHandlers");
 const userService = require("./user.service");
+const { parseUserAgent } = require("../../utils/heplers");
 
 exports.register = async (req, res, next) => {
   let data = req?.body;
@@ -47,8 +48,31 @@ exports.verifyOldNumber = async (req, res, next) => {
 exports.verifyNewNumber = async (req, res, next) => {
   const userId = req?.userId;
   const body = req?.body || {};
-  const ipAddress = req.ip || req.headers["x-forwarded-for"];
-  const response = await userService.verifyNewNumber(body, userId, ipAddress);
+  const forwardedFor = req.headers["x-forwarded-for"];
+  const ipAddress =
+    (Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor)
+      ?.split(",")?.[0]
+      ?.trim() ||
+    req.ip ||
+    req.socket?.remoteAddress ||
+    null;
+
+  const userAgent = req.headers["user-agent"] || "";
+  const parsed = parseUserAgent(userAgent, req.headers);
+  const deviceInfo = {
+    userAgent: userAgent || null,
+    deviceId: parsed.deviceId || null,
+    deviceName: parsed.deviceName || null,
+    platform: parsed.platform || null,
+    appVersion: parsed.appVersion || null,
+  };
+
+  const response = await userService.verifyNewNumber(
+    body,
+    userId,
+    ipAddress,
+    deviceInfo,
+  );
   return sendResponse(res, response);
 };
 

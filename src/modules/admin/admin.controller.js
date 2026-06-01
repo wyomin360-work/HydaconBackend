@@ -48,3 +48,9 @@ exports.adminDelete = async (req, res) => {
   const response = await adminService.adminDelete(adminId);
   return sendResponse(res, response);
 };
+
+exports.phoneNumberChangeAuditLogs = async (req, res) => {
+  const data = req?.body;
+  const response = await adminService.phoneNumberChangeAuditLogs(data);
+  return sendResponse(res, response);
+};

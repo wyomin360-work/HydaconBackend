@@ -3,6 +3,7 @@ const ServiceRequest = require("../../schemas/service-request.schema");
 const RefreshToken = require("../../schemas/refreshtoken.schema");
 const AuditLog = require("../../schemas/audit-log.schema");
 const mongoose = require("mongoose");
+const { AUDIT_LOG_ACTIONS } = require("../../constants/audit-logs");
 const {
   sendFailResponse,
   sendResponse,
@@ -613,7 +614,7 @@ async function verifyOldNumber(data, userId) {
   };
 }
 
-async function verifyNewNumber(data, userId, ipAddress) {
+async function verifyNewNumber(data, userId, ipAddress, deviceInfo = {}) {
   const { phone, otp, token, oldVerificationToken } = data;
   const user = await User.findById(userId);
   if (!user) sendFailResponse("User not found");
@@ -624,25 +625,6 @@ async function verifyNewNumber(data, userId, ipAddress) {
     );
   }
 
-  console.log("VerifyNewNumber received:", {
-    phone,
-    token,
-    oldVerificationToken,
-  });
-
-  if (!oldVerificationToken) {
-    // Check if your new fallback logic successfully finds the previous session
-    const latestOldVerify = await ServiceRequest.findOne({
-      userId,
-      requestType: ServiceRequestType.CHANGE_PHONE_OLD_VERIFIED,
-      status: ServiceRequestStatus.PENDING,
-    }).sort({ createdAt: -1 });
-
-    console.log(
-      "Fallback search for oldVerification:",
-      latestOldVerify ? "Found" : "Not Found",
-    );
-  }
   if (otp && token) {
     const newOtpRequest = await consumeOtpRequest({
       token,
@@ -656,6 +638,7 @@ async function verifyNewNumber(data, userId, ipAddress) {
       userId,
       newPhone,
       ipAddress,
+      deviceInfo,
       oldVerificationToken: newOtpRequest.payload?.oldVerificationToken,
     });
 
@@ -702,6 +685,7 @@ async function finalizeNumberChange({
   userId,
   newPhone,
   ipAddress,
+  deviceInfo = {},
   oldVerificationToken,
 }) {
   const normalizedPhone = requirePhoneNumber(newPhone);
@@ -726,18 +710,22 @@ async function finalizeNumberChange({
       user.phone = normalizedPhone;
       updatedUser = await user.save({ session });
 
-      await AuditLog.create(
-        [
-          {
-            user_id: user._id,
-            old_value: oldPhone,
-            new_value: normalizedPhone,
-            timestamp: new Date(),
-            ip_address: ipAddress || null,
-          },
-        ],
-        { session },
-      );
+      const auditLog = new AuditLog({
+        userId: user._id,
+        action: AUDIT_LOG_ACTIONS.PHONE_NUMBER_CHANGE,
+        oldNumber: oldPhone,
+        newNumber: normalizedPhone,
+        timestamp: new Date(),
+        ipAddress: ipAddress || null,
+        deviceInfo: {
+          userAgent: deviceInfo?.userAgent || null,
+          deviceId: deviceInfo?.deviceId || null,
+          deviceName: deviceInfo?.deviceName || null,
+          platform: deviceInfo?.platform || null,
+          appVersion: deviceInfo?.appVersion || null,
+        },
+      });
+      await auditLog.save({ session });
 
       await ServiceRequest.updateMany(
         {
