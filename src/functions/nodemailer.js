@@ -61,8 +61,12 @@ const templateCache = {};
 
 const sendTemplateEmail = async (to, templateName, subject, data) => {
   try {
-    const templatePath = path.resolve(__dirname, "../templates", `${templateName}.hbs`);
-    
+    const templatePath = path.resolve(
+      __dirname,
+      "../templates",
+      `${templateName}.hbs`,
+    );
+
     let compiledTemplate = templateCache[templatePath];
     if (!compiledTemplate) {
       const templateSource = fs.readFileSync(templatePath, "utf-8");
@@ -82,7 +86,10 @@ const sendTemplateEmail = async (to, templateName, subject, data) => {
 
     return await sendMail(mailOptions);
   } catch (error) {
-    console.error(`[Mail] Error sending template email (${templateName}):`, error.message);
+    console.error(
+      `[Mail] Error sending template email (${templateName}):`,
+      error.message,
+    );
     return false;
   }
 };
