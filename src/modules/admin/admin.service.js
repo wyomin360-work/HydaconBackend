@@ -350,7 +350,6 @@ async function phoneNumberChangeAuditLogs(data = {}) {
 
     const matchingUsers = await User.find({
       $or: [
-        { name: { $regex: search, $options: "i" } },
         { email: emailRegex },
         { phone: { $regex: search, $options: "i" } },
       ],
