@@ -158,16 +158,12 @@ describe("kyc.service unit tests", () => {
       };
       User.findById.mockResolvedValue(mockUser);
 
-<<<<<<< HEAD
-      const result = await kycService.uploadDocument("userId123", "aadhaar", mockFile);
-=======
       // Re-upload aadhaar document
       const result = await kycService.uploadDocument(
         "userId123",
         "aadhaar",
         mockFile,
       );
->>>>>>> e5638921cd1e3106bb7b78c95c22590fd5d27769
 
       expect(mockUser.kycDocuments.aadhaar.status).toBe("PENDING");
       expect(mockUser.kycDocuments.pan.status).toBe("REJECTED");
@@ -193,16 +189,12 @@ describe("kyc.service unit tests", () => {
       };
       User.findById.mockResolvedValue(mockUser);
 
-<<<<<<< HEAD
-      const result = await kycService.uploadDocument("userId123", "pan", mockFile);
-=======
       // Re-upload pan document (which was the rejected one)
       const result = await kycService.uploadDocument(
         "userId123",
         "pan",
         mockFile,
       );
->>>>>>> e5638921cd1e3106bb7b78c95c22590fd5d27769
 
       expect(mockUser.kycDocuments.pan.status).toBe("PENDING");
       expect(mockUser.kycStatus).toBe("PENDING");
@@ -271,15 +263,11 @@ describe("kyc.service unit tests", () => {
     it("should set status to NOT_STARTED when single document is approved but others are missing (Bug 4 Fix)", async () => {
       const mockUser = {
         kycDocuments: {
-<<<<<<< HEAD
-          aadhaar: { originalUrl: "/uploads/images/aadhaar.jpg", status: "PENDING" },
-=======
           aadhaar: {
             originalUrl: "/uploads/images/aadhaar.jpg",
             status: "PENDING",
           },
           // pan and shopPhoto are missing
->>>>>>> e5638921cd1e3106bb7b78c95c22590fd5d27769
         },
         kycStatus: "NOT_STARTED",
         save: jest.fn().mockResolvedValue(true),
@@ -379,17 +367,11 @@ describe("kyc.service unit tests", () => {
       await expect(
         kycService.reviewKycDocument("userId123", {
           status: "REJECTED",
-<<<<<<< HEAD
-          rejectionReason: "incomplete documents",
-        })
-      ).rejects.toThrow("Cannot reject KYC entirely because not all documents have been uploaded");
-=======
           rejectionReason: "incomplete profile documents",
         }),
       ).rejects.toThrow(
         "Cannot reject KYC entirely because not all documents have been uploaded",
       );
->>>>>>> e5638921cd1e3106bb7b78c95c22590fd5d27769
     });
 
     it("should allow admin to reject KYC entirely if all documents are uploaded", async () => {

@@ -1,15 +1,12 @@
 const User = require("../../schemas/user.schema");
 const ServiceRequest = require("../../schemas/service-request.schema");
 const RefreshToken = require("../../schemas/refreshtoken.schema");
-<<<<<<< HEAD
 const path = require("path");
 const sharp = require("sharp");
 const fs = require("fs");
-=======
 const AuditLog = require("../../schemas/audit-log.schema");
 const mongoose = require("mongoose");
 const { AUDIT_LOG_ACTIONS } = require("../../constants/audit-logs");
->>>>>>> e5638921cd1e3106bb7b78c95c22590fd5d27769
 const {
   sendFailResponse,
   sendResponse,

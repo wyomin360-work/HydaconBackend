@@ -133,12 +133,26 @@ const calculateProfileCompletion = (user, roleName = "") => {
     if (user.shopName) filledFields++;
   }
 
-<<<<<<< HEAD
   return Math.round((filledFields / totalFields) * 100);
 };
-=======
+
+function buildPhoneLookupVariants(phone) {
+  const digits = String(phone).replace(/\D/g, "");
+  const variants = new Set([String(phone).trim()]);
+
+  if (digits.length === 10) {
+    variants.add(digits);
+    variants.add(`+91${digits}`);
+    variants.add(`91${digits}`);
+  } else if (digits.length === 12 && digits.startsWith("91")) {
+    variants.add(digits);
+    variants.add(digits.slice(2));
+    variants.add(`+${digits}`);
+  }
+
   return [...variants];
 }
+
 function parseUserAgent(userAgent, headers = {}) {
   const info = {
     userAgent: userAgent || null,
@@ -205,7 +219,6 @@ function parseUserAgent(userAgent, headers = {}) {
 
   return info;
 }
->>>>>>> e5638921cd1e3106bb7b78c95c22590fd5d27769
 
 module.exports = {
   handleError,
@@ -219,10 +232,7 @@ module.exports = {
   generateBufferToken,
   generateRandomPassword,
   formatNotification,
-<<<<<<< HEAD
   calculateProfileCompletion,
-=======
   buildPhoneLookupVariants,
   parseUserAgent,
->>>>>>> e5638921cd1e3106bb7b78c95c22590fd5d27769
 };
