@@ -15,6 +15,10 @@ const srSchema = new mongoose.Schema(
       type: String,
       required: false,
     },
+    payload: {
+      type: mongoose.Schema.Types.Mixed,
+      required: false,
+    },
     token: {
       type: String,
       required: true,
@@ -42,10 +46,6 @@ const srSchema = new mongoose.Schema(
     },
     smsSentAt: {
       type: Date,
-    },
-    attempts: {
-      type: Number,
-      default: 0,
     },
   },
   {

@@ -19,12 +19,6 @@ exports.providerAuth = async (req, res, next) => {
   return sendResponse(res, response);
 };
 
-exports.providerAuth = async (req, res, next) => {
-  let data = req?.body;
-  const response = await userService.providerAuth(data);
-  return sendResponse(res, response);
-};
-
 exports.logout = async (req, res, next) => {
   let userId = req?.userId;
   const response = await userService.logout(userId);
@@ -40,6 +34,21 @@ exports.verifyEmail = async (req, res, next) => {
 exports.verifyOtp = async (req, res, next) => {
   let body = req?.body;
   const response = await userService.verifyOtp(body);
+  return sendResponse(res, response);
+};
+
+exports.verifyOldNumber = async (req, res, next) => {
+  const userId = req?.userId;
+  const body = req?.body || {};
+  const response = await userService.verifyOldNumber(body, userId);
+  return sendResponse(res, response);
+};
+
+exports.verifyNewNumber = async (req, res, next) => {
+  const userId = req?.userId;
+  const body = req?.body || {};
+  const ipAddress = req.ip || req.headers["x-forwarded-for"];
+  const response = await userService.verifyNewNumber(body, userId, ipAddress);
   return sendResponse(res, response);
 };
 
