@@ -49,7 +49,7 @@ describe("kyc.service unit tests", () => {
       fs.existsSync.mockReturnValue(true);
 
       await expect(
-        kycService.uploadDocument("userId123", "invalidType", mockFile),,
+        kycService.uploadDocument("userId123", "invalidType", mockFile),
       ).rejects.toThrow("Invalid document type");
 
       expect(fs.existsSync).toHaveBeenCalledWith(mockFile.path);
@@ -63,7 +63,6 @@ describe("kyc.service unit tests", () => {
 
       await expect(
         kycService.uploadDocument("userId123", "aadhaar", mockFile),
-        kycService.uploadDocument("userId123", "aadhaar", mockFile),
       ).rejects.toThrow("Invalid file type");
 
       expect(fs.existsSync).toHaveBeenCalledWith(mockFile.path);
@@ -75,7 +74,6 @@ describe("kyc.service unit tests", () => {
       fs.existsSync.mockReturnValue(true);
 
       await expect(
-        kycService.uploadDocument("userId123", "aadhaar", mockFile),
         kycService.uploadDocument("userId123", "aadhaar", mockFile),
       ).rejects.toThrow("File size exceeds");
 
@@ -89,12 +87,10 @@ describe("kyc.service unit tests", () => {
 
       await expect(
         kycService.uploadDocument("userId123", "aadhaar", mockFile),
-        kycService.uploadDocument("userId123", "aadhaar", mockFile),
       ).rejects.toThrow("User not found");
 
       expect(fs.unlinkSync).toHaveBeenCalledWith(mockFile.path);
       expect(fs.unlinkSync).toHaveBeenCalledWith(
-        expect.stringContaining("test-doc-compressed"),
         expect.stringContaining("test-doc-compressed"),
       );
     });
@@ -107,11 +103,6 @@ describe("kyc.service unit tests", () => {
       };
       User.findById.mockResolvedValue(mockUser);
 
-      const result = await kycService.uploadDocument(
-        "userId123",
-        "aadhaar",
-        mockFile,
-      );
       const result = await kycService.uploadDocument(
         "userId123",
         "aadhaar",
@@ -133,21 +124,12 @@ describe("kyc.service unit tests", () => {
             originalUrl: "/uploads/images/shop.jpg",
             status: "PENDING",
           },
-          shopPhoto: {
-            originalUrl: "/uploads/images/shop.jpg",
-            status: "PENDING",
-          },
         },
         kycStatus: "NOT_STARTED",
         save: jest.fn().mockResolvedValue(true),
       };
       User.findById.mockResolvedValue(mockUser);
 
-      const result = await kycService.uploadDocument(
-        "userId123",
-        "aadhaar",
-        mockFile,
-      );
       const result = await kycService.uploadDocument(
         "userId123",
         "aadhaar",
@@ -165,15 +147,7 @@ describe("kyc.service unit tests", () => {
             originalUrl: "/uploads/images/aadhaar.jpg",
             status: "REJECTED",
           },
-          aadhaar: {
-            originalUrl: "/uploads/images/aadhaar.jpg",
-            status: "REJECTED",
-          },
           pan: { originalUrl: "/uploads/images/pan.jpg", status: "REJECTED" },
-          shopPhoto: {
-            originalUrl: "/uploads/images/shop.jpg",
-            status: "APPROVED",
-          },
           shopPhoto: {
             originalUrl: "/uploads/images/shop.jpg",
             status: "APPROVED",
@@ -240,15 +214,7 @@ describe("kyc.service unit tests", () => {
             originalUrl: "/uploads/images/aadhaar.jpg",
             status: "APPROVED",
           },
-          aadhaar: {
-            originalUrl: "/uploads/images/aadhaar.jpg",
-            status: "APPROVED",
-          },
           pan: { originalUrl: "/uploads/images/pan.jpg", status: "PENDING" },
-          shopPhoto: {
-            originalUrl: "/uploads/images/shop.jpg",
-            status: "APPROVED",
-          },
           shopPhoto: {
             originalUrl: "/uploads/images/shop.jpg",
             status: "APPROVED",
@@ -275,15 +241,7 @@ describe("kyc.service unit tests", () => {
             originalUrl: "/uploads/images/aadhaar.jpg",
             status: "APPROVED",
           },
-          aadhaar: {
-            originalUrl: "/uploads/images/aadhaar.jpg",
-            status: "APPROVED",
-          },
           pan: { originalUrl: "/uploads/images/pan.jpg", status: "PENDING" },
-          shopPhoto: {
-            originalUrl: "/uploads/images/shop.jpg",
-            status: "APPROVED",
-          },
           shopPhoto: {
             originalUrl: "/uploads/images/shop.jpg",
             status: "APPROVED",
@@ -333,15 +291,7 @@ describe("kyc.service unit tests", () => {
             originalUrl: "/uploads/images/aadhaar.jpg",
             status: "PENDING",
           },
-          aadhaar: {
-            originalUrl: "/uploads/images/aadhaar.jpg",
-            status: "PENDING",
-          },
           pan: { originalUrl: "/uploads/images/pan.jpg", status: "PENDING" },
-          shopPhoto: {
-            originalUrl: "/uploads/images/shop.jpg",
-            status: "PENDING",
-          },
           shopPhoto: {
             originalUrl: "/uploads/images/shop.jpg",
             status: "PENDING",
@@ -378,10 +328,6 @@ describe("kyc.service unit tests", () => {
       await expect(
         kycService.reviewKycDocument("userId123", {
           status: "APPROVED",
-        }),
-      ).rejects.toThrow(
-        "Cannot approve KYC entirely because no documents have been uploaded",
-      );
         }),
       ).rejects.toThrow(
         "Cannot approve KYC entirely because no documents have been uploaded",
