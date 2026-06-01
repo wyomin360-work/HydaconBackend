@@ -60,11 +60,11 @@ exports.verifyNewNumber = async (req, res, next) => {
   const userAgent = req.headers["user-agent"] || "";
   const parsed = parseUserAgent(userAgent, req.headers);
   const deviceInfo = {
-    user_agent: userAgent || null,
-    device_id: parsed.deviceId || null,
-    device_name: parsed.deviceName || null,
+    userAgent: userAgent || null,
+    deviceId: parsed.deviceId || null,
+    deviceName: parsed.deviceName || null,
     platform: parsed.platform || null,
-    app_version: parsed.appVersion || null,
+    appVersion: parsed.appVersion || null,
   };
 
   const response = await userService.verifyNewNumber(

@@ -3,6 +3,7 @@ const ServiceRequest = require("../../schemas/service-request.schema");
 const RefreshToken = require("../../schemas/refreshtoken.schema");
 const AuditLog = require("../../schemas/audit-log.schema");
 const mongoose = require("mongoose");
+const { AUDIT_LOG_ACTIONS } = require("../../constants/audit-logs");
 const {
   sendFailResponse,
   sendResponse,
@@ -710,18 +711,18 @@ async function finalizeNumberChange({
       updatedUser = await user.save({ session });
 
       const auditLog = new AuditLog({
-        user_id: user._id,
-        action: "PHONE_NUMBER_CHANGE",
-        old_number: oldPhone,
-        new_number: normalizedPhone,
+        userId: user._id,
+        action: AUDIT_LOG_ACTIONS.PHONE_NUMBER_CHANGE,
+        oldNumber: oldPhone,
+        newNumber: normalizedPhone,
         timestamp: new Date(),
-        ip_address: ipAddress || null,
-        device_info: {
-          user_agent: deviceInfo?.user_agent || null,
-          device_id: deviceInfo?.device_id || null,
-          device_name: deviceInfo?.device_name || null,
+        ipAddress: ipAddress || null,
+        deviceInfo: {
+          userAgent: deviceInfo?.userAgent || null,
+          deviceId: deviceInfo?.deviceId || null,
+          deviceName: deviceInfo?.deviceName || null,
           platform: deviceInfo?.platform || null,
-          app_version: deviceInfo?.app_version || null,
+          appVersion: deviceInfo?.appVersion || null,
         },
       });
       await auditLog.save({ session });

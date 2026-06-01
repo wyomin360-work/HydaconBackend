@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const nodemailer = require("nodemailer");
 const Admin = require("../../schemas/admin.schema");
 const AuditLog = require("../../schemas/audit-log.schema");
+const { AUDIT_LOG_ACTIONS } = require("../../constants/audit-logs");
 const RefreshToken = require("../../schemas/refreshtoken.schema");
 const User = require("../../schemas/user.schema");
 const {
@@ -358,29 +359,29 @@ async function phoneNumberChangeAuditLogs(data = {}) {
     const userIds = matchingUsers.map((u) => u._id);
 
     const searchConditions = [
-      { old_number: { $regex: search, $options: "i" } },
-      { new_number: { $regex: search, $options: "i" } },
+      { oldNumber: { $regex: search, $options: "i" } },
+      { newNumber: { $regex: search, $options: "i" } },
     ];
 
     if (userIds.length > 0) {
-      searchConditions.push({ user_id: { $in: userIds } });
+      searchConditions.push({ userId: { $in: userIds } });
     }
 
     query.$and.push({ $or: searchConditions });
   }
 
   // 4. Add additional filters
-  if (safeFilters.userId && mongoose.Types.ObjectId.isValid(safeFilters.userId)) {
-    query.$and.push({ user_id: safeFilters.userId });
+  if (safeFilters.userId) {
+    query.$and.push({ userId: safeFilters.userId });
   }
   if (safeFilters.oldNumber) {
-    query.$and.push({ $or: [{ old_number: safeFilters.oldNumber }] });
+    query.$and.push({ $or: [{ oldNumber: safeFilters.oldNumber }] });
   }
   if (safeFilters.newNumber) {
-    query.$and.push({ $or: [{ new_number: safeFilters.newNumber }] });
+    query.$and.push({ $or: [{ newNumber: safeFilters.newNumber }] });
   }
   if (safeFilters.ipAddress) {
-    query.$and.push({ ip_address: safeFilters.ipAddress });
+    query.$and.push({ ipAddress: safeFilters.ipAddress });
   }
   if (safeFilters.dateFrom || safeFilters.dateTo) {
     const dateRange = {};
@@ -395,7 +396,7 @@ async function phoneNumberChangeAuditLogs(data = {}) {
   sort[sortableFields.has(sortBy) ? sortBy : "timestamp"] = sortOrder === "asc" ? 1 : -1;
 
   const auditLogs = await AuditLog.find(query)
-    .populate("user_id", "name email phone")
+    .populate("userId", "name email phone")
     .sort(sort)
     .skip(skip)
     .limit(pageSize)
@@ -406,12 +407,12 @@ async function phoneNumberChangeAuditLogs(data = {}) {
   // 6. Return mapped response
   return {
     auditLogs: auditLogs.map((log) => {
-      const u = log.user_id;
+      const u = log.userId;
       return {
         id: log._id,
-        action: log.action || "PHONE_NUMBER_CHANGE",
-        oldNumber: log.old_number ?? null,
-        newNumber: log.new_number ?? null,
+        action: log.action || AUDIT_LOG_ACTIONS.PHONE_NUMBER_CHANGE,
+        oldNumber: log.oldNumber ?? null,
+        newNumber: log.newNumber ?? null,
         user: u ? {
           id: u._id,
           name: u.name || null,
@@ -419,15 +420,15 @@ async function phoneNumberChangeAuditLogs(data = {}) {
           email: u.email || null,
           useremail: u.email || null,
         } : null,
-        ipAddress: log.ip_address || null,
-        deviceInfo: log.device_info ? (() => {
-          const userAgent = log.device_info.user_agent || "";
+        ipAddress: log.ipAddress || null,
+        deviceInfo: log.deviceInfo ? (() => {
+          const userAgent = log.deviceInfo.userAgent || "";
           const parsed = parseUserAgent(userAgent);
           return {
-            deviceId: log.device_info.device_id || parsed.deviceId || null,
-            deviceName: log.device_info.device_name || parsed.deviceName || null,
-            platform: log.device_info.platform || parsed.platform || null,
-            appVersion: log.device_info.app_version || parsed.appVersion || null,
+            deviceId: log.deviceInfo.deviceId || parsed.deviceId || null,
+            deviceName: log.deviceInfo.deviceName || parsed.deviceName || null,
+            platform: log.deviceInfo.platform || parsed.platform || null,
+            appVersion: log.deviceInfo.appVersion || parsed.appVersion || null,
           };
         })() : null,
         timestamp: log.timestamp || log.createdAt || null,

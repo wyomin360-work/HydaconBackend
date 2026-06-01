@@ -1,0 +1,7 @@
+const AUDIT_LOG_ACTIONS = {
+  PHONE_NUMBER_CHANGE: "PHONE_NUMBER_CHANGE",
+};
+
+module.exports = {
+  AUDIT_LOG_ACTIONS,
+};
