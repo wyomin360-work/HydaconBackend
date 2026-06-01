@@ -93,9 +93,19 @@ async function createRedeem(redeemData) {
   if (new Date(reward.expiresAt) < now) sendFailResponse("reward is expired");
   if (reward.isRedeemed) sendFailResponse("reward already redeemed");
 
+  // 1. Get tier multiplier
+  const loyaltyService = require("../loyalty/loyalty.service");
+  const TierConfiguration = require("../../schemas/tier-configuration.schema");
+  const userProgress = await loyaltyService.getOrCreateUserProgress(userId);
+  const tierConfig = await TierConfiguration.findOne({
+    seasonId: userProgress.seasonId,
+    tierId: userProgress.currentTierId?._id,
+  }).lean();
+  const tierMultiplier = tierConfig?.pointMultiplier || 1.0;
+
   // Weighted Rewards Logic
-  const multiplier = user.roleId?.pointMultiplier || 1;
-  const weightedPoints = (reward?.point || 0) * multiplier;
+  const roleMultiplier = user.roleId?.pointMultiplier || 1;
+  const weightedPoints = Math.round((reward?.point || 0) * roleMultiplier * tierMultiplier);
 
   const newRedeem = await Redeem.create({
     userId,
@@ -121,6 +131,9 @@ async function createRedeem(redeemData) {
   // save
   await user.save();
   await reward.save();
+
+  // Process QP & Tier Upgrade in loyalty engine
+  await loyaltyService.processQrScanPoints(userId, weightedPoints, newRedeem._id);
   if (user?.fcmTokens?.length && user?.enableNotification) {
     await sendFcmNotifications(
       user.fcmTokens,

@@ -73,6 +73,12 @@ const userSchema = new mongoose.Schema(
       ref: "Role",
       required: false,
     },
+    currentTierId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Tier",
+      required: false,
+      default: null,
+    },
     kycStatus: {
       type: String,
       enum: Object.values(KYC_STATUS),
