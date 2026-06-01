@@ -100,13 +100,13 @@ const calculateProfileCompletion = (user, roleName = "") => {
   if (user.name) filledFields++;
 
   // 3. Mobile Number (phonenumber)
-  if (user.mobileNumber) filledFields++;
+  if (user.phone) filledFields++;
 
   // 4. Date of Birth
   if (user.dob) filledFields++;
 
   // 5. Profile Photo
-  if (user.profilePhoto) filledFields++;
+  if (user.profilePhoto || user.avatarId) filledFields++;
 
   // 6. Experience
   if (user.experience !== undefined && user.experience !== null) filledFields++;
@@ -133,7 +133,7 @@ const calculateProfileCompletion = (user, roleName = "") => {
     // 11. Shop Name
     if (user.shopName) filledFields++;
   }
-
+console.log(user)
   return Math.round((filledFields / totalFields) * 100);
 };
 function parseUserAgent(userAgent, headers = {}) {
