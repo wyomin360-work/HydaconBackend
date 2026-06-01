@@ -11,10 +11,7 @@ const KYC_RESTRICTION_MESSAGES = {
     "Your KYC verification was rejected. Please re-submit your documents to redeem points.",
 };
 
-const ALLOWED_KYC_STATUSES = new Set([
-  KYC_STATUS.APPROVED,
-  KYC_STATUS.VERIFIED,
-]);
+const ALLOWED_KYC_STATUSES = new Set([KYC_STATUS.APPROVED]);
 
 /**
  * Middleware that blocks access for users whose KYC is not verified.

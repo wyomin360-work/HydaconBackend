@@ -1,4 +1,12 @@
-const twilio = require("twilio");
+let twilio;
+try {
+  twilio = require("twilio");
+} catch (err) {
+  console.warn(
+    "[SMS] Twilio module not installed; SMS functionality disabled.",
+  );
+  twilio = null;
+}
 
 function trimEnv(value) {
   if (!value) return "";
@@ -17,7 +25,8 @@ const accountSid = trimEnv(process.env.TWILIO_ACCOUNT_SID);
 const authToken = trimEnv(process.env.TWILIO_AUTH_TOKEN);
 const twilioPhoneNumber = trimEnv(process.env.TWILIO_PHONE_NUMBER);
 
-const client = accountSid && authToken ? twilio(accountSid, authToken) : null;
+const client =
+  accountSid && authToken && twilio ? twilio(accountSid, authToken) : null;
 
 function isSmsConfigured() {
   const provider = (process.env.SMS_PROVIDER || "").toLowerCase();
