@@ -141,6 +141,8 @@ async function createTransaction(data, userId) {
 
   const user = await User.findById(userId);
   if (!user) sendFailResponse("User not found");
+  if (user.kycStatus !== User.KYC_STATUS.VERIFIED)
+    sendFailResponse("KYC verification is required to withdraw amount");
   if (!user.bankDetails?.accountNumber)
     sendFailResponse("Add bank details to withdraw amount");
 
