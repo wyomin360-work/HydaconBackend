@@ -1,4 +1,5 @@
 module.exports = {
+<<<<<<< HEAD
   root: '/user',
   details: '/details',
   list: '/list',
@@ -9,6 +10,20 @@ module.exports = {
   flagUser: '/flag/:id',
   updatePreferences: '/preference/update',
   fcmToken: '/fcm-token',
+=======
+  root: "/user",
+  details: "/details",
+  list: "/list",
+  roles: "/roles",
+  onboardingRoles: "/onboarding/roles",
+  updateProfile: "/profile/update",
+  updatePreferences: "/preference/update",
+  fcmToken: "/fcm-token",
+  phone: {
+    verifyOldNumber: "/phone/verify-old-number",
+    verifyNewNumber: "/phone/verify-new-number",
+  },
+>>>>>>> e5638921cd1e3106bb7b78c95c22590fd5d27769
   auth: {
     login: "/auth/login",
     register: "/auth/register",

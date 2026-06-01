@@ -35,6 +35,15 @@ const bankDetailsSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const kycDocumentsSchema = new mongoose.Schema(
+  {
+    aadhaar: { type: kycDocumentSchema, default: () => ({}) },
+    pan: { type: kycDocumentSchema, default: () => ({}) },
+    shopPhoto: { type: kycDocumentSchema, default: () => ({}) },
+  },
+  { _id: false },
+);
+
 const userSchema = new mongoose.Schema(
   {
     name: { type: String, required: false },
@@ -85,9 +94,8 @@ const userSchema = new mongoose.Schema(
       default: KYC_STATUS.NOT_STARTED,
     },
     kycDocuments: {
-      aadhaar: { type: kycDocumentSchema, default: () => ({}) },
-      pan: { type: kycDocumentSchema, default: () => ({}) },
-      shopPhoto: { type: kycDocumentSchema, default: () => ({}) },
+      type: kycDocumentsSchema,
+      default: () => ({}),
     },
   },
   {

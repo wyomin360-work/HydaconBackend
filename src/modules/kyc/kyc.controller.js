@@ -1,6 +1,9 @@
 const fs = require("fs");
 const kycService = require("./kyc.service");
-const { sendResponse, sendFailResponse } = require("../../utils/responseHandlers");
+const {
+  sendResponse,
+  sendFailResponse,
+} = require("../../utils/responseHandlers");
 
 /**
  * Deletes any files uploaded by multer from disk.
@@ -42,7 +45,9 @@ exports.uploadKycDocument = async (req, res) => {
 
   try {
     if (!documentType) {
-      sendFailResponse("documentType is required in the request body (aadhaar, pan, or shopPhoto)");
+      sendFailResponse(
+        "documentType is required in the request body (aadhaar, pan, or shopPhoto)",
+      );
     }
     if (!file) {
       sendFailResponse("Please select a document file to upload");

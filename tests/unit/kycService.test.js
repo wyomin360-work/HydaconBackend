@@ -3,6 +3,11 @@ jest.mock("bcrypt", () => ({
   compare: jest.fn(),
 }));
 
+jest.mock("../../src/functions/nodemailer", () => ({
+  sendMail: jest.fn().mockResolvedValue(true),
+  sendTemplateEmail: jest.fn().mockResolvedValue(true),
+}));
+
 const kycService = require("../../src/modules/kyc/kyc.service");
 const User = require("../../src/schemas/user.schema");
 const fs = require("fs");
@@ -44,7 +49,7 @@ describe("kyc.service unit tests", () => {
       fs.existsSync.mockReturnValue(true);
 
       await expect(
-        kycService.uploadDocument("userId123", "invalidType", mockFile)
+        kycService.uploadDocument("userId123", "invalidType", mockFile),
       ).rejects.toThrow("Invalid document type");
 
       expect(fs.existsSync).toHaveBeenCalledWith(mockFile.path);
@@ -57,7 +62,7 @@ describe("kyc.service unit tests", () => {
       fs.existsSync.mockReturnValue(true);
 
       await expect(
-        kycService.uploadDocument("userId123", "aadhaar", mockFile)
+        kycService.uploadDocument("userId123", "aadhaar", mockFile),
       ).rejects.toThrow("Invalid file type");
 
       expect(fs.existsSync).toHaveBeenCalledWith(mockFile.path);
@@ -69,7 +74,7 @@ describe("kyc.service unit tests", () => {
       fs.existsSync.mockReturnValue(true);
 
       await expect(
-        kycService.uploadDocument("userId123", "aadhaar", mockFile)
+        kycService.uploadDocument("userId123", "aadhaar", mockFile),
       ).rejects.toThrow("File size exceeds");
 
       expect(fs.existsSync).toHaveBeenCalledWith(mockFile.path);
@@ -81,12 +86,12 @@ describe("kyc.service unit tests", () => {
       User.findById.mockResolvedValue(null);
 
       await expect(
-        kycService.uploadDocument("userId123", "aadhaar", mockFile)
+        kycService.uploadDocument("userId123", "aadhaar", mockFile),
       ).rejects.toThrow("User not found");
 
       expect(fs.unlinkSync).toHaveBeenCalledWith(mockFile.path);
       expect(fs.unlinkSync).toHaveBeenCalledWith(
-        expect.stringContaining("test-doc-compressed")
+        expect.stringContaining("test-doc-compressed"),
       );
     });
 
@@ -98,7 +103,11 @@ describe("kyc.service unit tests", () => {
       };
       User.findById.mockResolvedValue(mockUser);
 
-      const result = await kycService.uploadDocument("userId123", "aadhaar", mockFile);
+      const result = await kycService.uploadDocument(
+        "userId123",
+        "aadhaar",
+        mockFile,
+      );
 
       expect(mockUser.kycDocuments.aadhaar).toBeDefined();
       expect(mockUser.kycDocuments.aadhaar.status).toBe("PENDING");
@@ -111,14 +120,21 @@ describe("kyc.service unit tests", () => {
       const mockUser = {
         kycDocuments: {
           pan: { originalUrl: "/uploads/images/pan.jpg", status: "APPROVED" },
-          shopPhoto: { originalUrl: "/uploads/images/shop.jpg", status: "PENDING" },
+          shopPhoto: {
+            originalUrl: "/uploads/images/shop.jpg",
+            status: "PENDING",
+          },
         },
         kycStatus: "NOT_STARTED",
         save: jest.fn().mockResolvedValue(true),
       };
       User.findById.mockResolvedValue(mockUser);
 
-      const result = await kycService.uploadDocument("userId123", "aadhaar", mockFile);
+      const result = await kycService.uploadDocument(
+        "userId123",
+        "aadhaar",
+        mockFile,
+      );
 
       expect(mockUser.kycStatus).toBe("PENDING");
       expect(result.kycStatus).toBe("PENDING");
@@ -127,16 +143,31 @@ describe("kyc.service unit tests", () => {
     it("should remain REJECTED on re-upload of one document if another is still rejected (Bug 3 Fix)", async () => {
       const mockUser = {
         kycDocuments: {
-          aadhaar: { originalUrl: "/uploads/images/aadhaar.jpg", status: "REJECTED" },
+          aadhaar: {
+            originalUrl: "/uploads/images/aadhaar.jpg",
+            status: "REJECTED",
+          },
           pan: { originalUrl: "/uploads/images/pan.jpg", status: "REJECTED" },
-          shopPhoto: { originalUrl: "/uploads/images/shop.jpg", status: "APPROVED" },
+          shopPhoto: {
+            originalUrl: "/uploads/images/shop.jpg",
+            status: "APPROVED",
+          },
         },
         kycStatus: "REJECTED",
         save: jest.fn().mockResolvedValue(true),
       };
       User.findById.mockResolvedValue(mockUser);
 
+<<<<<<< HEAD
       const result = await kycService.uploadDocument("userId123", "aadhaar", mockFile);
+=======
+      // Re-upload aadhaar document
+      const result = await kycService.uploadDocument(
+        "userId123",
+        "aadhaar",
+        mockFile,
+      );
+>>>>>>> e5638921cd1e3106bb7b78c95c22590fd5d27769
 
       expect(mockUser.kycDocuments.aadhaar.status).toBe("PENDING");
       expect(mockUser.kycDocuments.pan.status).toBe("REJECTED");
@@ -147,16 +178,31 @@ describe("kyc.service unit tests", () => {
     it("should transition to PENDING on re-upload if no documents remain rejected", async () => {
       const mockUser = {
         kycDocuments: {
-          aadhaar: { originalUrl: "/uploads/images/aadhaar.jpg", status: "PENDING" },
+          aadhaar: {
+            originalUrl: "/uploads/images/aadhaar.jpg",
+            status: "PENDING",
+          },
           pan: { originalUrl: "/uploads/images/pan.jpg", status: "REJECTED" },
-          shopPhoto: { originalUrl: "/uploads/images/shop.jpg", status: "APPROVED" },
+          shopPhoto: {
+            originalUrl: "/uploads/images/shop.jpg",
+            status: "APPROVED",
+          },
         },
         kycStatus: "REJECTED",
         save: jest.fn().mockResolvedValue(true),
       };
       User.findById.mockResolvedValue(mockUser);
 
+<<<<<<< HEAD
       const result = await kycService.uploadDocument("userId123", "pan", mockFile);
+=======
+      // Re-upload pan document (which was the rejected one)
+      const result = await kycService.uploadDocument(
+        "userId123",
+        "pan",
+        mockFile,
+      );
+>>>>>>> e5638921cd1e3106bb7b78c95c22590fd5d27769
 
       expect(mockUser.kycDocuments.pan.status).toBe("PENDING");
       expect(mockUser.kycStatus).toBe("PENDING");
@@ -170,9 +216,15 @@ describe("kyc.service unit tests", () => {
     it("should set status to APPROVED if all documents are approved", async () => {
       const mockUser = {
         kycDocuments: {
-          aadhaar: { originalUrl: "/uploads/images/aadhaar.jpg", status: "APPROVED" },
+          aadhaar: {
+            originalUrl: "/uploads/images/aadhaar.jpg",
+            status: "APPROVED",
+          },
           pan: { originalUrl: "/uploads/images/pan.jpg", status: "PENDING" },
-          shopPhoto: { originalUrl: "/uploads/images/shop.jpg", status: "APPROVED" },
+          shopPhoto: {
+            originalUrl: "/uploads/images/shop.jpg",
+            status: "APPROVED",
+          },
         },
         kycStatus: "PENDING",
         save: jest.fn().mockResolvedValue(true),
@@ -191,9 +243,15 @@ describe("kyc.service unit tests", () => {
     it("should set status to REJECTED if any document is rejected", async () => {
       const mockUser = {
         kycDocuments: {
-          aadhaar: { originalUrl: "/uploads/images/aadhaar.jpg", status: "APPROVED" },
+          aadhaar: {
+            originalUrl: "/uploads/images/aadhaar.jpg",
+            status: "APPROVED",
+          },
           pan: { originalUrl: "/uploads/images/pan.jpg", status: "PENDING" },
-          shopPhoto: { originalUrl: "/uploads/images/shop.jpg", status: "APPROVED" },
+          shopPhoto: {
+            originalUrl: "/uploads/images/shop.jpg",
+            status: "APPROVED",
+          },
         },
         kycStatus: "PENDING",
         save: jest.fn().mockResolvedValue(true),
@@ -213,7 +271,15 @@ describe("kyc.service unit tests", () => {
     it("should set status to NOT_STARTED when single document is approved but others are missing (Bug 4 Fix)", async () => {
       const mockUser = {
         kycDocuments: {
+<<<<<<< HEAD
           aadhaar: { originalUrl: "/uploads/images/aadhaar.jpg", status: "PENDING" },
+=======
+          aadhaar: {
+            originalUrl: "/uploads/images/aadhaar.jpg",
+            status: "PENDING",
+          },
+          // pan and shopPhoto are missing
+>>>>>>> e5638921cd1e3106bb7b78c95c22590fd5d27769
         },
         kycStatus: "NOT_STARTED",
         save: jest.fn().mockResolvedValue(true),
@@ -232,9 +298,15 @@ describe("kyc.service unit tests", () => {
     it("should set status to PENDING when single document is approved, others are not approved but are uploaded", async () => {
       const mockUser = {
         kycDocuments: {
-          aadhaar: { originalUrl: "/uploads/images/aadhaar.jpg", status: "PENDING" },
+          aadhaar: {
+            originalUrl: "/uploads/images/aadhaar.jpg",
+            status: "PENDING",
+          },
           pan: { originalUrl: "/uploads/images/pan.jpg", status: "PENDING" },
-          shopPhoto: { originalUrl: "/uploads/images/shop.jpg", status: "PENDING" },
+          shopPhoto: {
+            originalUrl: "/uploads/images/shop.jpg",
+            status: "PENDING",
+          },
         },
         kycStatus: "PENDING",
         save: jest.fn().mockResolvedValue(true),
@@ -267,8 +339,10 @@ describe("kyc.service unit tests", () => {
       await expect(
         kycService.reviewKycDocument("userId123", {
           status: "APPROVED",
-        })
-      ).rejects.toThrow("Cannot approve KYC entirely because no documents have been uploaded");
+        }),
+      ).rejects.toThrow(
+        "Cannot approve KYC entirely because no documents have been uploaded",
+      );
     });
 
     it("should allow admin to approve KYC entirely if at least one document is uploaded", async () => {
@@ -305,9 +379,17 @@ describe("kyc.service unit tests", () => {
       await expect(
         kycService.reviewKycDocument("userId123", {
           status: "REJECTED",
+<<<<<<< HEAD
           rejectionReason: "incomplete documents",
         })
       ).rejects.toThrow("Cannot reject KYC entirely because not all documents have been uploaded");
+=======
+          rejectionReason: "incomplete profile documents",
+        }),
+      ).rejects.toThrow(
+        "Cannot reject KYC entirely because not all documents have been uploaded",
+      );
+>>>>>>> e5638921cd1e3106bb7b78c95c22590fd5d27769
     });
 
     it("should allow admin to reject KYC entirely if all documents are uploaded", async () => {
@@ -328,6 +410,116 @@ describe("kyc.service unit tests", () => {
       });
 
       expect(mockUser.kycStatus).toBe("REJECTED");
+    });
+
+    it("should send approval email if user.email is set and KYC is APPROVED", async () => {
+      const mockUser = {
+        email: "user@example.com",
+        name: "Test User",
+        kycDocuments: {
+          aadhaar: {
+            originalUrl: "/uploads/images/aadhaar.jpg",
+            status: "APPROVED",
+          },
+          pan: { originalUrl: "/uploads/images/pan.jpg", status: "PENDING" },
+          shopPhoto: {
+            originalUrl: "/uploads/images/shop.jpg",
+            status: "APPROVED",
+          },
+        },
+        kycStatus: "PENDING",
+        save: jest.fn().mockResolvedValue(true),
+      };
+      User.findById.mockResolvedValue(mockUser);
+
+      const { sendTemplateEmail } = require("../../src/functions/nodemailer");
+      sendTemplateEmail.mockClear();
+
+      await kycService.reviewKycDocument("userId123", {
+        documentType: "pan",
+        status: "APPROVED",
+      });
+
+      expect(sendTemplateEmail).toHaveBeenCalledTimes(1);
+      expect(sendTemplateEmail).toHaveBeenCalledWith(
+        "user@example.com",
+        "users/kycApproved",
+        "KYC Verified Successfully 🎉",
+        expect.objectContaining({
+          userName: "Test User",
+        }),
+      );
+    });
+
+    it("should send rejection email if user.email is set and KYC is REJECTED", async () => {
+      const mockUser = {
+        email: "user@example.com",
+        name: "Test User",
+        kycDocuments: {
+          aadhaar: {
+            originalUrl: "/uploads/images/aadhaar.jpg",
+            status: "APPROVED",
+          },
+          pan: { originalUrl: "/uploads/images/pan.jpg", status: "PENDING" },
+          shopPhoto: {
+            originalUrl: "/uploads/images/shop.jpg",
+            status: "APPROVED",
+          },
+        },
+        kycStatus: "PENDING",
+        save: jest.fn().mockResolvedValue(true),
+      };
+      User.findById.mockResolvedValue(mockUser);
+
+      const { sendTemplateEmail } = require("../../src/functions/nodemailer");
+      sendTemplateEmail.mockClear();
+
+      await kycService.reviewKycDocument("userId123", {
+        documentType: "pan",
+        status: "REJECTED",
+        rejectionReason: "ID blurry",
+      });
+
+      expect(sendTemplateEmail).toHaveBeenCalledTimes(1);
+      expect(sendTemplateEmail).toHaveBeenCalledWith(
+        "user@example.com",
+        "users/kycRejected",
+        "KYC Verification Failed ⚠️",
+        expect.objectContaining({
+          userName: "Test User",
+          rejectionReason: "ID blurry",
+        }),
+      );
+    });
+
+    it("should not send email if user.email is not set", async () => {
+      const mockUser = {
+        name: "Test User",
+        kycDocuments: {
+          aadhaar: {
+            originalUrl: "/uploads/images/aadhaar.jpg",
+            status: "APPROVED",
+          },
+          pan: { originalUrl: "/uploads/images/pan.jpg", status: "PENDING" },
+          shopPhoto: {
+            originalUrl: "/uploads/images/shop.jpg",
+            status: "APPROVED",
+          },
+        },
+        kycStatus: "PENDING",
+        save: jest.fn().mockResolvedValue(true),
+      };
+      User.findById.mockResolvedValue(mockUser);
+
+      const { sendTemplateEmail } = require("../../src/functions/nodemailer");
+      sendTemplateEmail.mockClear();
+
+      await kycService.reviewKycDocument("userId123", {
+        documentType: "pan",
+        status: "APPROVED",
+      });
+
+      expect(sendTemplateEmail).not.toHaveBeenCalled();
     });
   });
 });

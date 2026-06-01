@@ -72,7 +72,7 @@ async function createRedeem(redeemData) {
   if (!user) sendFailResponse("unable to find user");
 
   // KYC verification gate - block redemption for unverified users
-  const allowedKycStatuses = [KYC_STATUS.APPROVED, KYC_STATUS.VERIFIED];
+  const allowedKycStatuses = [KYC_STATUS.APPROVED];
   if (!allowedKycStatuses.includes(user.kycStatus)) {
     sendFailResponse(
       "KYC verification is required to redeem points. Your current KYC status: " +

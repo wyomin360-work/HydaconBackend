@@ -59,10 +59,10 @@ describe("requireVerifiedKyc middleware", () => {
     expect(next).toHaveBeenCalledTimes(1);
   });
 
-  it("should pass if user KYC status is VERIFIED", async () => {
+  it("should pass if user KYC status is APPROVED", async () => {
     User.findById.mockReturnValue({
       select: jest.fn().mockReturnValue({
-        lean: jest.fn().mockResolvedValue({ kycStatus: KYC_STATUS.VERIFIED }),
+        lean: jest.fn().mockResolvedValue({ kycStatus: KYC_STATUS.APPROVED }),
       }),
     });
 

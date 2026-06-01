@@ -357,4 +357,100 @@ module.exports = {
       },
     },
   },
+
+  "/admin/audit-logs/phone-number-changes": {
+    post: {
+      summary: "Get list of phone number change audit logs",
+      tags: ["Admin"],
+      security: [{ bearerAuth: [] }],
+      requestBody: {
+        required: false,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              properties: {
+                page: { type: "integer", example: 1 },
+                limit: { type: "integer", example: 10 },
+                search: { type: "string", example: "John" },
+                sortBy: { type: "string", example: "timestamp" },
+                sortOrder: {
+                  type: "string",
+                  enum: ["asc", "desc"],
+                  example: "desc",
+                },
+                filters: {
+                  type: "object",
+                  properties: {
+                    userId: { type: "string", example: "64b5f..." },
+                    oldNumber: { type: "string", example: "1234567890" },
+                    newNumber: { type: "string", example: "0987654321" },
+                    ipAddress: { type: "string", example: "127.0.0.1" },
+                    dateFrom: { type: "string", example: "2025-01-01T00:00:00Z" },
+                    dateTo: { type: "string", example: "2025-12-31T23:59:59Z" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Audit logs retrieved successfully",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  data: {
+                    type: "object",
+                    properties: {
+                      auditLogs: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            id: { type: "string", example: "64b5f..." },
+                            action: { type: "string", example: "PHONE_NUMBER_CHANGE" },
+                            oldNumber: { type: "string", example: "1234567890" },
+                            newNumber: { type: "string", example: "0987654321" },
+                            timestamp: { type: "string", format: "date-time" },
+                            user: {
+                              type: "object",
+                              properties: {
+                                id: { type: "string" },
+                                name: { type: "string" },
+                                phone: { type: "string" },
+                                email: { type: "string" },
+                              },
+                            },
+                            ipAddress: { type: "string", example: "127.0.0.1" },
+                            deviceInfo: {
+                              type: "object",
+                              properties: {
+                                deviceId: { type: "string" },
+                                deviceName: { type: "string" },
+                                platform: { type: "string" },
+                                appVersion: { type: "string" },
+                              },
+                            },
+                          },
+                        },
+                      },
+                      page: { type: "integer", example: 1 },
+                      limit: { type: "integer", example: 10 },
+                      totalPages: { type: "integer", example: 5 },
+                      total: { type: "integer", example: 50 },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        401: { description: "Unauthorized - Invalid or missing token" },
+      },
+    },
+  },
 };

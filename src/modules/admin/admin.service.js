@@ -1,12 +1,16 @@
 const crypto = require("crypto");
+const mongoose = require("mongoose");
 const nodemailer = require("nodemailer");
 const Admin = require("../../schemas/admin.schema");
+const AuditLog = require("../../schemas/audit-log.schema");
+const { AUDIT_LOG_ACTIONS } = require("../../constants/audit-logs");
 const RefreshToken = require("../../schemas/refreshtoken.schema");
+const User = require("../../schemas/user.schema");
 const {
   sendFailResponse,
   sendResponse,
 } = require("../../utils/responseHandlers");
-const { compareHash, generateToken } = require("../../utils/heplers");
+const { compareHash, generateToken, parseUserAgent } = require("../../utils/heplers");
 const { sendMail } = require("../../functions/nodemailer");
 
 async function generateAndSaveToken(payload) {
@@ -307,6 +311,135 @@ async function adminDelete(adminId) {
   return { message: "reward deleted", data: { adminDeleted: true } };
 }
 
+// ----------------------
+// Phone Number Change Audit Logs
+// ----------------------
+async function phoneNumberChangeAuditLogs(data = {}) {
+  const {
+    page = 1,
+    limit = 10,
+    search = "",
+    sortBy = "timestamp",
+    sortOrder = "desc",
+    filters = {},
+  } = data;
+
+  const currentPage = Math.max(Number(page) || 1, 1);
+  const pageSize = Math.min(Math.max(Number(limit) || 10, 1), 100);
+  const safeFilters = filters || {};
+  const skip = (currentPage - 1) * pageSize;
+
+  // 1. Define base action requirements
+  const baseConditions = {
+    $or: [
+      { action: "PHONE_NUMBER_CHANGE" },
+      { action: { $exists: false } },
+      { action: null },
+    ],
+  };
+
+  // 2. Initialize query with base conditions
+  const query = { $and: [baseConditions] };
+
+  // 3. Add Search
+  if (search) {
+    const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const emailRegex = search.includes("@")
+      ? new RegExp(escapedSearch, "i")
+      : new RegExp(escapedSearch + "[^@]*@", "i");
+
+    const matchingUsers = await User.find({
+      $or: [
+        { email: emailRegex },
+        { phone: { $regex: search, $options: "i" } },
+      ],
+    }).select("_id").lean();
+
+    const userIds = matchingUsers.map((u) => u._id);
+
+    const searchConditions = [
+      { oldNumber: { $regex: search, $options: "i" } },
+      { newNumber: { $regex: search, $options: "i" } },
+    ];
+
+    if (userIds.length > 0) {
+      searchConditions.push({ userId: { $in: userIds } });
+    }
+
+    query.$and.push({ $or: searchConditions });
+  }
+
+  // 4. Add additional filters
+  if (safeFilters.userId) {
+    query.$and.push({ userId: safeFilters.userId });
+  }
+  if (safeFilters.oldNumber) {
+    query.$and.push({ $or: [{ oldNumber: safeFilters.oldNumber }] });
+  }
+  if (safeFilters.newNumber) {
+    query.$and.push({ $or: [{ newNumber: safeFilters.newNumber }] });
+  }
+  if (safeFilters.ipAddress) {
+    query.$and.push({ ipAddress: safeFilters.ipAddress });
+  }
+  if (safeFilters.dateFrom || safeFilters.dateTo) {
+    const dateRange = {};
+    if (safeFilters.dateFrom) dateRange.$gte = new Date(safeFilters.dateFrom);
+    if (safeFilters.dateTo) dateRange.$lte = new Date(safeFilters.dateTo);
+    query.$and.push({ timestamp: dateRange });
+  }
+
+  // 5. Execution
+  const sortableFields = new Set(["timestamp", "createdAt", "updatedAt"]);
+  const sort = {};
+  sort[sortableFields.has(sortBy) ? sortBy : "timestamp"] = sortOrder === "asc" ? 1 : -1;
+
+  const auditLogs = await AuditLog.find(query)
+    .populate("userId", "name email phone")
+    .sort(sort)
+    .skip(skip)
+    .limit(pageSize)
+    .lean();
+
+  const totalLogs = await AuditLog.countDocuments(query);
+
+  // 6. Return mapped response
+  return {
+    auditLogs: auditLogs.map((log) => {
+      const u = log.userId;
+      return {
+        id: log._id,
+        action: log.action || AUDIT_LOG_ACTIONS.PHONE_NUMBER_CHANGE,
+        oldNumber: log.oldNumber ?? null,
+        newNumber: log.newNumber ?? null,
+        user: u ? {
+          id: u._id,
+          name: u.name || null,
+          username: u.name || null,
+          email: u.email || null,
+          useremail: u.email || null,
+        } : null,
+        ipAddress: log.ipAddress || null,
+        deviceInfo: log.deviceInfo ? (() => {
+          const userAgent = log.deviceInfo.userAgent || "";
+          const parsed = parseUserAgent(userAgent);
+          return {
+            deviceId: log.deviceInfo.deviceId || parsed.deviceId || null,
+            deviceName: log.deviceInfo.deviceName || parsed.deviceName || null,
+            platform: log.deviceInfo.platform || parsed.platform || null,
+            appVersion: log.deviceInfo.appVersion || parsed.appVersion || null,
+          };
+        })() : null,
+        timestamp: log.timestamp || log.createdAt || null,
+      };
+    }),
+    limit: pageSize,
+    totalPages: Math.ceil(totalLogs / pageSize),
+    total: totalLogs,
+    page: currentPage,
+  };
+}
+
 module.exports = {
   registerAdmin,
   login,
@@ -316,4 +449,5 @@ module.exports = {
   updateDetails,
   adminList,
   adminDelete,
+  phoneNumberChangeAuditLogs,
 };

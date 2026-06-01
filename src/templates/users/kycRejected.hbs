@@ -1,0 +1,111 @@
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KYC Verification Failed</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        font-family: "Plus Jakarta Sans", Arial, sans-serif;
+        background-color: #f6f7fb;
+        color: #333;
+        margin: 0;
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 620px;
+        margin: auto;
+        background: #ffffff;
+        padding: 32px;
+        border-radius: 14px;
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+      }
+
+      .header {
+        text-align: center;
+        margin-bottom: 25px;
+      }
+
+      h2 {
+        color: #c62828;
+        font-weight: 600;
+        margin-bottom: 10px;
+      }
+
+      p {
+        line-height: 1.7;
+        font-size: 16px;
+        margin: 14px 0;
+      }
+
+      .details-card {
+        background-color: #f9fafc;
+        border-radius: 12px;
+        padding: 18px;
+        margin: 22px 0;
+        font-size: 15px;
+      }
+
+      .details-card p {
+        margin: 6px 0;
+      }
+
+      .info-box {
+        margin-top: 25px;
+        padding: 16px;
+        background-color: #ffebee;
+        border-radius: 12px;
+        color: #c62828;
+        font-size: 15px;
+        text-align: center;
+        font-weight: 600;
+      }
+
+      .footer {
+        margin-top: 35px;
+        text-align: center;
+        font-size: 12px;
+        color: #777;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <div class="header">
+        <h2>KYC Verification Failed ⚠️</h2>
+      </div>
+
+      <p>Hello {{userName}},</p>
+
+      <p>
+        We regret to inform you that your KYC submission was reviewed and has
+        been rejected by our team.
+      </p>
+
+      <div class="details-card">
+        <p><strong>Reason for rejection:</strong> {{rejectionReason}}</p>
+      </div>
+
+      <p>
+        Please log back into your account and re-submit clear, valid, and
+        matching documents to proceed with your verification.
+      </p>
+
+      <div class="info-box">
+        Please resolve the issues listed above to unlock premium features.
+      </div>
+
+      <div class="footer">
+        <p>Thank you for your cooperation.</p>
+        <p>Hydacon Support Team</p>
+      </div>
+    </div>
+  </body>
+
+</html>
