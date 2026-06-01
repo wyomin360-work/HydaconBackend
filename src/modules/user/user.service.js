@@ -591,7 +591,7 @@ async function addFcmToken(data, userId) {
 // User Bank Details
 // ----------------------
 async function getUserBankDetails(userId) {
-  const user = await User.findById(userId);
+  const user = await User.findById(userId).lean();
   if (!user) sendFailResponse("User not found");
 
   if (!user.bankDetails?.accountNumber || !user.bankDetails?.ifscCode)
