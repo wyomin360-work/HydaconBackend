@@ -48,14 +48,7 @@ async function updateTier(req, res) {
  * Admin API: Creates a loyalty season.
  */
 async function createSeason(req, res) {
-  const { name, code, startDate, endDate, active } = req.body;
-  
-  if (active) {
-    // Disable all other active seasons
-    await LoyaltySeason.updateMany({ active: true }, { active: false });
-  }
-
-  const season = await LoyaltySeason.create({ name, code, startDate, endDate, active });
+  const season = await loyaltyService.createSeason(req.userId, req.body);
   return sendResponse(res, season, 201);
 }
 
@@ -63,7 +56,10 @@ async function createSeason(req, res) {
  * Admin API: Lists all loyalty seasons.
  */
 async function listSeasons(req, res) {
-  const seasons = await LoyaltySeason.find().sort({ startDate: -1 });
+  const includeArchived = req.query.includeArchived === "true";
+  const seasons = await LoyaltySeason.find(
+    includeArchived ? {} : { isArchived: { $ne: true } }
+  ).sort({ startDate: -1 });
   return sendResponse(res, seasons, 200);
 }
 
@@ -72,17 +68,7 @@ async function listSeasons(req, res) {
  */
 async function activateSeason(req, res) {
   const seasonId = req.params.id;
-  
-  // Deactivate all others
-  await LoyaltySeason.updateMany({ _id: { $ne: seasonId } }, { active: false });
-  
-  // Activate selected
-  const activeSeason = await LoyaltySeason.findByIdAndUpdate(
-    seasonId,
-    { active: true },
-    { new: true }
-  );
-
+  const activeSeason = await loyaltyService.activateSeason(req.userId, seasonId);
   return sendResponse(res, activeSeason, 200);
 }
 
@@ -90,14 +76,7 @@ async function activateSeason(req, res) {
  * Admin API: Creates a dynamic tier configuration for a season.
  */
 async function createTierConfiguration(req, res) {
-  const { tierId, seasonId, qualificationThreshold, pointMultiplier, benefits } = req.body;
-  const config = await TierConfiguration.create({
-    tierId,
-    seasonId,
-    qualificationThreshold,
-    pointMultiplier,
-    benefits,
-  });
+  const config = await loyaltyService.createTierConfiguration(req.userId, req.body);
   return sendResponse(res, config, 201);
 }
 
@@ -109,6 +88,9 @@ async function listTierConfigurations(req, res) {
   const query = {};
   if (seasonId) {
     query.seasonId = seasonId;
+  }
+  if (req.query.includeArchived !== "true") {
+    query.isArchived = { $ne: true };
   }
   const configs = await TierConfiguration.find(query)
     .populate("tierId")
@@ -123,7 +105,7 @@ async function listTierConfigurations(req, res) {
  */
 async function updateTierConfiguration(req, res) {
   const configId = req.params.id;
-  const config = await TierConfiguration.findByIdAndUpdate(configId, req.body, { new: true });
+  const config = await loyaltyService.updateTierConfiguration(req.userId, configId, req.body);
   return sendResponse(res, config, 200);
 }
 
@@ -156,6 +138,11 @@ async function updateSeason(req, res) {
   return sendResponse(res, season, 200);
 }
 
+async function deactivateSeason(req, res) {
+  const season = await loyaltyService.deactivateSeason(req.userId, req.params.id);
+  return sendResponse(res, season, 200);
+}
+
 /**
  * Admin API: Deletes a loyalty season.
  */
@@ -163,6 +150,21 @@ async function deleteSeason(req, res) {
   const seasonId = req.params.id;
   await LoyaltySeason.findByIdAndDelete(seasonId);
   return sendResponse(res, { message: "Season deleted successfully" }, 200);
+}
+
+async function getSeasonManagementSummary(req, res) {
+  const summary = await loyaltyService.getSeasonManagementSummary();
+  return sendResponse(res, summary, 200);
+}
+
+async function listConfigurationAuditLogs(req, res) {
+  const logs = await loyaltyService.listConfigurationAuditLogs(req.query);
+  return sendResponse(res, logs, 200);
+}
+
+async function getTierConfigurationHistory(req, res) {
+  const history = await loyaltyService.getTierConfigurationHistory(req.params.id);
+  return sendResponse(res, history, 200);
 }
 
 /**
@@ -211,6 +213,7 @@ module.exports = {
   listSeasons,
   updateSeason,
   activateSeason,
+  deactivateSeason,
   deleteSeason,
   createTierConfiguration,
   listTierConfigurations,
@@ -220,4 +223,7 @@ module.exports = {
   listBenefits,
   updateBenefit,
   deleteBenefit,
+  getSeasonManagementSummary,
+  listConfigurationAuditLogs,
+  getTierConfigurationHistory,
 };

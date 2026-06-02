@@ -46,10 +46,20 @@ router.get(
   verification.verifyAdmin,
   handleError(controller.listSeasons)
 );
+router.get(
+  loyaltyPaths.admin.seasonSummary,
+  verification.verifyAdmin,
+  handleError(controller.getSeasonManagementSummary)
+);
 router.patch(
   loyaltyPaths.admin.seasonsActivate,
   verification.verifyAdmin,
   handleError(controller.activateSeason)
+);
+router.patch(
+  loyaltyPaths.admin.seasonsDeactivate,
+  verification.verifyAdmin,
+  handleError(controller.deactivateSeason)
 );
 router.patch(
   loyaltyPaths.admin.seasonsDetail,
@@ -72,6 +82,16 @@ router.get(
   loyaltyPaths.admin.tierConfigurations,
   verification.verifyAdmin,
   handleError(controller.listTierConfigurations)
+);
+router.get(
+  loyaltyPaths.admin.tierConfigurationHistory,
+  verification.verifyAdmin,
+  handleError(controller.getTierConfigurationHistory)
+);
+router.get(
+  loyaltyPaths.admin.configAuditLogs,
+  verification.verifyAdmin,
+  handleError(controller.listConfigurationAuditLogs)
 );
 router.patch(
   loyaltyPaths.admin.tierConfigurationsDetail,

@@ -8,6 +8,8 @@ const tierConfigurationSchema = new mongoose.Schema(
     pointMultiplier: { type: Number, default: 1.0 }, // Multiplier for scanning
     benefits: [{ type: mongoose.Schema.Types.ObjectId, ref: "TierBenefit" }],
     active: { type: Boolean, default: true },
+    metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
+    isArchived: { type: Boolean, default: false, index: true },
   },
   {
     timestamps: true,
