@@ -234,6 +234,7 @@ async function addBonusPoints(userId, points, description, referenceId = null) {
 
   // 2. Add to user totalPoints
   user.totalPoints += points;
+  user.lifetimePoints = (user.lifetimePoints || 0) + points;
   await user.save();
 
   return { message: "Bonus points successfully added", points };

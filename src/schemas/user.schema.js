@@ -53,6 +53,7 @@ const userSchema = new mongoose.Schema(
     password: { type: String, required: true },
     fcmTokens: { type: [String], default: [] },
     totalPoints: { type: Number, default: 0 },
+    lifetimePoints: { type: Number, default: 0 },
     totalWithdraw: { type: Number, default: 0 },
     authKey: { type: String, required: false },
     agreedToTerms: { type: Boolean, default: true },

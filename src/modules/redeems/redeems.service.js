@@ -127,6 +127,7 @@ async function createRedeem(redeemData) {
 
   // update user
   user.totalPoints += weightedPoints;
+  user.lifetimePoints = (user.lifetimePoints || 0) + weightedPoints;
 
   // save
   await user.save();
