@@ -1,6 +1,7 @@
 module.exports = {
   root: "/loyalty",
   summary: "/summary",
+  tiers: "/tiers",
   admin: {
     tiers: "/admin/tiers",
     tiersDetail: "/admin/tiers/:id",

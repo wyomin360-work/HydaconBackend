@@ -13,6 +13,13 @@ router.get(
   handleError(controller.getUserSummary)
 );
 
+// User Loyalty Tiers Endpoint (Mobile App integration)
+router.get(
+  loyaltyPaths.tiers,
+  verification.verifyUser,
+  handleError(controller.getMobileTiers)
+);
+
 // Admin Loyalty Tier Management Endpoints
 router.post(
   loyaltyPaths.admin.tiers,

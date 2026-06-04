@@ -226,4 +226,71 @@ describe("Loyalty and Tier Progression Engine", () => {
       expect(mockRes.status).toHaveBeenCalledWith(200);
     });
   });
+
+  describe("Mobile Tiers Listing Service", () => {
+    it("should retrieve mobile tiers and thresholds sorted by rank", async () => {
+      const mockUnsortedConfigs = [
+        { tierId: mockTiers[2], seasonId: "season123", qualificationThreshold: 500, pointMultiplier: 1.2, benefits: [] },
+        { tierId: mockTiers[0], seasonId: "season123", qualificationThreshold: 0, pointMultiplier: 1.0, benefits: [] },
+        { tierId: mockTiers[1], seasonId: "season123", qualificationThreshold: 100, pointMultiplier: 1.1, benefits: [] },
+      ];
+
+      TierConfiguration.find.mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(mockUnsortedConfigs),
+      });
+
+      const tiers = await loyaltyService.getMobileTiersList();
+
+      expect(tiers.length).toBe(3);
+      expect(tiers[0].rank).toBe(0);
+      expect(tiers[1].rank).toBe(1);
+      expect(tiers[2].rank).toBe(2);
+      expect(tiers[0].name).toBe("Beginner");
+      expect(tiers[0].qualificationThreshold).toBe(0);
+    });
+
+    it("should seed default loyalty data if active season is not found", async () => {
+      LoyaltySeason.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(mockSeason);
+      LoyaltySeason.countDocuments.mockResolvedValue(0);
+      Tier.countDocuments.mockResolvedValue(0);
+      TierConfiguration.countDocuments.mockResolvedValue(0);
+
+      TierConfiguration.find.mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(mockConfigs),
+      });
+
+      const tiers = await loyaltyService.getMobileTiersList();
+      expect(tiers.length).toBe(5);
+    });
+  });
+
+  describe("Loyalty Controller Mobile Endpoints", () => {
+    let mockReq, mockRes;
+
+    beforeEach(() => {
+      mockReq = {};
+      mockRes = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
+      };
+    });
+
+    it("should get mobile tiers and respond with 200", async () => {
+      const mockMappedTiers = [
+        { id: "tier0", name: "Beginner", qualificationThreshold: 0, pointMultiplier: 1.0, benefits: [] },
+      ];
+      jest.spyOn(loyaltyService, "getMobileTiersList").mockResolvedValue(mockMappedTiers);
+
+      await loyaltyController.getMobileTiers(mockReq, mockRes);
+
+      expect(loyaltyService.getMobileTiersList).toHaveBeenCalled();
+      expect(mockRes.status).toHaveBeenCalledWith(200);
+      expect(mockRes.json).toHaveBeenCalledWith({
+        status: "success",
+        data: mockMappedTiers,
+      });
+    });
+  });
 });

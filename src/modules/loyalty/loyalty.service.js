@@ -330,6 +330,53 @@ async function getUserLoyaltySummary(userId) {
   };
 }
 
+/**
+ * Retrieves all active tier configurations for the active season,
+ * populated with their respective tier details, sorted by tier rank.
+ */
+async function getMobileTiersList() {
+  let activeSeason = await LoyaltySeason.findOne({ active: true });
+  if (!activeSeason) {
+    activeSeason = await seedDefaultLoyaltyData();
+  }
+
+  const configs = await TierConfiguration.find({
+    seasonId: activeSeason._id,
+    active: true,
+  })
+    .populate("tierId")
+    .populate("benefits")
+    .exec();
+
+  // Filter out any configs where the tierId is not found (or inactive)
+  const validConfigs = configs.filter(config => config.tierId && config.tierId.active !== false);
+
+  // Sort by tier rank ASC
+  validConfigs.sort((a, b) => (a.tierId.rank || 0) - (b.tierId.rank || 0));
+
+  // Map to a clean response format suitable for the mobile app
+  return validConfigs.map(config => {
+    const tier = config.tierId;
+    return {
+      id: tier._id,
+      name: tier.name,
+      key: tier.key,
+      colorIdentity: tier.colorIdentity,
+      badgeUrl: tier.badgeUrl,
+      rank: tier.rank,
+      qualificationThreshold: config.qualificationThreshold,
+      pointMultiplier: config.pointMultiplier,
+      benefits: (config.benefits || []).map(benefit => ({
+        id: benefit._id,
+        name: benefit.name,
+        description: benefit.description,
+        key: benefit.key,
+        active: benefit.active,
+      })),
+    };
+  });
+}
+
 module.exports = {
   seedDefaultLoyaltyData,
   getOrCreateUserProgress,
@@ -337,4 +384,6 @@ module.exports = {
   addBonusPoints,
   evaluateTierUpgrade,
   getUserLoyaltySummary,
+  getMobileTiersList,
 };
+

@@ -14,6 +14,14 @@ async function getUserSummary(req, res) {
   return sendResponse(res, summary, 200);
 }
 
+/**
+ * Mobile App API: Retrieves all active configured loyalty tiers and thresholds for the active season.
+ */
+async function getMobileTiers(req, res) {
+  const tiers = await loyaltyService.getMobileTiersList();
+  return sendResponse(res, tiers, 200);
+}
+
 // ----------------------------------------------------
 // Admin Configuration APIs
 // ----------------------------------------------------
@@ -203,6 +211,7 @@ async function deleteBenefit(req, res) {
 
 module.exports = {
   getUserSummary,
+  getMobileTiers,
   createTier,
   listTiers,
   updateTier,
