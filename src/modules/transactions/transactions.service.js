@@ -13,6 +13,7 @@ const { decrypt, encrypt } = require("../../utils/encryption");
 const { attachId, formatNotification } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const { sendFcmNotifications } = require("../../functions/fcm");
+const { LOYALTY_TRANSACTION_TYPES } = require("../../constants/loyalty");
 
 // ----------------------
 // Transaction List
@@ -152,7 +153,7 @@ async function createTransaction(data, userId) {
     if (lifetimePoints < 1000) {
       const LoyaltyTransaction = require("../../schemas/loyalty-transaction.schema");
       const result = await LoyaltyTransaction.aggregate([
-        { $match: { userId: user._id, type: { $in: ["REDEEMABLE", "BOTH"] }, points: { $gt: 0 } } },
+        { $match: { userId: user._id, type: { $in: [LOYALTY_TRANSACTION_TYPES.REDEEMABLE, LOYALTY_TRANSACTION_TYPES.BOTH] }, points: { $gt: 0 } } },
         { $group: { _id: null, total: { $sum: "$points" } } }
       ]);
       const calculatedPoints = result[0]?.total || 0;

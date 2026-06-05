@@ -14,6 +14,7 @@ const {
   buildChanges,
   createTierConfigHistorySnapshot,
 } = require("./loyalty-audit.service");
+const { LOYALTY_TRANSACTION_TYPES, LOYALTY_TRANSACTION_SOURCES } = require("../../constants/loyalty");
 
 function normalizeDateRange(startDate, endDate) {
   const start = new Date(startDate);
@@ -40,31 +41,12 @@ async function ensureSeasonDateRangeHasNoOverlap({ startDate, endDate, excludeSe
   }
 }
 
-async function resolveActiveSeason(referenceDate = new Date()) {
-  const now = new Date(referenceDate);
-  const dateMatchedSeason = await LoyaltySeason.findOne({
+async function resolveActiveSeason() {
+  const activeSeason = await LoyaltySeason.findOne({
+    active: true,
     isArchived: { $ne: true },
-    startDate: { $lte: now },
-    endDate: { $gte: now },
   });
-
-  if (!dateMatchedSeason) {
-    return null;
-  }
-
-  if (!dateMatchedSeason.active) {
-    await LoyaltySeason.updateMany(
-      { _id: { $ne: dateMatchedSeason._id }, active: true },
-      { active: false, deactivatedAt: now },
-    );
-    await LoyaltySeason.findByIdAndUpdate(dateMatchedSeason._id, {
-      active: true,
-      activatedAt: now,
-      deactivatedAt: null,
-    });
-  }
-
-  return LoyaltySeason.findById(dateMatchedSeason._id);
+  return activeSeason;
 }
 
 /**
@@ -149,31 +131,32 @@ async function getOrCreateUserProgress(userId, seasonId = null) {
   }
 
   if (!activeSeason) {
-    activeSeason = await seedDefaultLoyaltyData();
+    sendFailResponse("No active loyalty season available.");
   }
 
-  let progress = await UserTierProgress.findOne({ userId, seasonId: activeSeason._id })
-    .populate("currentTierId")
-    .exec();
+  const beginnerTier = await Tier.findOne({ rank: 0 });
+  if (!beginnerTier) {
+    sendFailResponse("Loyalty tiers are not properly configured.");
+  }
 
-  if (!progress) {
-    const beginnerTier = await Tier.findOne({ rank: 0 });
-    if (!beginnerTier) {
-      await seedDefaultLoyaltyData();
-      return getOrCreateUserProgress(userId, activeSeason._id);
-    }
+  let progress = await UserTierProgress.findOneAndUpdate(
+    { userId, seasonId: activeSeason._id },
+    {
+      $setOnInsert: {
+        userId,
+        seasonId: activeSeason._id,
+        currentTierId: beginnerTier._id,
+        qualificationPoints: 0,
+      }
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  ).populate("currentTierId");
 
-    progress = await UserTierProgress.create({
-      userId,
-      seasonId: activeSeason._id,
-      currentTierId: beginnerTier._id,
-      qualificationPoints: 0,
-    });
-
-    // Update cached tier in User record
-    await User.findByIdAndUpdate(userId, { currentTierId: beginnerTier._id });
-
-    progress = await UserTierProgress.findById(progress._id).populate("currentTierId").exec();
+  // Ensure user has a cached currentTierId
+  const user = await User.findById(userId);
+  if (user && !user.currentTierId) {
+    user.currentTierId = beginnerTier._id;
+    await user.save();
   }
 
   return progress;
@@ -185,7 +168,7 @@ async function getOrCreateUserProgress(userId, seasonId = null) {
 async function processQrScanPoints(userId, points, referenceId) {
   const activeSeason = await resolveActiveSeason();
   if (!activeSeason) {
-    await seedDefaultLoyaltyData();
+    sendFailResponse("No active loyalty season available.");
   }
 
   const progress = await getOrCreateUserProgress(userId);
@@ -195,8 +178,8 @@ async function processQrScanPoints(userId, points, referenceId) {
     userId,
     seasonId: progress.seasonId,
     points,
-    type: "BOTH",
-    source: "QR_SCAN",
+    type: LOYALTY_TRANSACTION_TYPES.BOTH,
+    source: LOYALTY_TRANSACTION_SOURCES.QR_SCAN,
     description: `QR Code scan points addition`,
     referenceId,
   });
@@ -226,8 +209,8 @@ async function addBonusPoints(userId, points, description, referenceId = null) {
     userId,
     seasonId: activeSeason?._id || null,
     points,
-    type: "REDEEMABLE",
-    source: "CAMPAIGN_BONUS",
+    type: LOYALTY_TRANSACTION_TYPES.REDEEMABLE,
+    source: LOYALTY_TRANSACTION_SOURCES.CAMPAIGN_BONUS,
     description: description || "Bonus points reward",
     referenceId,
   });
@@ -310,7 +293,7 @@ async function evaluateTierUpgrade(userId, seasonId) {
 async function getUserLoyaltySummary(userId) {
   const activeSeason = await resolveActiveSeason();
   if (!activeSeason) {
-    await seedDefaultLoyaltyData();
+    sendFailResponse("No active loyalty season available.");
   }
 
   const progress = await getOrCreateUserProgress(userId);
@@ -772,6 +755,23 @@ async function listConfigurationAuditLogs(query = {}) {
   };
 }
 
+async function getConfigAuditLogById(id) {
+  const log = await LoyaltyConfigAuditLog.findById(id)
+    .populate("changedBy", "name email")
+    .populate("seasonId", "name code startDate endDate active")
+    .populate("tierId", "name key rank colorIdentity")
+    .populate("tierConfigurationId")
+    .lean();
+
+  if (!log) {
+    const error = new Error("Audit log entry not found");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return log;
+}
+
 async function getTierConfigurationHistory(configId) {
   return TierConfigurationHistory.find({ tierConfigurationId: configId })
     .populate("changedBy", "name email")
@@ -795,6 +795,7 @@ module.exports = {
   updateTierConfiguration,
   getSeasonManagementSummary,
   listConfigurationAuditLogs,
+  getConfigAuditLogById,
   getTierConfigurationHistory,
   archiveSeason,
   archiveTierConfiguration,

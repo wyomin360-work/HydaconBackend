@@ -162,6 +162,11 @@ async function listConfigurationAuditLogs(req, res) {
   return sendResponse(res, logs, 200);
 }
 
+async function getConfigAuditLogById(req, res) {
+  const log = await loyaltyService.getConfigAuditLogById(req.params.id);
+  return sendResponse(res, log, 200);
+}
+
 async function getTierConfigurationHistory(req, res) {
   const history = await loyaltyService.getTierConfigurationHistory(req.params.id);
   return sendResponse(res, history, 200);
@@ -225,5 +230,6 @@ module.exports = {
   deleteBenefit,
   getSeasonManagementSummary,
   listConfigurationAuditLogs,
+  getConfigAuditLogById,
   getTierConfigurationHistory,
 };

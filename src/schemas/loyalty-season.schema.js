@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { CARRY_FORWARD_BEHAVIOR } = require("../constants/loyalty");
 
 const loyaltySeasonSchema = new mongoose.Schema(
   {
@@ -9,8 +10,8 @@ const loyaltySeasonSchema = new mongoose.Schema(
     active: { type: Boolean, default: false }, // Only one season should be active at a time
     carryForwardBehavior: {
       type: String,
-      enum: ["RESET", "FULL", "PERCENTAGE"],
-      default: "RESET",
+      enum: Object.values(CARRY_FORWARD_BEHAVIOR),
+      default: CARRY_FORWARD_BEHAVIOR.RESET,
     },
     carryForwardPercentage: {
       type: Number,
@@ -36,6 +37,7 @@ const loyaltySeasonSchema = new mongoose.Schema(
 );
 
 loyaltySeasonSchema.index({ startDate: 1, endDate: 1 });
+loyaltySeasonSchema.index({ active: 1 }, { unique: true, partialFilterExpression: { active: true } });
 
 const LoyaltySeason = mongoose.model("LoyaltySeason", loyaltySeasonSchema);
 module.exports = LoyaltySeason;

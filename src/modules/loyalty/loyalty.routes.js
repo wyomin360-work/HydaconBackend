@@ -93,6 +93,11 @@ router.get(
   verification.verifyAdmin,
   handleError(controller.listConfigurationAuditLogs)
 );
+router.get(
+  loyaltyPaths.admin.configAuditLogDetail,
+  verification.verifyAdmin,
+  handleError(controller.getConfigAuditLogById)
+);
 router.patch(
   loyaltyPaths.admin.tierConfigurationsDetail,
   verification.verifyAdmin,

@@ -13,6 +13,7 @@ module.exports = {
     tierConfigurationsDetail: "/admin/tier-configurations/:id",
     tierConfigurationHistory: "/admin/tier-configurations/:id/history",
     configAuditLogs: "/admin/config-audit-logs",
+    configAuditLogDetail: "/admin/config-audit-logs/:id",
     benefits: "/admin/benefits",
     benefitsDetail: "/admin/benefits/:id",
   },

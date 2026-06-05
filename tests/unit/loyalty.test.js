@@ -7,6 +7,7 @@ const UserTierProgress = require("../../src/schemas/user-tier-progress.schema");
 const LoyaltyTransaction = require("../../src/schemas/loyalty-transaction.schema");
 const User = require("../../src/schemas/user.schema");
 const TierBenefit = require("../../src/schemas/tier-benefit.schema");
+const { LOYALTY_TRANSACTION_TYPES, LOYALTY_TRANSACTION_SOURCES } = require("../../src/constants/loyalty");
 
 // Mock schemas
 jest.mock("../../src/schemas/tier.schema");
@@ -82,20 +83,14 @@ describe("Loyalty and Tier Progression Engine", () => {
 
   describe("Seeding & User Progress", () => {
     it("should fetch or create user tier progress cards correctly", async () => {
-      // Setup progress not found (to trigger create)
-      UserTierProgress.findOne.mockReturnValue({
-        populate: jest.fn().mockReturnThis(),
-        exec: jest.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(mockProgress),
-      });
-      UserTierProgress.create.mockResolvedValue(mockProgress);
-      UserTierProgress.findById.mockReturnValue({
-        populate: jest.fn().mockReturnThis(),
-        exec: jest.fn().mockResolvedValue(mockProgress),
+      // Setup progress
+      UserTierProgress.findOneAndUpdate = jest.fn().mockReturnValue({
+        populate: jest.fn().mockResolvedValue(mockProgress),
       });
 
       const progress = await loyaltyService.getOrCreateUserProgress("user123");
 
-      expect(UserTierProgress.create).toHaveBeenCalled();
+      expect(UserTierProgress.findOneAndUpdate).toHaveBeenCalled();
       expect(progress.currentTierId.name).toBe("Beginner");
       expect(progress.qualificationPoints).toBe(50);
     });
@@ -106,6 +101,9 @@ describe("Loyalty and Tier Progression Engine", () => {
       UserTierProgress.findOne.mockReturnValue({
         populate: jest.fn().mockReturnThis(),
         exec: jest.fn().mockResolvedValue(mockProgress),
+      });
+      UserTierProgress.findOneAndUpdate = jest.fn().mockReturnValue({
+        populate: jest.fn().mockResolvedValue(mockProgress),
       });
       
       // Stub configs find for evaluate
@@ -118,8 +116,8 @@ describe("Loyalty and Tier Progression Engine", () => {
 
       expect(LoyaltyTransaction.create).toHaveBeenCalledWith(expect.objectContaining({
         points: 25,
-        type: "BOTH",
-        source: "QR_SCAN",
+        type: LOYALTY_TRANSACTION_TYPES.BOTH,
+        source: LOYALTY_TRANSACTION_SOURCES.QR_SCAN,
       }));
       expect(mockProgress.qualificationPoints).toBe(75);
     });
@@ -129,8 +127,8 @@ describe("Loyalty and Tier Progression Engine", () => {
 
       expect(LoyaltyTransaction.create).toHaveBeenCalledWith(expect.objectContaining({
         points: 150,
-        type: "REDEEMABLE",
-        source: "CAMPAIGN_BONUS",
+        type: LOYALTY_TRANSACTION_TYPES.REDEEMABLE,
+        source: LOYALTY_TRANSACTION_SOURCES.CAMPAIGN_BONUS,
       }));
       expect(mockUser.totalPoints).toBe(350); // 200 + 150
       expect(mockProgress.qualificationPoints).toBe(50); // Unchanged

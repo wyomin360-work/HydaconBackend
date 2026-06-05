@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const { LOYALTY_TRANSACTION_TYPES, LOYALTY_TRANSACTION_SOURCES } = require("../constants/loyalty");
+
 
 const loyaltyTransactionSchema = new mongoose.Schema(
   {
@@ -7,16 +9,17 @@ const loyaltyTransactionSchema = new mongoose.Schema(
     points: { type: Number, required: true }, // positive for addition, negative for deduction
     type: {
       type: String,
-      enum: ["QUALIFICATION", "REDEEMABLE", "BOTH"],
+      enum: Object.values(LOYALTY_TRANSACTION_TYPES),
       required: true,
     },
     source: {
       type: String,
-      enum: ["QR_SCAN", "CAMPAIGN_BONUS", "WITHDRAW", "ADMIN_ADJUSTMENT", "SEASON_ROLLOVER"],
+      enum: Object.values(LOYALTY_TRANSACTION_SOURCES),
       required: true,
     },
     description: { type: String, default: "" },
     referenceId: { type: mongoose.Schema.Types.ObjectId, required: false }, // e.g. ref Redeem or Transaction ID
+    expiresAt: { type: Date, default: null }, // for point expiration policy
   },
   {
     timestamps: true,
