@@ -225,6 +225,7 @@ async function addBonusPoints(userId, points, description, referenceId = null) {
 
 /**
  * Evaluates points and performs automatic tier upgrades.
+ * Returns the updated progress document enriched with a `levelUpEvent` payload.
  */
 async function evaluateTierUpgrade(userId, seasonId) {
   const progress = await UserTierProgress.findOne({ userId, seasonId }).populate("currentTierId");
@@ -235,7 +236,9 @@ async function evaluateTierUpgrade(userId, seasonId) {
     .populate("tierId")
     .lean();
 
-  if (configs.length === 0) return progress;
+  if (configs.length === 0) {
+    return Object.assign(progress.toObject?.() ?? progress, { levelUpEvent: { upgraded: false } });
+  }
 
   // Sort by threshold DESC to evaluate highest qualification first
   const sortedConfigs = configs.sort((a, b) => {
@@ -252,12 +255,15 @@ async function evaluateTierUpgrade(userId, seasonId) {
 
   // If we found a qualified tier config and it is a higher rank than the current tier
   if (qualifiedConfig && qualifiedConfig.tierId.rank > (progress.currentTierId?.rank || 0)) {
-    const oldTierName = progress.currentTierId?.name || "None";
+    const oldTier = progress.currentTierId;
+    const oldTierName = oldTier?.name || "None";
     const newTier = qualifiedConfig.tierId;
+    const upgradedAt = new Date();
 
-    // Perform upgrade
+    // Persist previous tier before overwriting
+    progress.previousTierId = oldTier?._id || null;
     progress.currentTierId = newTier._id;
-    progress.lastEvaluatedAt = new Date();
+    progress.lastEvaluatedAt = upgradedAt;
     await progress.save();
 
     // Cache current tier in User record
@@ -280,15 +286,42 @@ async function evaluateTierUpgrade(userId, seasonId) {
       }
     }
 
-    // Return newly populated progress
-    return UserTierProgress.findById(progress._id).populate("currentTierId").exec();
+    // Return populated progress with level-up event metadata
+    const updatedProgress = await UserTierProgress.findById(progress._id)
+      .populate("currentTierId")
+      .populate("previousTierId")
+      .exec();
+
+    const result = updatedProgress.toObject ? updatedProgress.toObject() : updatedProgress;
+    result.levelUpEvent = {
+      upgraded: true,
+      previousTier: oldTier ? {
+        id: oldTier._id,
+        name: oldTier.name,
+        key: oldTier.key,
+        colorIdentity: oldTier.colorIdentity,
+        badgeUrl: oldTier.badgeUrl,
+      } : null,
+      newTier: {
+        id: newTier._id,
+        name: newTier.name,
+        key: newTier.key,
+        colorIdentity: newTier.colorIdentity,
+        badgeUrl: newTier.badgeUrl,
+      },
+      upgradedAt,
+    };
+    return result;
   }
 
-  return progress;
+  const result = progress.toObject?.() ?? progress;
+  result.levelUpEvent = { upgraded: false };
+  return result;
 }
 
 /**
  * Formulate loyalty summary report.
+ * Includes currentTier, previousTier, nextTier, progression metrics and active season.
  */
 async function getUserLoyaltySummary(userId) {
   const activeSeason = await resolveActiveSeason();
@@ -296,8 +329,18 @@ async function getUserLoyaltySummary(userId) {
     sendFailResponse("No active loyalty season available.");
   }
 
-  const progress = await getOrCreateUserProgress(userId);
+  // Populate both currentTierId and previousTierId in one query
+  const progress = await (async () => {
+    const p = await getOrCreateUserProgress(userId);
+    // Re-fetch with previousTierId populated
+    return UserTierProgress.findById(p._id)
+      .populate("currentTierId")
+      .populate("previousTierId")
+      .lean();
+  })();
+
   const currentTier = progress.currentTierId;
+  const previousTier = progress.previousTierId || null;
   const user = await User.findById(userId);
 
   // Find next tier config in active season
@@ -363,6 +406,13 @@ async function getUserLoyaltySummary(userId) {
       badgeUrl: currentTier?.badgeUrl || "",
       pointMultiplier: activeConfig?.pointMultiplier || 1.0,
     },
+    previousTier: previousTier ? {
+      id: previousTier._id,
+      name: previousTier.name,
+      key: previousTier.key,
+      colorIdentity: previousTier.colorIdentity,
+      badgeUrl: previousTier.badgeUrl,
+    } : null,
     nextTier: nextTier ? {
       id: nextTier._id,
       name: nextTier.name,

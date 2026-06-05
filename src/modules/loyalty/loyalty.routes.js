@@ -13,6 +13,14 @@ router.get(
   handleError(controller.getUserSummary)
 );
 
+// User Tier Progression Metadata Endpoint (Mobile App integration)
+router.get(
+  loyaltyPaths.progression,
+  verification.verifyUser,
+  handleError(controller.getTierProgression)
+);
+
+
 // Admin Loyalty Tier Management Endpoints
 router.post(
   loyaltyPaths.admin.tiers,
