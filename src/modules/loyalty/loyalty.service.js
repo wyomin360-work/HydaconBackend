@@ -432,6 +432,28 @@ async function getUserLoyaltySummary(userId) {
   };
 }
 
+/**
+ * Retrieve the full tier progression configurations for the active season,
+ * populated with the tier definition data and benefits list.
+ */
+async function getTierProgressionMetadata(userId) {
+  const activeSeason = await resolveActiveSeason();
+  if (!activeSeason) {
+    sendFailResponse("No active loyalty season available.");
+  }
+
+  const configs = await TierConfiguration.find({
+    seasonId: activeSeason._id,
+    active: true,
+    isArchived: { $ne: true },
+  })
+    .populate("tierId")
+    .populate("benefits")
+    .lean();
+
+  return configs;
+}
+
 async function createSeason(adminId, payload) {
   const { name, code, startDate, endDate, active = false } = payload;
   const { start, end } = normalizeDateRange(startDate, endDate);
@@ -836,6 +858,7 @@ module.exports = {
   addBonusPoints,
   evaluateTierUpgrade,
   getUserLoyaltySummary,
+  getTierProgressionMetadata,
   resolveActiveSeason,
   createSeason,
   updateSeason,

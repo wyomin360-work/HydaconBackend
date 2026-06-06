@@ -94,6 +94,22 @@ describe("Loyalty and Tier Progression Engine", () => {
       expect(progress.currentTierId.name).toBe("Beginner");
       expect(progress.qualificationPoints).toBe(50);
     });
+
+    it("should fetch tier progression metadata correctly", async () => {
+      TierConfiguration.find = jest.fn().mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockResolvedValue(mockConfigs),
+      });
+
+      const result = await loyaltyService.getTierProgressionMetadata("user123");
+
+      expect(TierConfiguration.find).toHaveBeenCalledWith({
+        seasonId: "season123",
+        active: true,
+        isArchived: { $ne: true },
+      });
+      expect(result).toEqual(mockConfigs);
+    });
   });
 
   describe("QR Scan vs. Campaign Bonus points separation", () => {
