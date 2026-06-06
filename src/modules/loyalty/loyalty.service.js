@@ -779,6 +779,16 @@ async function getTierConfigurationHistory(configId) {
     .lean();
 }
 
+async function getSeasonById(seasonId) {
+  const season = await LoyaltySeason.findById(seasonId).lean();
+  if (!season) {
+    const error = new Error("Season not found");
+    error.statusCode = 404;
+    throw error;
+  }
+  return season;
+}
+
 module.exports = {
   seedDefaultLoyaltyData,
   getOrCreateUserProgress,
@@ -799,4 +809,5 @@ module.exports = {
   getTierConfigurationHistory,
   archiveSeason,
   archiveTierConfiguration,
+  getSeasonById,
 };
