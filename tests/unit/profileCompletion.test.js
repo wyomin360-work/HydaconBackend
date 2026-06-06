@@ -32,7 +32,7 @@ describe("User Profile Completion Percentage Calculation", () => {
       areaOfOperation: "Zone A",
       kycStatus: "PENDING",
       email: "contractor@example.com",
-      mobileNumber: "1234567890",
+      phone: "1234567890",
       bankDetails: {
         accountNumber: "123456789",
         ifscCode: "ABCD0123456",
@@ -61,7 +61,7 @@ describe("User Profile Completion Percentage Calculation", () => {
       areaOfOperation: "Zone B",
       kycStatus: "APPROVED",
       email: "retailer@example.com",
-      mobileNumber: "9876543210",
+      phone: "9876543210",
       bankDetails: {
         accountNumber: "987654321",
         ifscCode: "XYZB0123456",
@@ -90,7 +90,7 @@ describe("User Profile Completion Percentage Calculation", () => {
       areaOfOperation: "Zone B",
       kycStatus: "APPROVED",
       email: "retailer@example.com",
-      mobileNumber: "9876543210",
+      phone: "9876543210",
       bankDetails: {
         accountNumber: "987654321",
         ifscCode: "XYZB0123456",
@@ -120,7 +120,7 @@ describe("User Profile Completion Percentage Calculation", () => {
       areaOfOperation: "Zone C",
       kycStatus: "NOT_STARTED", // counts as missing
       email: null, // missing
-      mobileNumber: null, // missing
+      phone: null, // missing
       bankDetails: null, // missing
       agreedToTerms: false, // missing
     });

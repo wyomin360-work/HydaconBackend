@@ -118,7 +118,7 @@ const calculateProfileCompletion = (user, roleName = "") => {
   if (user.name) filledFields++;
 
   // 3. Mobile Number (phonenumber)
-  if (user.phone || user.mobileNumber) filledFields++;
+  if (user.phone) filledFields++;
 
   // 4. Date of Birth
   if (user.dob) filledFields++;

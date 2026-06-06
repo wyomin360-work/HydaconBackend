@@ -38,7 +38,7 @@ const userProfileUpdateRequestType = {
     name: { type: "string", minLength: 2 },
     avatarId: { type: "string" },
     dob: { type: "string" },
-    mobileNumber: { type: "string" },
+    phone: { type: "string" },
     shopName: { type: "string" },
     experience: { type: "number" },
     areaOfOperation: { type: "string" },

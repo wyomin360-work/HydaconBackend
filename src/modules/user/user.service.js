@@ -859,7 +859,7 @@ async function updateUserProfile(data, userId) {
   if (data.name !== undefined) user.name = data.name;
   if (data.avatarId !== undefined) user.avatarId = data.avatarId;
   if (data.dob !== undefined) user.dob = data.dob ? new Date(data.dob) : null;
-  if (data.mobileNumber !== undefined) user.mobileNumber = data.mobileNumber;
+  if (data.phone !== undefined) user.phone = data.phone;
   if (data.shopName !== undefined) user.shopName = data.shopName;
   if (data.experience !== undefined) user.experience = data.experience;
   if (data.areaOfOperation !== undefined)
