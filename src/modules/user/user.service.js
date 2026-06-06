@@ -32,6 +32,7 @@ const { encrypt, decrypt } = require("../../utils/encryption");
 const { validateIFSC } = require("../../functions/razorPay");
 const { sendFcmNotifications } = require("../../functions/fcm");
 const { sendSms } = require("../../functions/sms");
+const { sendMail } = require("../../functions/nodemailer");
 
 async function generateAndSaveToken(payload) {
   const accessToken = generateToken(payload);
@@ -234,10 +235,12 @@ async function verifyEmail(data) {
   if (!user) sendFailResponse("User not found");
 
   const phoneToUse = phone || user.phone;
+  const emailToUse = email || user.email;
   const { token, alreadySent } = await issueOtpForUser({
     userId: user._id,
     requestType: ServiceRequestType.FORGOT_PASSWORD,
     phoneNumber: phoneToUse,
+    email: emailToUse,
     buildMessage: (otp) =>
       `Greetings from Hydacon, your verification OTP is: ${otp}`,
   });
@@ -402,6 +405,7 @@ async function issueOtpForUser({
   userId,
   requestType,
   phoneNumber,
+  email,
   payload,
   buildMessage,
 }) {
@@ -426,15 +430,50 @@ async function issueOtpForUser({
     buildOtpServiceRequest({ userId, token, otpHash, requestType, payload }),
   );
 
-  try {
-    await deliverOtpViaSms(phoneNumber, buildMessage(otp));
-    await ServiceRequest.findByIdAndUpdate(serviceRequest._id, {
-      smsSentAt: new Date(),
-    });
-  } catch (error) {
-    await ServiceRequest.findByIdAndDelete(serviceRequest._id);
-    throw error;
+  let smsSent = false;
+  let emailSent = false;
+  let smsError = null;
+  let emailError = null;
+
+  if (phoneNumber) {
+    try {
+      await deliverOtpViaSms(phoneNumber, buildMessage(otp));
+      smsSent = true;
+    } catch (error) {
+      smsError = error;
+    }
   }
+
+  if (email) {
+    try {
+      const mailResult = await sendMail({
+        to: email,
+        subject: "Hydacon OTP Verification",
+        text: buildMessage(otp),
+      });
+      if (mailResult === true) {
+        emailSent = true;
+      } else {
+        emailError = new Error("Failed to send email");
+      }
+    } catch (error) {
+      emailError = error;
+    }
+  }
+
+  if (!phoneNumber && !email) {
+    await ServiceRequest.findByIdAndDelete(serviceRequest._id);
+    sendFailResponse("No email or phone number provided to send OTP.");
+  }
+
+  if (!smsSent && !emailSent) {
+    await ServiceRequest.findByIdAndDelete(serviceRequest._id);
+    throw smsError || emailError || new Error("Failed to send OTP.");
+  }
+
+  await ServiceRequest.findByIdAndUpdate(serviceRequest._id, {
+    smsSentAt: new Date(),
+  });
 
   return { token, alreadySent: false };
 }
