@@ -42,6 +42,8 @@ describe("kyc.service unit tests", () => {
     };
   });
 
+  // ─── uploadDocument ──────────────────────────────────────────────────────────
+
   describe("uploadDocument", () => {
     it("should throw error and clean up original file if document type is invalid", async () => {
       fs.existsSync.mockReturnValue(true);
@@ -88,7 +90,6 @@ describe("kyc.service unit tests", () => {
       ).rejects.toThrow("User not found");
 
       expect(fs.unlinkSync).toHaveBeenCalledWith(mockFile.path);
-      // It should also try to clean up the compressed file
       expect(fs.unlinkSync).toHaveBeenCalledWith(
         expect.stringContaining("test-doc-compressed"),
       );
@@ -157,15 +158,12 @@ describe("kyc.service unit tests", () => {
       };
       User.findById.mockResolvedValue(mockUser);
 
-      // Re-upload aadhaar document
       const result = await kycService.uploadDocument(
         "userId123",
         "aadhaar",
         mockFile,
       );
 
-      // aadhaar should become PENDING, but pan is still REJECTED.
-      // So kycStatus must remain REJECTED.
       expect(mockUser.kycDocuments.aadhaar.status).toBe("PENDING");
       expect(mockUser.kycDocuments.pan.status).toBe("REJECTED");
       expect(mockUser.kycStatus).toBe("REJECTED");
@@ -184,13 +182,16 @@ describe("kyc.service unit tests", () => {
             originalUrl: "/uploads/images/shop.jpg",
             status: "APPROVED",
           },
+          shopPhoto: {
+            originalUrl: "/uploads/images/shop.jpg",
+            status: "APPROVED",
+          },
         },
         kycStatus: "REJECTED",
         save: jest.fn().mockResolvedValue(true),
       };
       User.findById.mockResolvedValue(mockUser);
 
-      // Re-upload pan document (which was the rejected one)
       const result = await kycService.uploadDocument(
         "userId123",
         "pan",
@@ -202,6 +203,8 @@ describe("kyc.service unit tests", () => {
       expect(result.kycStatus).toBe("PENDING");
     });
   });
+
+  // ─── reviewKycDocument ───────────────────────────────────────────────────────
 
   describe("reviewKycDocument", () => {
     it("should set status to APPROVED if all documents are approved", async () => {
@@ -222,7 +225,7 @@ describe("kyc.service unit tests", () => {
       };
       User.findById.mockResolvedValue(mockUser);
 
-      const result = await kycService.reviewKycDocument("userId123", {
+      await kycService.reviewKycDocument("userId123", {
         documentType: "pan",
         status: "APPROVED",
       });
@@ -249,7 +252,7 @@ describe("kyc.service unit tests", () => {
       };
       User.findById.mockResolvedValue(mockUser);
 
-      const result = await kycService.reviewKycDocument("userId123", {
+      await kycService.reviewKycDocument("userId123", {
         documentType: "pan",
         status: "REJECTED",
         rejectionReason: "illegible",
@@ -266,20 +269,18 @@ describe("kyc.service unit tests", () => {
             originalUrl: "/uploads/images/aadhaar.jpg",
             status: "PENDING",
           },
-          // pan and shopPhoto are missing
         },
         kycStatus: "NOT_STARTED",
         save: jest.fn().mockResolvedValue(true),
       };
       User.findById.mockResolvedValue(mockUser);
 
-      const result = await kycService.reviewKycDocument("userId123", {
+      await kycService.reviewKycDocument("userId123", {
         documentType: "aadhaar",
         status: "APPROVED",
       });
 
       expect(mockUser.kycDocuments.aadhaar.status).toBe("APPROVED");
-      // Since pan and shopPhoto originalUrls are missing, kycStatus should remain NOT_STARTED instead of transitioning to PENDING
       expect(mockUser.kycStatus).toBe("NOT_STARTED");
     });
 
@@ -301,15 +302,16 @@ describe("kyc.service unit tests", () => {
       };
       User.findById.mockResolvedValue(mockUser);
 
-      const result = await kycService.reviewKycDocument("userId123", {
+      await kycService.reviewKycDocument("userId123", {
         documentType: "aadhaar",
         status: "APPROVED",
       });
 
       expect(mockUser.kycDocuments.aadhaar.status).toBe("APPROVED");
-      // Since all 3 are uploaded, but pan and shopPhoto are still pending, kycStatus should remain PENDING
       expect(mockUser.kycStatus).toBe("PENDING");
     });
+
+    // ── Global review (no documentType) ─────────────────────────────────────
 
     it("should throw an error if admin tries to approve KYC entirely when no documents have been uploaded", async () => {
       const mockUser = {
@@ -344,7 +346,7 @@ describe("kyc.service unit tests", () => {
       };
       User.findById.mockResolvedValue(mockUser);
 
-      const result = await kycService.reviewKycDocument("userId123", {
+      await kycService.reviewKycDocument("userId123", {
         status: "APPROVED",
       });
 
@@ -366,7 +368,7 @@ describe("kyc.service unit tests", () => {
       await expect(
         kycService.reviewKycDocument("userId123", {
           status: "REJECTED",
-          rejectionReason: "incomplete profile documents",
+          rejectionReason: "incomplete documents",
         }),
       ).rejects.toThrow(
         "Cannot reject KYC entirely because not all documents have been uploaded",
@@ -385,7 +387,7 @@ describe("kyc.service unit tests", () => {
       };
       User.findById.mockResolvedValue(mockUser);
 
-      const result = await kycService.reviewKycDocument("userId123", {
+      await kycService.reviewKycDocument("userId123", {
         status: "REJECTED",
         rejectionReason: "bad quality scans",
       });

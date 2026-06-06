@@ -1,5 +1,5 @@
 const { default: mongoose } = require("mongoose");
-const { hashData } = require("../utils/heplers");
+const { hashData, calculateProfileCompletion } = require("../utils/heplers");
 const {
   AuthTypes,
   KYC_STATUS,
@@ -58,6 +58,14 @@ const userSchema = new mongoose.Schema(
     agreedToTerms: { type: Boolean, default: true },
     enableNotification: { type: Boolean, default: true },
     avatarId: { type: String, required: false },
+    dob: { type: Date, required: false, default: null },
+    profilePhoto: { type: String, required: false, default: null },
+    shopName: { type: String, required: false, default: null },
+    experience: { type: Number, required: false, default: null },
+    areaOfOperation: { type: String, required: false, default: null },
+    profileCompletionPercentage: { type: Number, default: 0 },
+    isFlagged: { type: Boolean, default: false },
+    flaggedReason: { type: String, default: null },
     authType: {
       type: String,
       enum: Object.values(AuthTypes),
@@ -96,10 +104,32 @@ const userSchema = new mongoose.Schema(
   },
 );
 
+userSchema.methods.calculateCompletionPercentage = async function () {
+  try {
+    const Role = mongoose.model("Role");
+    let roleName = "";
+    if (this.roleId) {
+      const role = await Role.findById(this.roleId);
+      if (role) {
+        roleName = role.name.toLowerCase();
+      }
+    }
+
+    this.profileCompletionPercentage = calculateProfileCompletion(
+      this,
+      roleName,
+    );
+  } catch (err) {
+    console.error("Error calculating profile completion percentage:", err);
+  }
+};
+
 userSchema.pre("save", async function (next) {
   if (this.isModified("password")) {
     this.password = await hashData(this.password);
   }
+
+  await this.calculateCompletionPercentage();
   next();
 });
 

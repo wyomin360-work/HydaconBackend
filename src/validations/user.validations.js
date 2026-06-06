@@ -36,9 +36,14 @@ const userProfileUpdateRequestType = {
   type: "object",
   properties: {
     name: { type: "string", minLength: 2 },
-    avatarId: { type: "string", minLength: 10 },
+    avatarId: { type: "string" },
+    dob: { type: "string" },
+    phone: { type: "string" },
+    shopName: { type: "string" },
+    experience: { type: "number" },
+    areaOfOperation: { type: "string" },
+    profilePhoto: { type: "string" },
   },
-  required: ["name", "avatarId"],
   additionalProperties: false,
 };
 
