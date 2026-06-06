@@ -69,6 +69,24 @@ const generateBufferToken = (count = 32) => {
   return buffer.toString("hex");
 };
 
+function buildPhoneLookupVariants(phone) {
+  const digits = String(phone).replace(/\D/g, "");
+  const variants = new Set([String(phone).trim()]);
+
+  // Also match just the 10-digit number if it starts with a country code (assuming India 91 for this platform mostly)
+  if (digits.length === 10) {
+    variants.add(digits);
+    variants.add(`+91${digits}`);
+    variants.add(`91${digits}`);
+  } else if (digits.length === 12 && digits.startsWith("91")) {
+    variants.add(digits);
+    variants.add(digits.slice(2));
+    variants.add(`+${digits}`);
+  }
+
+  return [...variants];
+}
+
 function attachId(doc) {
   if (Array.isArray(doc)) {
     return doc.map((d) => ({ ...d, id: d._id }));
@@ -100,7 +118,7 @@ const calculateProfileCompletion = (user, roleName = "") => {
   if (user.name) filledFields++;
 
   // 3. Mobile Number (phonenumber)
-  if (user.phone) filledFields++;
+  if (user.phone || user.mobileNumber) filledFields++;
 
   // 4. Date of Birth
   if (user.dob) filledFields++;
@@ -225,4 +243,5 @@ module.exports = {
   formatNotification,
   calculateProfileCompletion,
   parseUserAgent,
+  buildPhoneLookupVariants,
 };
