@@ -1,6 +1,9 @@
 const User = require("../../schemas/user.schema");
 const ServiceRequest = require("../../schemas/service-request.schema");
 const RefreshToken = require("../../schemas/refreshtoken.schema");
+const path = require("path");
+const sharp = require("sharp");
+const fs = require("fs");
 const AuditLog = require("../../schemas/audit-log.schema");
 const mongoose = require("mongoose");
 const { AUDIT_LOG_ACTIONS } = require("../../constants/audit-logs");
@@ -850,12 +853,27 @@ async function simpleLoginWithOtp(data) {
 // Update User profile
 // ----------------------
 async function updateUserProfile(data, userId) {
-  const { name, avatarId } = data;
-  const user = await User.findByIdAndUpdate(userId, { name, avatarId });
+  const user = await User.findById(userId);
   if (!user) sendFailResponse("User not found");
+
+  if (data.name !== undefined) user.name = data.name;
+  if (data.avatarId !== undefined) user.avatarId = data.avatarId;
+  if (data.dob !== undefined) user.dob = data.dob ? new Date(data.dob) : null;
+  if (data.phone !== undefined) user.phone = data.phone;
+  if (data.shopName !== undefined) user.shopName = data.shopName;
+  if (data.experience !== undefined) user.experience = data.experience;
+  if (data.areaOfOperation !== undefined)
+    user.areaOfOperation = data.areaOfOperation;
+  if (data.profilePhoto !== undefined) user.profilePhoto = data.profilePhoto;
+
+  await user.save();
+
+  const populatedUser = await User.findById(userId).populate("roleId");
+  const { password, ...rest } = populatedUser.toObject();
+
   return {
     message: "Profile Updated Successfully",
-    data: { profileUpdated: true },
+    data: { ...rest, profileUpdated: true },
   };
 }
 
@@ -892,7 +910,7 @@ async function addFcmToken(data, userId) {
 // User Bank Details
 // ----------------------
 async function getUserBankDetails(userId) {
-  const user = await User.findById(userId);
+  const user = await User.findById(userId).lean();
   if (!user) sendFailResponse("User not found");
 
   if (!user.bankDetails?.accountNumber || !user.bankDetails?.ifscCode)
@@ -1069,6 +1087,125 @@ async function userList(data) {
   };
 }
 
+// ----------------------
+// Profile Photo Upload
+// ----------------------
+async function compressProfileImage(filePath) {
+  const parsedPath = path.parse(filePath);
+  const ext = parsedPath.ext.toLowerCase();
+  const compressedFilename = `${parsedPath.name}-compressed${ext}`;
+  const compressedPath = path.join(parsedPath.dir, compressedFilename);
+
+  try {
+    await sharp(filePath)
+      .resize(400, 400, { fit: "cover" })
+      .jpeg({ quality: 80, force: false })
+      .png({ quality: 80, force: false })
+      .toFile(compressedPath);
+
+    return compressedFilename;
+  } catch (error) {
+    console.error("Error compressing profile image:", error);
+    return parsedPath.base;
+  }
+}
+
+async function uploadProfilePhoto(userId, file) {
+  if (!file) {
+    throw new Error("No file uploaded");
+  }
+
+  const allowedMimeTypes = ["image/jpeg", "image/png", "image/jpg"];
+  const allowedExtensions = [".jpg", ".jpeg", ".png"];
+  const ext = path.extname(file.originalname || "").toLowerCase();
+
+  if (
+    !allowedMimeTypes.includes(file.mimetype) ||
+    !allowedExtensions.includes(ext)
+  ) {
+    if (file.path && fs.existsSync(file.path)) {
+      try {
+        fs.unlinkSync(file.path);
+      } catch (err) {
+        console.error("Error deleting invalid file type:", err);
+      }
+    }
+    throw new Error(
+      "Invalid file type. Only JPG, JPEG, and PNG files are allowed.",
+    );
+  }
+
+  const maxFileSize = 5 * 1024 * 1024;
+  if (file.size > maxFileSize) {
+    if (file.path && fs.existsSync(file.path)) {
+      try {
+        fs.unlinkSync(file.path);
+      } catch (err) {
+        console.error("Error deleting oversized file:", err);
+      }
+    }
+    throw new Error("File size exceeds the 5MB limit.");
+  }
+
+  const user = await User.findById(userId);
+  if (!user) {
+    if (file.path && fs.existsSync(file.path)) {
+      try {
+        fs.unlinkSync(file.path);
+      } catch (err) {
+        console.error("Error deleting orphaned file:", err);
+      }
+    }
+    throw new Error("User not found");
+  }
+
+  if (user.profilePhoto) {
+    const prevPhotoPath = path.join(__dirname, "../..", user.profilePhoto);
+    if (fs.existsSync(prevPhotoPath)) {
+      try {
+        fs.unlinkSync(prevPhotoPath);
+      } catch (err) {
+        console.error("Error deleting previous profile photo:", err);
+      }
+    }
+  }
+
+  const originalFilename = file.filename;
+  const compressedFilename = await compressProfileImage(file.path);
+  const profilePhotoUrl = `/uploads/images/${compressedFilename}`;
+
+  user.profilePhoto = profilePhotoUrl;
+  await user.save();
+
+  const populatedUser = await User.findById(userId).populate("roleId");
+  const { password, ...rest } = populatedUser.toObject();
+
+  return {
+    message: "Profile photo uploaded successfully",
+    data: rest,
+  };
+}
+
+// ----------------------
+// Flag User
+// ----------------------
+async function flagUser(userId, data) {
+  const { isFlagged, flaggedReason } = data;
+  const user = await User.findById(userId);
+  if (!user) sendFailResponse("User not found");
+
+  user.isFlagged = !!isFlagged;
+  user.flaggedReason = isFlagged ? flaggedReason : null;
+  await user.save();
+
+  return {
+    message: isFlagged
+      ? "User flagged successfully"
+      : "User unflagged successfully",
+    data: { isFlagged: user.isFlagged, flaggedReason: user.flaggedReason },
+  };
+}
+
 module.exports = {
   registerUser,
   login,
@@ -1090,4 +1227,6 @@ module.exports = {
   deleteBankDetails,
   getUserBankDetails,
   updatePreferences,
+  uploadProfilePhoto,
+  flagUser,
 };

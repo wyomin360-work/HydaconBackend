@@ -15,6 +15,7 @@ const {
   verifyNewNumberRequestType,
 } = require("../../validations/user.validations");
 const validateRequest = require("../../middlewares/validator");
+const upload = require("../../middlewares/multer");
 const rateLimiter = require("../../middlewares/rateLimiter");
 
 const otpRateLimiter = rateLimiter({
@@ -86,6 +87,13 @@ router.patch(
   handleError(controller.updateProfile),
 );
 
+router.post(
+  userPaths.profilePhoto,
+  verification.verifyUser,
+  upload.single("profilePhoto"),
+  handleError(controller.uploadProfilePhoto),
+);
+
 router.patch(
   userPaths.updatePreferences,
   verification.verifyUser,
@@ -145,6 +153,12 @@ router.post(
   userPaths.list,
   verification.verifyAdmin,
   handleError(controller.userList),
+);
+
+router.patch(
+  userPaths.flagUser,
+  verification.verifyAdmin,
+  handleError(controller.flagUser),
 );
 
 module.exports = router;

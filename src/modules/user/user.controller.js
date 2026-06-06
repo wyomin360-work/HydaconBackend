@@ -150,3 +150,17 @@ exports.userList = async (req, res) => {
   const response = await userService.userList(data);
   return sendResponse(res, response);
 };
+
+exports.uploadProfilePhoto = async (req, res, next) => {
+  const userId = req?.userId;
+  const file = req?.file;
+  const response = await userService.uploadProfilePhoto(userId, file);
+  return sendResponse(res, response);
+};
+
+exports.flagUser = async (req, res, next) => {
+  const targetUserId = req?.params?.id;
+  const data = req?.body;
+  const response = await userService.flagUser(targetUserId, data);
+  return sendResponse(res, response);
+};

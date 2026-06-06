@@ -386,7 +386,10 @@ module.exports = {
                     oldNumber: { type: "string", example: "1234567890" },
                     newNumber: { type: "string", example: "0987654321" },
                     ipAddress: { type: "string", example: "127.0.0.1" },
-                    dateFrom: { type: "string", example: "2025-01-01T00:00:00Z" },
+                    dateFrom: {
+                      type: "string",
+                      example: "2025-01-01T00:00:00Z",
+                    },
                     dateTo: { type: "string", example: "2025-12-31T23:59:59Z" },
                   },
                 },
@@ -412,9 +415,18 @@ module.exports = {
                           type: "object",
                           properties: {
                             id: { type: "string", example: "64b5f..." },
-                            action: { type: "string", example: "PHONE_NUMBER_CHANGE" },
-                            oldNumber: { type: "string", example: "1234567890" },
-                            newNumber: { type: "string", example: "0987654321" },
+                            action: {
+                              type: "string",
+                              example: "PHONE_NUMBER_CHANGE",
+                            },
+                            oldNumber: {
+                              type: "string",
+                              example: "1234567890",
+                            },
+                            newNumber: {
+                              type: "string",
+                              example: "0987654321",
+                            },
                             timestamp: { type: "string", format: "date-time" },
                             user: {
                               type: "object",

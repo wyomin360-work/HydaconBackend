@@ -5,6 +5,10 @@ const {
   sendFailResponse,
 } = require("../../utils/responseHandlers");
 
+/**
+ * Deletes any files uploaded by multer from disk.
+ * Called when validation fails or the service throws an error to prevent orphaned uploads.
+ */
 const deleteUploadedFiles = (req) => {
   if (req.file && req.file.path && fs.existsSync(req.file.path)) {
     try {
@@ -52,6 +56,7 @@ exports.uploadKycDocument = async (req, res) => {
     const result = await kycService.uploadDocument(userId, documentType, file);
     return sendResponse(res, result);
   } catch (error) {
+    // Cleanup any uploaded files on failure (Bug 1 fix)
     deleteUploadedFiles(req);
     throw error;
   }

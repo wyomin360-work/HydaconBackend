@@ -5,6 +5,8 @@ module.exports = {
   roles: "/roles",
   onboardingRoles: "/onboarding/roles",
   updateProfile: "/profile/update",
+  profilePhoto: "/profile/photo",
+  flagUser: "/flag/:id",
   updatePreferences: "/preference/update",
   fcmToken: "/fcm-token",
   phone: {
