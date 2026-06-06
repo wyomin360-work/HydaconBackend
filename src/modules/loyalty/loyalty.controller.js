@@ -14,6 +14,16 @@ async function getUserSummary(req, res) {
   return sendResponse(res, summary, 200);
 }
 
+/**
+ * Mobile App API: Retrieves the full tier progression ladder for the active season,
+ * enriched with per-user unlock/current/next flags.
+ */
+async function getTierProgression(req, res) {
+  const userId = req.userId;
+  const progression = await loyaltyService.getTierProgressionMetadata(userId);
+  return sendResponse(res, progression, 200);
+}
+
 // ----------------------------------------------------
 // Admin Configuration APIs
 // ----------------------------------------------------
@@ -212,8 +222,18 @@ async function deleteBenefit(req, res) {
   return sendResponse(res, { message: "Benefit deleted successfully" }, 200);
 }
 
+async function addPoints(req, res) {
+  const userId = req.userId;
+  const { points = 100 } = req.body;
+  // Dev endpoint: uses processQrScanPoints to award QP + trigger tier upgrades
+  const result = await loyaltyService.processQrScanPoints(userId, Number(points), `dev-add-${Date.now()}`);
+  return sendResponse(res, result, 200);
+}
+
 module.exports = {
   getUserSummary,
+  getTierProgression,
+  addPoints,
   createTier,
   listTiers,
   updateTier,
