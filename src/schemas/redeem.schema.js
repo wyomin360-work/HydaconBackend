@@ -40,6 +40,11 @@ const redeemSchema = new mongoose.Schema(
     },
 
     cardBg: { type: String },
+    scannerRole: { type: String },
+    scannerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
   },
   { timestamps: true },
 );

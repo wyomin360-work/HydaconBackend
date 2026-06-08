@@ -433,6 +433,157 @@ async function getUserLoyaltySummary(userId) {
 }
 
 /**
+ * Admin API: Lists all configured loyalty tiers with pagination.
+ */
+async function listTiers(query = {}) {
+  const page = Number(query.page || 1);
+  const limit = Number(query.limit || 20);
+  const skip = (page - 1) * limit;
+
+  const filters = {};
+  if (query.search) {
+    filters.$or = [
+      { name: { $regex: query.search, $options: "i" } },
+      { key: { $regex: query.search, $options: "i" } },
+    ];
+  }
+
+  const [tiers, total] = await Promise.all([
+    Tier.find(filters).sort({ rank: 1 }).skip(skip).limit(limit).lean(),
+    Tier.countDocuments(filters),
+  ]);
+
+  return {
+    data: tiers,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
+}
+
+/**
+ * Admin API: Lists all loyalty seasons with pagination.
+ */
+async function listSeasons(query = {}) {
+  const page = Number(query.page || 1);
+  const limit = Number(query.limit || 20);
+  const skip = (page - 1) * limit;
+
+  const includeArchived = query.includeArchived === "true";
+  const filters = includeArchived ? {} : { isArchived: { $ne: true } };
+
+  if (query.search) {
+    filters.$or = [
+      { name: { $regex: query.search, $options: "i" } },
+      { code: { $regex: query.search, $options: "i" } },
+    ];
+  }
+  if (query.active === "true") filters.active = true;
+  if (query.active === "false") filters.active = false;
+
+  const [seasons, total] = await Promise.all([
+    LoyaltySeason.find(filters).sort({ startDate: -1 }).skip(skip).limit(limit).lean(),
+    LoyaltySeason.countDocuments(filters),
+  ]);
+
+  return {
+    data: seasons,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
+}
+
+/**
+ * Admin API: Lists tier configurations with pagination (optionally filtered by season).
+ */
+async function listTierConfigurations(query = {}) {
+  const page = Number(query.page || 1);
+  const limit = Number(query.limit || 20);
+  const skip = (page - 1) * limit;
+
+  const filters = {};
+  if (query.seasonId) {
+    filters.seasonId = query.seasonId;
+  }
+  if (query.tierId) {
+    filters.tierId = query.tierId;
+  }
+  if (query.includeArchived !== "true") {
+    filters.isArchived = { $ne: true };
+  }
+  if (query.active === "true") filters.active = true;
+  if (query.active === "false") filters.active = false;
+
+  if (query.search) {
+    filters.$or = [
+      { "metadata.campaignTag": { $regex: query.search, $options: "i" } },
+      { "metadata.region": { $regex: query.search, $options: "i" } }
+    ];
+  }
+
+  const [configs, total] = await Promise.all([
+    TierConfiguration.find(filters)
+      .populate("tierId")
+      .populate("benefits")
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    TierConfiguration.countDocuments(filters),
+  ]);
+
+  return {
+    data: configs,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
+}
+
+/**
+ * Admin API: Lists configured benefit items with pagination.
+ */
+async function listBenefits(query = {}) {
+  const page = Number(query.page || 1);
+  const limit = Number(query.limit || 20);
+  const skip = (page - 1) * limit;
+
+  const filters = {};
+  if (query.search) {
+    filters.$or = [
+      { name: { $regex: query.search, $options: "i" } },
+      { key: { $regex: query.search, $options: "i" } },
+    ];
+  }
+  if (query.active === "true") filters.active = true;
+  if (query.active === "false") filters.active = false;
+
+  const [benefits, total] = await Promise.all([
+    TierBenefit.find(filters).skip(skip).limit(limit).lean(),
+    TierBenefit.countDocuments(filters),
+  ]);
+
+  return {
+    data: benefits,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
+}
+
+/**
  * Retrieve the full tier progression configurations for the active season,
  * populated with the tier definition data and benefits list.
  */
@@ -844,11 +995,32 @@ async function getConfigAuditLogById(id) {
   return log;
 }
 
-async function getTierConfigurationHistory(configId) {
-  return TierConfigurationHistory.find({ tierConfigurationId: configId })
-    .populate("changedBy", "name email")
-    .sort({ version: -1 })
-    .lean();
+async function getTierConfigurationHistory(configId, query = {}) {
+  const page = Number(query.page || 1);
+  const limit = Number(query.limit || 20);
+  const skip = (page - 1) * limit;
+
+  const filters = { tierConfigurationId: configId };
+
+  const [history, total] = await Promise.all([
+    TierConfigurationHistory.find(filters)
+      .populate("changedBy", "name email")
+      .sort({ version: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    TierConfigurationHistory.countDocuments(filters),
+  ]);
+
+  return {
+    data: history,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
 }
 
 async function getSeasonById(seasonId) {
@@ -870,6 +1042,10 @@ module.exports = {
   getUserLoyaltySummary,
   getTierProgressionMetadata,
   resolveActiveSeason,
+  listTiers,
+  listSeasons,
+  listTierConfigurations,
+  listBenefits,
   createSeason,
   updateSeason,
   activateSeason,

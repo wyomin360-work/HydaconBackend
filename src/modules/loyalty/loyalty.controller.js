@@ -38,11 +38,11 @@ async function createTier(req, res) {
 }
 
 /**
- * Admin API: Lists all configured loyalty tiers.
+ * Admin API: Lists all configured loyalty tiers (paginated).
  */
 async function listTiers(req, res) {
-  const tiers = await Tier.find().sort({ rank: 1 });
-  return sendResponse(res, tiers, 200);
+  const result = await loyaltyService.listTiers(req.query);
+  return sendResponse(res, result, 200);
 }
 
 /**
@@ -63,14 +63,11 @@ async function createSeason(req, res) {
 }
 
 /**
- * Admin API: Lists all loyalty seasons.
+ * Admin API: Lists all loyalty seasons (paginated).
  */
 async function listSeasons(req, res) {
-  const includeArchived = req.query.includeArchived === "true";
-  const seasons = await LoyaltySeason.find(
-    includeArchived ? {} : { isArchived: { $ne: true } }
-  ).sort({ startDate: -1 });
-  return sendResponse(res, seasons, 200);
+  const result = await loyaltyService.listSeasons(req.query);
+  return sendResponse(res, result, 200);
 }
 
 /**
@@ -91,23 +88,11 @@ async function createTierConfiguration(req, res) {
 }
 
 /**
- * Admin API: Lists tier configurations (optionally filtered by season).
+ * Admin API: Lists tier configurations (paginated, optionally filtered by season).
  */
 async function listTierConfigurations(req, res) {
-  const { seasonId } = req.query;
-  const query = {};
-  if (seasonId) {
-    query.seasonId = seasonId;
-  }
-  if (req.query.includeArchived !== "true") {
-    query.isArchived = { $ne: true };
-  }
-  const configs = await TierConfiguration.find(query)
-    .populate("tierId")
-    .populate("benefits")
-    .exec();
-
-  return sendResponse(res, configs, 200);
+  const result = await loyaltyService.listTierConfigurations(req.query);
+  return sendResponse(res, result, 200);
 }
 
 /**
@@ -129,11 +114,11 @@ async function createBenefit(req, res) {
 }
 
 /**
- * Admin API: Lists configured benefit items.
+ * Admin API: Lists configured benefit items (paginated).
  */
 async function listBenefits(req, res) {
-  const benefits = await TierBenefit.find();
-  return sendResponse(res, benefits, 200);
+  const result = await loyaltyService.listBenefits(req.query);
+  return sendResponse(res, result, 200);
 }
 
 /**
@@ -182,7 +167,7 @@ async function getConfigAuditLogById(req, res) {
 }
 
 async function getTierConfigurationHistory(req, res) {
-  const history = await loyaltyService.getTierConfigurationHistory(req.params.id);
+  const history = await loyaltyService.getTierConfigurationHistory(req.params.id, req.query);
   return sendResponse(res, history, 200);
 }
 

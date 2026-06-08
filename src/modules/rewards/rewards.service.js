@@ -88,17 +88,19 @@ async function createRewards(rewardData) {
   const product = await Product.findById(productId).lean();
   if (!product) sendFailResponse("product not found");
 
+  // Calculate the expiry with the 90-day buffer
+  const expiresAtWithBuffer = new Date(expiresAt);
+  expiresAtWithBuffer.setDate(expiresAtWithBuffer.getDate() + 90);
+
   const generateComplexRewardUID = () => {
-    return (
-      "rwd-" +
-      Date.now().toString(36) +
-      "-" +
-      randomHex() +
-      "-" +
-      randomHex() +
-      "-" +
-      randomHex()
-    );
+    // Generate a short, human-readable 8-character alphanumeric code for easier manual entry
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // excluded easily confused chars (I, O, 1, 0)
+    let code = '';
+    for (let i = 0; i < 8; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    // E.g., A7X9M2B4
+    return code;
   };
   const structuredRewards = [];
 
@@ -106,7 +108,7 @@ async function createRewards(rewardData) {
     const rewardUID = generateComplexRewardUID();
     const reward = {
       productId,
-      expiresAt,
+      expiresAt: expiresAtWithBuffer,
       uidCode: rewardUID,
       point: product.rewardPoints,
     };

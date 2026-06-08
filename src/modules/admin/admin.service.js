@@ -10,7 +10,11 @@ const {
   sendFailResponse,
   sendResponse,
 } = require("../../utils/responseHandlers");
-const { compareHash, generateToken, parseUserAgent } = require("../../utils/heplers");
+const {
+  compareHash,
+  generateToken,
+  parseUserAgent,
+} = require("../../utils/heplers");
 const { sendMail } = require("../../functions/nodemailer");
 
 async function generateAndSaveToken(payload) {
@@ -353,7 +357,9 @@ async function phoneNumberChangeAuditLogs(data = {}) {
         { email: emailRegex },
         { phone: { $regex: search, $options: "i" } },
       ],
-    }).select("_id").lean();
+    })
+      .select("_id")
+      .lean();
 
     const userIds = matchingUsers.map((u) => u._id);
 
@@ -392,7 +398,8 @@ async function phoneNumberChangeAuditLogs(data = {}) {
   // 5. Execution
   const sortableFields = new Set(["timestamp", "createdAt", "updatedAt"]);
   const sort = {};
-  sort[sortableFields.has(sortBy) ? sortBy : "timestamp"] = sortOrder === "asc" ? 1 : -1;
+  sort[sortableFields.has(sortBy) ? sortBy : "timestamp"] =
+    sortOrder === "asc" ? 1 : -1;
 
   const auditLogs = await AuditLog.find(query)
     .populate("userId", "name email phone")
@@ -412,24 +419,30 @@ async function phoneNumberChangeAuditLogs(data = {}) {
         action: log.action || AUDIT_LOG_ACTIONS.PHONE_NUMBER_CHANGE,
         oldNumber: log.oldNumber ?? null,
         newNumber: log.newNumber ?? null,
-        user: u ? {
-          id: u._id,
-          name: u.name || null,
-          username: u.name || null,
-          email: u.email || null,
-          useremail: u.email || null,
-        } : null,
+        user: u
+          ? {
+              id: u._id,
+              name: u.name || null,
+              username: u.name || null,
+              email: u.email || null,
+              useremail: u.email || null,
+            }
+          : null,
         ipAddress: log.ipAddress || null,
-        deviceInfo: log.deviceInfo ? (() => {
-          const userAgent = log.deviceInfo.userAgent || "";
-          const parsed = parseUserAgent(userAgent);
-          return {
-            deviceId: log.deviceInfo.deviceId || parsed.deviceId || null,
-            deviceName: log.deviceInfo.deviceName || parsed.deviceName || null,
-            platform: log.deviceInfo.platform || parsed.platform || null,
-            appVersion: log.deviceInfo.appVersion || parsed.appVersion || null,
-          };
-        })() : null,
+        deviceInfo: log.deviceInfo
+          ? (() => {
+              const userAgent = log.deviceInfo.userAgent || "";
+              const parsed = parseUserAgent(userAgent);
+              return {
+                deviceId: log.deviceInfo.deviceId || parsed.deviceId || null,
+                deviceName:
+                  log.deviceInfo.deviceName || parsed.deviceName || null,
+                platform: log.deviceInfo.platform || parsed.platform || null,
+                appVersion:
+                  log.deviceInfo.appVersion || parsed.appVersion || null,
+              };
+            })()
+          : null,
         timestamp: log.timestamp || log.createdAt || null,
       };
     }),

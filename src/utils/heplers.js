@@ -69,6 +69,24 @@ const generateBufferToken = (count = 32) => {
   return buffer.toString("hex");
 };
 
+function buildPhoneLookupVariants(phone) {
+  const digits = String(phone).replace(/\D/g, "");
+  const variants = new Set([String(phone).trim()]);
+
+  // Also match just the 10-digit number if it starts with a country code (assuming India 91 for this platform mostly)
+  if (digits.length === 10) {
+    variants.add(digits);
+    variants.add(`+91${digits}`);
+    variants.add(`91${digits}`);
+  } else if (digits.length === 12 && digits.startsWith("91")) {
+    variants.add(digits);
+    variants.add(digits.slice(2));
+    variants.add(`+${digits}`);
+  }
+
+  return [...variants];
+}
+
 function attachId(doc) {
   if (Array.isArray(doc)) {
     return doc.map((d) => ({ ...d, id: d._id }));
@@ -95,39 +113,40 @@ const calculateProfileCompletion = (user, roleName = "") => {
 
   // 1. Email
   if (user.email) filledFields++;
-  
+
   // 2. Name
   if (user.name) filledFields++;
-  
+
   // 3. Mobile Number (phonenumber)
-  if (user.mobileNumber) filledFields++;
-  
+  if (user.phone) filledFields++;
+
   // 4. Date of Birth
   if (user.dob) filledFields++;
-  
+
   // 5. Profile Photo
-  if (user.profilePhoto) filledFields++;
-  
+  if (user.profilePhoto || user.avatarId) filledFields++;
+
   // 6. Experience
   if (user.experience !== undefined && user.experience !== null) filledFields++;
-  
+
   // 7. Area of Operation
   if (user.areaOfOperation) filledFields++;
-  
+
   // 8. KYC Status
-  if (user.kycStatus && user.kycStatus !== 'NOT_STARTED') filledFields++;
-  
+  if (user.kycStatus && user.kycStatus !== "NOT_STARTED") filledFields++;
+
   // 9. Bank Details (must contain accountNumber, ifscCode, and userName)
-  const hasBankDetails = user.bankDetails && 
-                         user.bankDetails.accountNumber && 
-                         user.bankDetails.ifscCode && 
-                         user.bankDetails.userName;
+  const hasBankDetails =
+    user.bankDetails &&
+    user.bankDetails.accountNumber &&
+    user.bankDetails.ifscCode &&
+    user.bankDetails.userName;
   if (hasBankDetails) filledFields++;
-  
+
   // 10. Agreed to Terms
   if (user.agreedToTerms === true) filledFields++;
 
-  if (roleName === 'retailer') {
+  if (roleName === "retailer") {
     totalFields = 11;
     // 11. Shop Name
     if (user.shopName) filledFields++;
@@ -164,31 +183,37 @@ function parseUserAgent(userAgent, headers = {}) {
 
   if (!userAgent) return info;
 
-  const appVersionMatch = userAgent.match(/(?:Hybeck-[a-zA-Z]+|App)\/([\d.]+)/i);
+  const appVersionMatch = userAgent.match(
+    /(?:Hybeck-[a-zA-Z]+|App)\/([\d.]+)/i,
+  );
   if (appVersionMatch && !info.appVersion) {
     info.appVersion = appVersionMatch[1];
   }
 
   const parenMatch = userAgent.match(/\(([^)]+)\)/);
   if (parenMatch) {
-    const parts = parenMatch[1].split(";").map(p => p.trim());
-    const isAndroid = parts.some(p => /android/i.test(p)) || /android/i.test(userAgent);
-    const isIOS = parts.some(p => /iphone|ipad|ipod/i.test(p)) || /iphone|ipad|ipod/i.test(userAgent);
+    const parts = parenMatch[1].split(";").map((p) => p.trim());
+    const isAndroid =
+      parts.some((p) => /android/i.test(p)) || /android/i.test(userAgent);
+    const isIOS =
+      parts.some((p) => /iphone|ipad|ipod/i.test(p)) ||
+      /iphone|ipad|ipod/i.test(userAgent);
 
     if (isAndroid) {
       if (!info.platform) info.platform = "Android";
-      const devicePart = parts.find(p => 
-        !/linux/i.test(p) && 
-        !/android/i.test(p) && 
-        !/build/i.test(p) &&
-        !/applewebkit/i.test(p)
+      const devicePart = parts.find(
+        (p) =>
+          !/linux/i.test(p) &&
+          !/android/i.test(p) &&
+          !/build/i.test(p) &&
+          !/applewebkit/i.test(p),
       );
       if (devicePart) {
         info.deviceName = devicePart;
       }
     } else if (isIOS) {
       if (!info.platform) info.platform = "iOS";
-      const devicePart = parts.find(p => /iphone|ipad|ipod/i.test(p));
+      const devicePart = parts.find((p) => /iphone|ipad|ipod/i.test(p));
       if (devicePart) {
         info.deviceName = devicePart;
       }
@@ -207,14 +232,16 @@ function parseUserAgent(userAgent, headers = {}) {
   }
 
   if (!info.deviceName) {
-    const modelMatch = userAgent.match(/(RMX\d+|SM-\w+|iPhone\d+,\d+|iPad\d+,\d+)/i);
+    const modelMatch = userAgent.match(
+      /(RMX\d+|SM-\w+|iPhone\d+,\d+|iPad\d+,\d+)/i,
+    );
     if (modelMatch) {
       info.deviceName = modelMatch[1];
     }
   }
 
   if (!info.deviceId && info.deviceName) {
-    info.deviceId = `DEV-${info.deviceName.replace(/\s+/g, '-')}`;
+    info.deviceId = `DEV-${info.deviceName.replace(/\s+/g, "-")}`;
   }
 
   return info;

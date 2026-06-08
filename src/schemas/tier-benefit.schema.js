@@ -5,6 +5,7 @@ const tierBenefitSchema = new mongoose.Schema(
     name: { type: String, required: true },
     description: { type: String, default: "" },
     key: { type: String, required: true, unique: true }, // e.g. "free_shipping", "double_points"
+    imageUrl: { type: String, default: "" },
     active: { type: Boolean, default: true },
   },
   {
