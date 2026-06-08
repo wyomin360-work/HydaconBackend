@@ -432,6 +432,28 @@ async function getUserLoyaltySummary(userId) {
   };
 }
 
+/**
+ * Retrieve the full tier progression configurations for the active season,
+ * populated with the tier definition data and benefits list.
+ */
+async function getTierProgressionMetadata(userId) {
+  const activeSeason = await resolveActiveSeason();
+  if (!activeSeason) {
+    sendFailResponse("No active loyalty season available.");
+  }
+
+  const configs = await TierConfiguration.find({
+    seasonId: activeSeason._id,
+    active: true,
+    isArchived: { $ne: true },
+  })
+    .populate("tierId")
+    .populate("benefits")
+    .lean();
+
+  return configs;
+}
+
 async function createSeason(adminId, payload) {
   const { name, code, startDate, endDate, active = false } = payload;
   const { start, end } = normalizeDateRange(startDate, endDate);
@@ -829,6 +851,16 @@ async function getTierConfigurationHistory(configId) {
     .lean();
 }
 
+async function getSeasonById(seasonId) {
+  const season = await LoyaltySeason.findById(seasonId).lean();
+  if (!season) {
+    const error = new Error("Season not found");
+    error.statusCode = 404;
+    throw error;
+  }
+  return season;
+}
+
 module.exports = {
   seedDefaultLoyaltyData,
   getOrCreateUserProgress,
@@ -836,6 +868,7 @@ module.exports = {
   addBonusPoints,
   evaluateTierUpgrade,
   getUserLoyaltySummary,
+  getTierProgressionMetadata,
   resolveActiveSeason,
   createSeason,
   updateSeason,
@@ -849,4 +882,5 @@ module.exports = {
   getTierConfigurationHistory,
   archiveSeason,
   archiveTierConfiguration,
+  getSeasonById,
 };

@@ -161,6 +161,10 @@ async function deleteSeason(req, res) {
   await LoyaltySeason.findByIdAndDelete(seasonId);
   return sendResponse(res, { message: "Season deleted successfully" }, 200);
 }
+async function getSeasonById(req, res) {
+  const season = await loyaltyService.getSeasonById(req.params.id);
+  return sendResponse(res, { data: season }, 200);
+}
 
 async function getSeasonManagementSummary(req, res) {
   const summary = await loyaltyService.getSeasonManagementSummary();
@@ -252,4 +256,5 @@ module.exports = {
   listConfigurationAuditLogs,
   getConfigAuditLogById,
   getTierConfigurationHistory,
+  getSeasonById,
 };

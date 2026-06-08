@@ -79,6 +79,11 @@ router.delete(
   verification.verifyAdmin,
   handleError(controller.deleteSeason)
 );
+router.get(
+  loyaltyPaths.admin.seasonsDetail,
+  verification.verifyAdmin,
+  handleError(controller.getSeasonById)
+);
 
 // Admin Loyalty Seasonal Configurations
 router.post(
