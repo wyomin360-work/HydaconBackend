@@ -29,16 +29,9 @@ function normalizeDateRange(startDate, endDate) {
 }
 
 async function ensureSeasonDateRangeHasNoOverlap({ startDate, endDate, excludeSeasonId = null }) {
-  const overlapQuery = {
-    isArchived: { $ne: true },
-    _id: excludeSeasonId ? { $ne: excludeSeasonId } : { $exists: true },
-    startDate: { $lte: endDate },
-    endDate: { $gte: startDate },
-  };
-  const overlappingSeason = await LoyaltySeason.findOne(overlapQuery).lean();
-  if (overlappingSeason) {
-    sendFailResponse("Season date range overlaps with an existing season");
-  }
+  // Overlap check disabled to allow creating multiple seasons.
+  // The system relies on the `active` flag to determine the current season.
+  return;
 }
 
 async function resolveActiveSeason() {
