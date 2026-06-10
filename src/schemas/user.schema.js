@@ -55,6 +55,7 @@ const userSchema = new mongoose.Schema(
     totalPoints: { type: Number, default: 0 },
     lifetimePoints: { type: Number, default: 0 },
     totalWithdraw: { type: Number, default: 0 },
+    totalScans: { type: Number, default: 0 },
     authKey: { type: String, required: false },
     agreedToTerms: { type: Boolean, default: true },
     enableNotification: { type: Boolean, default: true },

@@ -1,6 +1,7 @@
 module.exports = {
   root: "/user",
   details: "/details",
+  adminDetails: "/admin-details/:id",
   list: "/list",
   roles: "/roles",
   onboardingRoles: "/onboarding/roles",

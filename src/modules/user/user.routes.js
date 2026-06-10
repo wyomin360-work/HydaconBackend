@@ -80,6 +80,12 @@ router.get(
   handleError(controller.userDetails),
 );
 
+router.get(
+  userPaths.adminDetails,
+  verification.verifyAdmin,
+  handleError(controller.getAdminUserDetails),
+);
+
 router.patch(
   userPaths.updateProfile,
   verification.verifyUser,
