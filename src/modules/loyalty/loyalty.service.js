@@ -327,9 +327,9 @@ async function getUserLoyaltySummary(userId) {
     const p = await getOrCreateUserProgress(userId);
     // Re-fetch with previousTierId populated
     return UserTierProgress.findById(p._id)
-      .populate("currentTierId")
-      .populate("previousTierId")
-      .lean();
+    .populate("currentTierId")
+    .populate("previousTierId")
+    .lean();
   })();
 
   const currentTier = progress.currentTierId;
@@ -360,14 +360,14 @@ async function getUserLoyaltySummary(userId) {
     remainingPoints = nextConfig.qualificationThreshold - progress.qualificationPoints;
 
     const currentThreshold = currentTier
-      ? await TierConfiguration.findOne({
-          seasonId: progress.seasonId,
-          tierId: currentTier._id,
-          isArchived: { $ne: true },
+    ? await TierConfiguration.findOne({
+        seasonId: progress.seasonId,
+        tierId: currentTier._id,
+        isArchived: { $ne: true },
         })
           .select("qualificationThreshold")
           .lean()
-      : null;
+    : null;
 
     const startPoints = currentThreshold ? currentThreshold.qualificationThreshold : 0;
     const targetPoints = nextConfig.qualificationThreshold;
@@ -398,6 +398,7 @@ async function getUserLoyaltySummary(userId) {
       colorIdentity: currentTier?.colorIdentity || "#8E8E93",
       badgeUrl: currentTier?.badgeUrl || "",
       pointMultiplier: activeConfig?.pointMultiplier || 1.0,
+      threshold: activeConfig?.qualificationThreshold ?? 0,
     },
     previousTier: previousTier ? {
       id: previousTier._id,
