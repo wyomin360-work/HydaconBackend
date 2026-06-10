@@ -139,6 +139,7 @@ async function getOrCreateUserProgress(userId, seasonId = null) {
         userId,
         seasonId: activeSeason._id,
         currentTierId: beginnerTier._id,
+        lastCelebratedTierId: beginnerTier._id,
         qualificationPoints: 0,
       }
     },
@@ -322,19 +323,62 @@ async function getUserLoyaltySummary(userId) {
     sendFailResponse("No active loyalty season available.");
   }
 
-  // Populate both currentTierId and previousTierId in one query
-  const progress = await (async () => {
-    const p = await getOrCreateUserProgress(userId);
-    // Re-fetch with previousTierId populated
-    return UserTierProgress.findById(p._id)
+  // Populate currentTierId, previousTierId, and lastCelebratedTierId in one query
+  const progressDoc = await getOrCreateUserProgress(userId);
+  let progress = await UserTierProgress.findById(progressDoc._id)
     .populate("currentTierId")
     .populate("previousTierId")
+    .populate("lastCelebratedTierId")
     .lean();
-  })();
 
   const currentTier = progress.currentTierId;
   const previousTier = progress.previousTierId || null;
+  let lastCelebratedTier = progress.lastCelebratedTierId || null;
   const user = await User.findById(userId);
+
+  // If lastCelebratedTierId is missing (legacy DB docs), initialize it to the current tier
+  if (!progress.lastCelebratedTierId) {
+    await UserTierProgress.findByIdAndUpdate(progress._id, {
+      lastCelebratedTierId: currentTier?._id || null
+    });
+    lastCelebratedTier = currentTier;
+  }
+
+  let levelUpEvent = { upgraded: false };
+  const currentRank = currentTier?.rank ?? 0;
+  const lastCelebratedRank = lastCelebratedTier?.rank ?? 0;
+
+  if (currentRank > lastCelebratedRank) {
+    levelUpEvent = {
+      upgraded: true,
+      previousTier: lastCelebratedTier ? {
+        id: lastCelebratedTier._id,
+        name: lastCelebratedTier.name,
+        key: lastCelebratedTier.key,
+        colorIdentity: lastCelebratedTier.colorIdentity,
+        badgeUrl: lastCelebratedTier.badgeUrl,
+      } : (previousTier ? {
+        id: previousTier._id,
+        name: previousTier.name,
+        key: previousTier.key,
+        colorIdentity: previousTier.colorIdentity,
+        badgeUrl: previousTier.badgeUrl,
+      } : null),
+      newTier: {
+        id: currentTier._id,
+        name: currentTier.name,
+        key: currentTier.key,
+        colorIdentity: currentTier.colorIdentity,
+        badgeUrl: currentTier.badgeUrl,
+      },
+      upgradedAt: progress.updatedAt || new Date(),
+    };
+
+    // Mark as celebrated in DB so it won't show again on subsequent requests
+    await UserTierProgress.findByIdAndUpdate(progress._id, {
+      lastCelebratedTierId: currentTier._id
+    });
+  }
 
   // Find next tier config in active season
   const nextConfig = await TierConfiguration.findOne({
@@ -423,6 +467,7 @@ async function getUserLoyaltySummary(userId) {
       code: activeSeason?.code || "DEFAULT",
       endDate: activeSeason?.endDate,
     },
+    levelUpEvent,
   };
 }
 
