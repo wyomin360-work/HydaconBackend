@@ -61,7 +61,6 @@ const userSchema = new mongoose.Schema(
     avatarId: { type: String, required: false },
     dob: { type: Date, required: false, default: null },
     profilePhoto: { type: String, required: false, default: null },
-    mobileNumber: { type: String, required: false, default: null },
     shopName: { type: String, required: false, default: null },
     experience: { type: Number, required: false, default: null },
     areaOfOperation: { type: String, required: false, default: null },
@@ -98,6 +97,8 @@ const userSchema = new mongoose.Schema(
       type: kycDocumentsSchema,
       default: () => ({}),
     },
+    failedScanAttempts: { type: Number, default: 0 },
+    scanBanUntil: { type: Date, default: null },
   },
   {
     timestamps: true,
@@ -123,7 +124,10 @@ userSchema.methods.calculateCompletionPercentage = async function () {
       }
     }
 
-    this.profileCompletionPercentage = calculateProfileCompletion(this, roleName);
+    this.profileCompletionPercentage = calculateProfileCompletion(
+      this,
+      roleName,
+    );
   } catch (err) {
     console.error("Error calculating profile completion percentage:", err);
   }

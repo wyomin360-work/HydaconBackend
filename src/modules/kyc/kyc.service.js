@@ -5,7 +5,11 @@ const fs = require("fs");
 const { sendFcmNotifications } = require("../../functions/fcm");
 const { APP_NOTIFICATIONS } = require("../../constants/notifications");
 const { formatNotification } = require("../../utils/heplers");
-const { KYC_STATUS, KYC_DOCUMENT_STATUS, KYC_DOCUMENT_TYPES } = require("../../constants/user");
+const {
+  KYC_STATUS,
+  KYC_DOCUMENT_STATUS,
+  KYC_DOCUMENT_TYPES,
+} = require("../../constants/user");
 const { sendTemplateEmail } = require("../../functions/nodemailer");
 
 async function compressImage(filePath) {
@@ -42,7 +46,7 @@ function safeUnlink(filePath) {
     try {
       fs.unlinkSync(filePath);
     } catch (err) {
-      console.error('Error deleting file:', err);
+      console.error("Error deleting file:", err);
     }
   }
 }
@@ -51,7 +55,9 @@ async function uploadDocument(userId, documentType, file) {
   // Bug 1: Validate documentType first and clean up file on failure
   if (!Object.values(KYC_DOCUMENT_TYPES).includes(documentType)) {
     safeUnlink(file?.path);
-    throw new Error(`Invalid document type. Allowed: ${Object.values(KYC_DOCUMENT_TYPES).join(', ')}`);
+    throw new Error(
+      `Invalid document type. Allowed: ${Object.values(KYC_DOCUMENT_TYPES).join(", ")}`,
+    );
   }
 
   if (!file) {
@@ -68,16 +74,21 @@ async function uploadDocument(userId, documentType, file) {
   const allowedExtensions = [".jpg", ".jpeg", ".png", ".pdf"];
   const ext = path.extname(file.originalname || "").toLowerCase();
 
-  if (!allowedMimeTypes.includes(file.mimetype) || !allowedExtensions.includes(ext)) {
+  if (
+    !allowedMimeTypes.includes(file.mimetype) ||
+    !allowedExtensions.includes(ext)
+  ) {
     safeUnlink(file.path);
-    throw new Error('Invalid file type. Only JPG, JPEG, PNG, and PDF files are allowed.');
+    throw new Error(
+      "Invalid file type. Only JPG, JPEG, PNG, and PDF files are allowed.",
+    );
   }
 
   // File size validation (5MB max)
   const maxFileSize = 5 * 1024 * 1024;
   if (file.size > maxFileSize) {
     safeUnlink(file.path);
-    throw new Error('File size exceeds the 5MB limit.');
+    throw new Error("File size exceeds the 5MB limit.");
   }
 
   let compressedPath = null;
@@ -112,7 +123,7 @@ async function uploadDocument(userId, documentType, file) {
       compressedUrl,
       uploadedAt: new Date(),
       status: KYC_DOCUMENT_STATUS.PENDING,
-      rejectionReason: null
+      rejectionReason: null,
     };
 
     // Bug 3 fix: Correctly recalculate overall status on re-upload.
@@ -192,10 +203,18 @@ async function getAdminKycList(filters = {}) {
     .select("name email kycStatus kycDocuments updatedAt")
     .sort({ updatedAt: -1 });
 
-  const allCount = await User.countDocuments({ kycStatus: { $ne: KYC_STATUS.NOT_STARTED } });
-  const pendingCount = await User.countDocuments({ kycStatus: KYC_STATUS.PENDING });
-  const approvedCount = await User.countDocuments({ kycStatus: { $in: [KYC_STATUS.APPROVED, KYC_STATUS.VERIFIED] } });
-  const rejectedCount = await User.countDocuments({ kycStatus: KYC_STATUS.REJECTED });
+  const allCount = await User.countDocuments({
+    kycStatus: { $ne: KYC_STATUS.NOT_STARTED },
+  });
+  const pendingCount = await User.countDocuments({
+    kycStatus: KYC_STATUS.PENDING,
+  });
+  const approvedCount = await User.countDocuments({
+    kycStatus: { $in: [KYC_STATUS.APPROVED, KYC_STATUS.VERIFIED] },
+  });
+  const rejectedCount = await User.countDocuments({
+    kycStatus: KYC_STATUS.REJECTED,
+  });
 
   return {
     users,
@@ -217,7 +236,11 @@ async function reviewKycDocument(
     normalizedStatus = KYC_DOCUMENT_STATUS.APPROVED;
   }
 
-  if (![KYC_DOCUMENT_STATUS.APPROVED, KYC_DOCUMENT_STATUS.REJECTED].includes(normalizedStatus)) {
+  if (
+    ![KYC_DOCUMENT_STATUS.APPROVED, KYC_DOCUMENT_STATUS.REJECTED].includes(
+      normalizedStatus,
+    )
+  ) {
     throw new Error(
       `Invalid review status. Allowed: ${KYC_DOCUMENT_STATUS.APPROVED}, ${KYC_STATUS.VERIFIED}, ${KYC_DOCUMENT_STATUS.REJECTED}`,
     );
@@ -231,7 +254,9 @@ async function reviewKycDocument(
   if (documentType) {
     // --- Per-document review ---
     if (!Object.values(KYC_DOCUMENT_TYPES).includes(documentType)) {
-      throw new Error(`Invalid document type. Allowed: ${Object.values(KYC_DOCUMENT_TYPES).join(', ')}`);
+      throw new Error(
+        `Invalid document type. Allowed: ${Object.values(KYC_DOCUMENT_TYPES).join(", ")}`,
+      );
     }
 
     if (
@@ -244,13 +269,18 @@ async function reviewKycDocument(
 
     user.kycDocuments[documentType].status = normalizedStatus;
     user.kycDocuments[documentType].rejectionReason =
-      normalizedStatus === KYC_DOCUMENT_STATUS.REJECTED ? rejectionReason : null;
+      normalizedStatus === KYC_DOCUMENT_STATUS.REJECTED
+        ? rejectionReason
+        : null;
 
     // Bug 4 fix: Recalculate global kycStatus correctly for per-document reviews.
     // Only fall back to PENDING if all three documents are uploaded;
     // if some are missing, the overall status stays NOT_STARTED.
     const docs = user.kycDocuments;
-    const allUploaded = docs.aadhaar?.originalUrl && docs.pan?.originalUrl && docs.shopPhoto?.originalUrl;
+    const allUploaded =
+      docs.aadhaar?.originalUrl &&
+      docs.pan?.originalUrl &&
+      docs.shopPhoto?.originalUrl;
     const anyRejected =
       docs.aadhaar?.status === KYC_DOCUMENT_STATUS.REJECTED ||
       docs.pan?.status === KYC_DOCUMENT_STATUS.REJECTED ||
@@ -291,23 +321,32 @@ async function reviewKycDocument(
       docs.shopPhoto?.originalUrl;
 
     // New Bug fix: Admin cannot approve KYC entirely if no documents have been uploaded
-    if (normalizedStatus === KYC_DOCUMENT_STATUS.APPROVED && !hasAtLeastOneDoc) {
-      throw new Error('Cannot approve KYC entirely because no documents have been uploaded');
+    if (
+      normalizedStatus === KYC_DOCUMENT_STATUS.APPROVED &&
+      !hasAtLeastOneDoc
+    ) {
+      throw new Error(
+        "Cannot approve KYC entirely because no documents have been uploaded",
+      );
     }
 
     // New Bug fix: Admin cannot reject KYC entirely unless all documents are uploaded
     if (normalizedStatus === KYC_DOCUMENT_STATUS.REJECTED && !allUploaded) {
-      throw new Error('Cannot reject KYC entirely because not all documents have been uploaded');
+      throw new Error(
+        "Cannot reject KYC entirely because not all documents have been uploaded",
+      );
     }
 
     const docTypes = Object.values(KYC_DOCUMENT_TYPES);
-    docTypes.forEach(type => {
+    docTypes.forEach((type) => {
       if (!user.kycDocuments[type]) {
         user.kycDocuments[type] = {};
       }
       user.kycDocuments[type].status = normalizedStatus;
       user.kycDocuments[type].rejectionReason =
-        normalizedStatus === KYC_DOCUMENT_STATUS.REJECTED ? rejectionReason : null;
+        normalizedStatus === KYC_DOCUMENT_STATUS.REJECTED
+          ? rejectionReason
+          : null;
       if (
         normalizedStatus === KYC_DOCUMENT_STATUS.APPROVED &&
         !user.kycDocuments[type].uploadedAt

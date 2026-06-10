@@ -15,7 +15,7 @@ exports.redeemDetails = async (req, res) => {
 
 exports.createRedeem = async (req, res) => {
   const redeemData = req?.body;
-  const response = await redeemService.createRedeem(redeemData);
+  const response = await redeemService.createRedeem(redeemData, req.user);
   return sendResponse(res, response);
 };
 

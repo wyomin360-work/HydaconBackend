@@ -35,6 +35,7 @@ const { encrypt, decrypt } = require("../../utils/encryption");
 const { validateIFSC } = require("../../functions/razorPay");
 const { sendFcmNotifications } = require("../../functions/fcm");
 const { sendSms } = require("../../functions/sms");
+const { sendMail } = require("../../functions/nodemailer");
 
 async function generateAndSaveToken(payload) {
   const accessToken = generateToken(payload);
@@ -237,10 +238,12 @@ async function verifyEmail(data) {
   if (!user) sendFailResponse("User not found");
 
   const phoneToUse = phone || user.phone;
+  const emailToUse = email || user.email;
   const { token, alreadySent } = await issueOtpForUser({
     userId: user._id,
     requestType: ServiceRequestType.FORGOT_PASSWORD,
     phoneNumber: phoneToUse,
+    email: emailToUse,
     buildMessage: (otp) =>
       `Greetings from Hydacon, your verification OTP is: ${otp}`,
   });
@@ -405,6 +408,7 @@ async function issueOtpForUser({
   userId,
   requestType,
   phoneNumber,
+  email,
   payload,
   buildMessage,
 }) {
@@ -429,15 +433,50 @@ async function issueOtpForUser({
     buildOtpServiceRequest({ userId, token, otpHash, requestType, payload }),
   );
 
-  try {
-    await deliverOtpViaSms(phoneNumber, buildMessage(otp));
-    await ServiceRequest.findByIdAndUpdate(serviceRequest._id, {
-      smsSentAt: new Date(),
-    });
-  } catch (error) {
-    await ServiceRequest.findByIdAndDelete(serviceRequest._id);
-    throw error;
+  let smsSent = false;
+  let emailSent = false;
+  let smsError = null;
+  let emailError = null;
+
+  if (phoneNumber) {
+    try {
+      await deliverOtpViaSms(phoneNumber, buildMessage(otp));
+      smsSent = true;
+    } catch (error) {
+      smsError = error;
+    }
   }
+
+  if (email) {
+    try {
+      const mailResult = await sendMail({
+        to: email,
+        subject: "Hydacon OTP Verification",
+        text: buildMessage(otp),
+      });
+      if (mailResult === true) {
+        emailSent = true;
+      } else {
+        emailError = new Error("Failed to send email");
+      }
+    } catch (error) {
+      emailError = error;
+    }
+  }
+
+  if (!phoneNumber && !email) {
+    await ServiceRequest.findByIdAndDelete(serviceRequest._id);
+    sendFailResponse("No email or phone number provided to send OTP.");
+  }
+
+  if (!smsSent && !emailSent) {
+    await ServiceRequest.findByIdAndDelete(serviceRequest._id);
+    throw smsError || emailError || new Error("Failed to send OTP.");
+  }
+
+  await ServiceRequest.findByIdAndUpdate(serviceRequest._id, {
+    smsSentAt: new Date(),
+  });
 
   return { token, alreadySent: false };
 }
@@ -859,15 +898,16 @@ async function updateUserProfile(data, userId) {
   if (data.name !== undefined) user.name = data.name;
   if (data.avatarId !== undefined) user.avatarId = data.avatarId;
   if (data.dob !== undefined) user.dob = data.dob ? new Date(data.dob) : null;
-  if (data.mobileNumber !== undefined) user.mobileNumber = data.mobileNumber;
+  if (data.phone !== undefined) user.phone = data.phone;
   if (data.shopName !== undefined) user.shopName = data.shopName;
   if (data.experience !== undefined) user.experience = data.experience;
-  if (data.areaOfOperation !== undefined) user.areaOfOperation = data.areaOfOperation;
+  if (data.areaOfOperation !== undefined)
+    user.areaOfOperation = data.areaOfOperation;
   if (data.profilePhoto !== undefined) user.profilePhoto = data.profilePhoto;
 
   await user.save();
 
-  const populatedUser = await User.findById(userId).populate('roleId');
+  const populatedUser = await User.findById(userId).populate("roleId");
   const { password, ...rest } = populatedUser.toObject();
 
   return {
@@ -909,7 +949,7 @@ async function addFcmToken(data, userId) {
 // User Bank Details
 // ----------------------
 async function getUserBankDetails(userId) {
-  const user = await User.findById(userId);
+  const user = await User.findById(userId).lean();
   if (!user) sendFailResponse("User not found");
 
   if (!user.bankDetails?.accountNumber || !user.bankDetails?.ifscCode)
@@ -1097,36 +1137,41 @@ async function compressProfileImage(filePath) {
 
   try {
     await sharp(filePath)
-      .resize(400, 400, { fit: 'cover' })
+      .resize(400, 400, { fit: "cover" })
       .jpeg({ quality: 80, force: false })
       .png({ quality: 80, force: false })
       .toFile(compressedPath);
 
     return compressedFilename;
   } catch (error) {
-    console.error('Error compressing profile image:', error);
+    console.error("Error compressing profile image:", error);
     return parsedPath.base;
   }
 }
 
 async function uploadProfilePhoto(userId, file) {
   if (!file) {
-    throw new Error('No file uploaded');
+    throw new Error("No file uploaded");
   }
 
-  const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/jpg'];
-  const allowedExtensions = ['.jpg', '.jpeg', '.png'];
-  const ext = path.extname(file.originalname || '').toLowerCase();
+  const allowedMimeTypes = ["image/jpeg", "image/png", "image/jpg"];
+  const allowedExtensions = [".jpg", ".jpeg", ".png"];
+  const ext = path.extname(file.originalname || "").toLowerCase();
 
-  if (!allowedMimeTypes.includes(file.mimetype) || !allowedExtensions.includes(ext)) {
+  if (
+    !allowedMimeTypes.includes(file.mimetype) ||
+    !allowedExtensions.includes(ext)
+  ) {
     if (file.path && fs.existsSync(file.path)) {
       try {
         fs.unlinkSync(file.path);
       } catch (err) {
-        console.error('Error deleting invalid file type:', err);
+        console.error("Error deleting invalid file type:", err);
       }
     }
-    throw new Error('Invalid file type. Only JPG, JPEG, and PNG files are allowed.');
+    throw new Error(
+      "Invalid file type. Only JPG, JPEG, and PNG files are allowed.",
+    );
   }
 
   const maxFileSize = 5 * 1024 * 1024;
@@ -1135,10 +1180,10 @@ async function uploadProfilePhoto(userId, file) {
       try {
         fs.unlinkSync(file.path);
       } catch (err) {
-        console.error('Error deleting oversized file:', err);
+        console.error("Error deleting oversized file:", err);
       }
     }
-    throw new Error('File size exceeds the 5MB limit.');
+    throw new Error("File size exceeds the 5MB limit.");
   }
 
   const user = await User.findById(userId);
@@ -1147,19 +1192,19 @@ async function uploadProfilePhoto(userId, file) {
       try {
         fs.unlinkSync(file.path);
       } catch (err) {
-        console.error('Error deleting orphaned file:', err);
+        console.error("Error deleting orphaned file:", err);
       }
     }
-    throw new Error('User not found');
+    throw new Error("User not found");
   }
 
   if (user.profilePhoto) {
-    const prevPhotoPath = path.join(__dirname, '../..', user.profilePhoto);
+    const prevPhotoPath = path.join(__dirname, "../..", user.profilePhoto);
     if (fs.existsSync(prevPhotoPath)) {
       try {
         fs.unlinkSync(prevPhotoPath);
       } catch (err) {
-        console.error('Error deleting previous profile photo:', err);
+        console.error("Error deleting previous profile photo:", err);
       }
     }
   }
@@ -1171,7 +1216,7 @@ async function uploadProfilePhoto(userId, file) {
   user.profilePhoto = profilePhotoUrl;
   await user.save();
 
-  const populatedUser = await User.findById(userId).populate('roleId');
+  const populatedUser = await User.findById(userId).populate("roleId");
   const { password, ...rest } = populatedUser.toObject();
 
   return {
@@ -1193,8 +1238,10 @@ async function flagUser(userId, data) {
   await user.save();
 
   return {
-    message: isFlagged ? "User flagged successfully" : "User unflagged successfully",
-    data: { isFlagged: user.isFlagged, flaggedReason: user.flaggedReason }
+    message: isFlagged
+      ? "User flagged successfully"
+      : "User unflagged successfully",
+    data: { isFlagged: user.isFlagged, flaggedReason: user.flaggedReason },
   };
 }
 

@@ -20,7 +20,7 @@ describe("User Profile Completion Percentage Calculation", () => {
 
   it("should calculate 100% completion for Contractor (10 fields filled)", async () => {
     mockRoleFindById.mockResolvedValue({
-      name: "Contractor"
+      name: "Contractor",
     });
 
     const user = new User({
@@ -32,14 +32,14 @@ describe("User Profile Completion Percentage Calculation", () => {
       areaOfOperation: "Zone A",
       kycStatus: "PENDING",
       email: "contractor@example.com",
-      mobileNumber: "1234567890",
+      phone: "1234567890",
       bankDetails: {
         accountNumber: "123456789",
         ifscCode: "ABCD0123456",
-        userName: "John Contractor"
+        userName: "John Contractor",
       },
       agreedToTerms: true,
-      shopName: null // Shop name is N/A for Contractor
+      shopName: null, // Shop name is N/A for Contractor
     });
 
     await user.calculateCompletionPercentage();
@@ -49,7 +49,7 @@ describe("User Profile Completion Percentage Calculation", () => {
 
   it("should calculate 100% completion for Retailer (11 fields filled, including shopName)", async () => {
     mockRoleFindById.mockResolvedValue({
-      name: "Retailer"
+      name: "Retailer",
     });
 
     const user = new User({
@@ -61,14 +61,14 @@ describe("User Profile Completion Percentage Calculation", () => {
       areaOfOperation: "Zone B",
       kycStatus: "APPROVED",
       email: "retailer@example.com",
-      mobileNumber: "9876543210",
+      phone: "9876543210",
       bankDetails: {
         accountNumber: "987654321",
         ifscCode: "XYZB0123456",
-        userName: "Shopkeeper Joe"
+        userName: "Shopkeeper Joe",
       },
       agreedToTerms: true,
-      shopName: "Joe's hardware store"
+      shopName: "Joe's hardware store",
     });
 
     await user.calculateCompletionPercentage();
@@ -78,7 +78,7 @@ describe("User Profile Completion Percentage Calculation", () => {
 
   it("should calculate less than 100% for Retailer if shopName is missing", async () => {
     mockRoleFindById.mockResolvedValue({
-      name: "Retailer"
+      name: "Retailer",
     });
 
     const user = new User({
@@ -90,14 +90,14 @@ describe("User Profile Completion Percentage Calculation", () => {
       areaOfOperation: "Zone B",
       kycStatus: "APPROVED",
       email: "retailer@example.com",
-      mobileNumber: "9876543210",
+      phone: "9876543210",
       bankDetails: {
         accountNumber: "987654321",
         ifscCode: "XYZB0123456",
-        userName: "Shopkeeper Joe"
+        userName: "Shopkeeper Joe",
       },
       agreedToTerms: true,
-      shopName: null // Missing shopName
+      shopName: null, // Missing shopName
     });
 
     await user.calculateCompletionPercentage();
@@ -108,7 +108,7 @@ describe("User Profile Completion Percentage Calculation", () => {
 
   it("should calculate correct percentage for partially filled profile", async () => {
     mockRoleFindById.mockResolvedValue({
-      name: "Mason"
+      name: "Mason",
     });
 
     const user = new User({
@@ -120,9 +120,9 @@ describe("User Profile Completion Percentage Calculation", () => {
       areaOfOperation: "Zone C",
       kycStatus: "NOT_STARTED", // counts as missing
       email: null, // missing
-      mobileNumber: null, // missing
+      phone: null, // missing
       bankDetails: null, // missing
-      agreedToTerms: false // missing
+      agreedToTerms: false, // missing
     });
 
     await user.calculateCompletionPercentage();

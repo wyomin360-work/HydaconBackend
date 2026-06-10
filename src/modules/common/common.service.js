@@ -8,7 +8,8 @@ const { sendFailResponse } = require("../../utils/responseHandlers");
 
 async function uploadImage(file) {
   if (!file) sendFailResponse("The file not received");
-  const fileUrl = `https://hydaconbackend.onrender.com/api/v1/uploads/images/${file?.filename}`;
+  const host = process.env.NODE_ENV === "dev" ? `http://localhost:${process.env.PORT || 3000}` : "https://hydaconbackend.onrender.com";
+  const fileUrl = `${host}/uploads/images/${file?.filename}`;
   return { data: { url: fileUrl } };
 }
 

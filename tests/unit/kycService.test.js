@@ -158,7 +158,6 @@ describe("kyc.service unit tests", () => {
       };
       User.findById.mockResolvedValue(mockUser);
 
-      // Re-upload aadhaar document
       const result = await kycService.uploadDocument(
         "userId123",
         "aadhaar",
@@ -179,6 +178,10 @@ describe("kyc.service unit tests", () => {
             status: "PENDING",
           },
           pan: { originalUrl: "/uploads/images/pan.jpg", status: "REJECTED" },
+          shopPhoto: {
+            originalUrl: "/uploads/images/shop.jpg",
+            status: "APPROVED",
+          },
           shopPhoto: {
             originalUrl: "/uploads/images/shop.jpg",
             status: "APPROVED",
