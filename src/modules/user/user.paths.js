@@ -30,4 +30,5 @@ module.exports = {
     update: "/bank-details/update",
     delete: "/bank-details/delete",
   },
+  convertPoints: "/convert-points",
 };

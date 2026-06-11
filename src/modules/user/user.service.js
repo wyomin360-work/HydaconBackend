@@ -1293,6 +1293,48 @@ async function getAdminUserDetails(userId) {
   };
 }
 
+// ----------------------
+// Convert Points to Coins
+// ----------------------
+async function convertPointsToCoins(userId, data) {
+  const { points } = data;
+  if (!points || points <= 0) return sendFailResponse("Invalid points amount");
+
+  const session = await mongoose.startSession();
+  try {
+    let result;
+    await session.withTransaction(async () => {
+      const user = await User.findById(userId).session(session);
+      if (!user) throw new Error("User not found");
+      if (user.totalPoints < points) throw new Error("Insufficient points");
+
+      const AppConfig = require("../../schemas/app-config.schema");
+      const config = await AppConfig.findOne().session(session);
+      const ratio = config?.coinSettings?.pointToCoinRatio || 100;
+      
+      const coinsToAdd = points / ratio;
+
+      user.totalPoints -= points;
+      user.hydaconCoins = (user.hydaconCoins || 0) + coinsToAdd;
+      user.lifetimeHydaconCoins = (user.lifetimeHydaconCoins || 0) + coinsToAdd;
+      
+      await user.save({ session });
+      
+      // Optionally create a transaction log here if a schema existed for point->coin conversion.
+      result = attachId(user);
+    });
+    
+    return {
+      message: "Points converted successfully",
+      data: result,
+    };
+  } catch (error) {
+    return { success: false, message: error.message };
+  } finally {
+    await session.endSession();
+  }
+}
+
 module.exports = {
   registerUser,
   login,
@@ -1317,4 +1359,5 @@ module.exports = {
   updatePreferences,
   uploadProfilePhoto,
   flagUser,
+  convertPointsToCoins,
 };

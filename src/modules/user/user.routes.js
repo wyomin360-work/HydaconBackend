@@ -167,4 +167,10 @@ router.patch(
   handleError(controller.flagUser),
 );
 
+router.post(
+  userPaths.convertPoints,
+  verification.verifyUser,
+  handleError(controller.convertPoints),
+);
+
 module.exports = router;

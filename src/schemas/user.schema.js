@@ -56,6 +56,8 @@ const userSchema = new mongoose.Schema(
     lifetimePoints: { type: Number, default: 0 },
     totalWithdraw: { type: Number, default: 0 },
     totalScans: { type: Number, default: 0 },
+    hydaconCoins: { type: Number, default: 0 },
+    lifetimeHydaconCoins: { type: Number, default: 0 },
     authKey: { type: String, required: false },
     agreedToTerms: { type: Boolean, default: true },
     enableNotification: { type: Boolean, default: true },

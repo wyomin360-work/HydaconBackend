@@ -22,6 +22,7 @@ const coinSettingsSchema = new mongoose.Schema(
     minWithdrawAmount: { type: Number, default: 100 },
     maxWithdrawAmount: { type: Number, default: 1000 },
     referralBonus: { type: Number, default: 50 },
+    pointToCoinRatio: { type: Number, default: 100 }, // 100 points = 1 coin
   },
   { _id: false },
 );

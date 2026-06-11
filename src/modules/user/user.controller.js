@@ -170,3 +170,10 @@ exports.flagUser = async (req, res, next) => {
   const response = await userService.flagUser(targetUserId, data);
   return sendResponse(res, response);
 };
+
+exports.convertPoints = async (req, res, next) => {
+  const userId = req?.userId;
+  const data = req?.body;
+  const response = await userService.convertPointsToCoins(userId, data);
+  return sendResponse(res, response);
+};
