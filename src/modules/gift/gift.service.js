@@ -284,6 +284,20 @@ exports.adminRedemptionList = async (data) => {
   }
 };
 
+exports.adminRedemptionDetails = async (redemptionId) => {
+  try {
+    const redemption = await GiftRedemption.findById(redemptionId)
+      .populate("userId", "name email phone hydaconCoins")
+      .populate("giftId", "name image priceInCoins description stockQuantity reservedQuantity");
+
+    if (!redemption) return { success: false, message: "Redemption not found" };
+    
+    return { success: true, data: redemption };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
 exports.adminUpdateRedemption = async (redemptionId, data) => {
   const { status, trackingNumber, courierDetails, cancellationReason } = data;
   const session = await mongoose.startSession();

@@ -23,6 +23,7 @@ module.exports = {
   // Redemption Routes (Admin)
   adminRedemptionList: "/admin/redemptions/list",
   adminUpdateRedemption: "/admin/redemptions/update/:redemptionId",
+  adminRedemptionDetails: "/admin/redemptions/details/:redemptionId",
   
   // Analytics (Admin)
   adminAnalytics: "/admin/analytics",

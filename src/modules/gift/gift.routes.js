@@ -105,6 +105,11 @@ router.patch(
   verification.verifyAdmin,
   handleError(giftController.adminUpdateRedemption),
 );
+router.get(
+  giftPaths.adminRedemptionDetails,
+  verification.verifyAdmin,
+  handleError(giftController.getAdminRedemptionDetails),
+);
 
 // Analytics
 router.get(

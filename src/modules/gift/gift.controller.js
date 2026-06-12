@@ -94,6 +94,12 @@ exports.adminUpdateRedemption = async (req, res) => {
   return sendResponse(res, response);
 };
 
+exports.getAdminRedemptionDetails = async (req, res) => {
+  const redemptionId = req.params.redemptionId;
+  const response = await giftService.adminRedemptionDetails(redemptionId);
+  return sendResponse(res, response);
+};
+
 exports.getAnalytics = async (req, res) => {
   const response = await giftService.getAnalytics();
   return sendResponse(res, response);
