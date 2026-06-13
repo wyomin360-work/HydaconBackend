@@ -22,6 +22,9 @@ jest.mock("../../src/modules/loyalty/loyalty.service", () => ({
   }),
   processQrScanPoints: jest.fn().mockResolvedValue(true),
 }));
+jest.mock("../../src/modules/scratch-cards/scratch-cards.service", () => ({
+  generateScratchCardForScan: jest.fn().mockResolvedValue(null),
+}));
 
 describe("Weighted Rewards Calculation", () => {
   let mockUser, mockRole, mockProduct, mockReward;
