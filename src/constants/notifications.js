@@ -92,6 +92,39 @@ const APP_NOTIFICATIONS = {
       body: "Your KYC submission was rejected. Reason: {{reason}}",
     },
   },
+
+  scratchCards: {
+    rewardWon: {
+      title: "You Won a Scratch Card Reward! 🎁",
+      body: "Congratulations! You won {{rewardText}} from the {{campaignName}} campaign.",
+    },
+  },
+
+  contests: {
+    announcement: {
+      title: "New Contest Alert! 🏆",
+      body: "Join the new contest '{{contestName}}' and compete for exciting prizes!",
+    },
+    winner: {
+      title: "Contest Winner! 🎊",
+      body: "Congratulations! You ranked #{{rank}} in '{{contestName}}' and won {{rewardText}}.",
+    },
+  },
+
+  events: {
+    invitation: {
+      title: "You're Invited! 📅",
+      body: "You have been invited to attend '{{eventName}}'. Confirm your spot now!",
+    },
+    reminder: {
+      title: "Event Reminder ⏰",
+      body: "Don't forget! '{{eventName}}' is coming up on {{eventDate}}.",
+    },
+    registrationConfirmed: {
+      title: "Registration Confirmed ✅",
+      body: "You are successfully registered for '{{eventName}}'. We look forward to seeing you!",
+    },
+  },
 };
 
 module.exports = { APP_NOTIFICATIONS };

@@ -4,9 +4,13 @@ const UserTierProgress = require("../schemas/user-tier-progress.schema");
 const LoyaltyTransaction = require("../schemas/loyalty-transaction.schema");
 const User = require("../schemas/user.schema");
 const { LOYALTY_TRANSACTION_TYPES, CARRY_FORWARD_BEHAVIOR } = require("../constants/loyalty");
+const startContestFinalizerCron = require("../cron/contest-finalizer.cron");
 
 function initCronJobs() {
   console.log("Initializing CRON jobs...");
+  
+  // Initialize Contest Finalizer
+  startContestFinalizerCron();
 
   // 1. Season Rollover Task
   // Runs every day at 00:05 AM

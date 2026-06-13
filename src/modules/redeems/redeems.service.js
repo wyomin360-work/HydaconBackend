@@ -8,6 +8,7 @@ const Reward = require("../../schemas/reward.schema");
 const User = require("../../schemas/user.schema");
 const { attachId, formatNotification } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
+const scratchCardsService = require("../scratch-cards/scratch-cards.service");
 
 async function listRedeems(data) {
   const { page = 1, limit = 20 } = data;
@@ -197,9 +198,17 @@ async function createRedeem(redeemData, reqUser = null) {
       }),
     );
   }
+
+  // Generate scratch card if applicable
+  const scratchCard = await scratchCardsService.generateScratchCardForScan(userId, actualProductId, newRedeem._id);
+
   return {
     message: "redeem successful",
-    data: { redeemSuccessful: true, pointsRewarded: weightedPoints },
+    data: { 
+      redeemSuccessful: true, 
+      pointsRewarded: weightedPoints,
+      scratchCardId: scratchCard ? scratchCard._id : null
+    },
   };
 }
 

@@ -32,7 +32,7 @@ const giftRedemptionSchema = new mongoose.Schema(
     },
     shippingAddress: {
       type: shippingAddressSchema,
-      required: true,
+      required: false,
     },
     trackingNumber: { type: String },
     courierDetails: { type: String },

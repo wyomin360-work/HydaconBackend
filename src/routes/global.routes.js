@@ -26,6 +26,12 @@ const campaignsRoutes = require("../modules/campaigns/campaigns.routes");
 const campaignsPaths = require("../modules/campaigns/campaigns.paths");
 const giftPaths = require("../modules/gift/gift.paths");
 const giftRoutes = require("../modules/gift/gift.routes");
+const scratchCardsRoutes = require("../modules/scratch-cards/scratch-cards.routes");
+const scratchCardsPaths = require("../modules/scratch-cards/scratch-cards.paths");
+const contestsRoutes = require("../modules/contests/contests.routes");
+const contestsPaths = require("../modules/contests/contests.paths");
+const eventsRoutes = require("../modules/events/events.routes");
+const eventsPaths = require("../modules/events/events.paths");
 
 const globalRoutes = express.Router();
 
@@ -42,5 +48,8 @@ globalRoutes.use(kycPaths.root, kycRoutes);
 globalRoutes.use(loyaltyPaths.root, loyaltyRoutes);
 globalRoutes.use(campaignsPaths.root, campaignsRoutes);
 globalRoutes.use(giftPaths.root, giftRoutes);
+globalRoutes.use(scratchCardsPaths.root, scratchCardsRoutes);
+globalRoutes.use(contestsPaths.root, contestsRoutes);
+globalRoutes.use(eventsPaths.root, eventsRoutes);
 
 module.exports = globalRoutes;
