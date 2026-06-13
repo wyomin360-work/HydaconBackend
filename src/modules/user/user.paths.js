@@ -8,6 +8,8 @@ module.exports = {
   updateProfile: "/profile/update",
   profilePhoto: "/profile/photo",
   flagUser: "/flag/:id",
+  toggleStatus: "/status/:id",
+  deleteUser: "/delete/:id",
   updatePreferences: "/preference/update",
   fcmToken: "/fcm-token",
   phone: {

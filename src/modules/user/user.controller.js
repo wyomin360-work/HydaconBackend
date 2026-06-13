@@ -170,3 +170,16 @@ exports.flagUser = async (req, res, next) => {
   const response = await userService.flagUser(targetUserId, data);
   return sendResponse(res, response);
 };
+
+exports.toggleUserStatus = async (req, res, next) => {
+  const targetUserId = req?.params?.id;
+  const data = req?.body;
+  const response = await userService.toggleUserStatus(targetUserId, data);
+  return sendResponse(res, response);
+};
+
+exports.deleteUser = async (req, res, next) => {
+  const targetUserId = req?.params?.id;
+  const response = await userService.deleteUser(targetUserId);
+  return sendResponse(res, response);
+};
