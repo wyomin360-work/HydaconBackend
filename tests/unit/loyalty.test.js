@@ -18,8 +18,14 @@ jest.mock("../../src/schemas/user-tier-progress.schema");
 jest.mock("../../src/schemas/loyalty-transaction.schema");
 jest.mock("../../src/schemas/user.schema");
 jest.mock("../../src/functions/fcm", () => ({
-  sendFcmNotifications: jest.fn(),
+  sendFcmNotifications: jest.fn().mockResolvedValue({}),
 }));
+jest.mock("../../src/modules/loyalty/loyalty-audit.service", () => ({
+  logConfigurationAudit: jest.fn().mockResolvedValue({}),
+  buildChanges: jest.fn().mockReturnValue([]),
+  createTierConfigHistorySnapshot: jest.fn().mockResolvedValue({}),
+}));
+const loyaltyAuditService = require("../../src/modules/loyalty/loyalty-audit.service");
 
 describe("Loyalty and Tier Progression Engine", () => {
   let mockUser, mockTiers, mockSeason, mockConfigs, mockProgress;
@@ -95,6 +101,54 @@ describe("Loyalty and Tier Progression Engine", () => {
       expect(progress.qualificationPoints).toBe(50);
     });
 
+    it("should calculate progressPercentage using the difference between current tier QP and (next tier QP - 1)", async () => {
+      // Mock getOrCreateUserProgress mock returned via findOneAndUpdate
+      UserTierProgress.findOneAndUpdate = jest.fn().mockReturnValue({
+        populate: jest.fn().mockResolvedValue(mockProgress),
+      });
+
+      UserTierProgress.findById = jest.fn().mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockResolvedValue({
+          _id: "progress123",
+          userId: "user123",
+          seasonId: "season123",
+          currentTierId: mockTiers[0], // Beginner
+          qualificationPoints: 50,
+        }),
+      });
+
+      TierConfiguration.findOne = jest.fn();
+      // Call 1: Next config (Bronze, threshold 100)
+      TierConfiguration.findOne.mockReturnValueOnce({
+        populate: jest.fn().mockReturnThis(),
+        sort: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockResolvedValue({
+          tierId: mockTiers[1], // Bronze
+          qualificationThreshold: 100,
+        }),
+      });
+      // Call 2: Current tier threshold (Beginner, threshold 0)
+      TierConfiguration.findOne.mockReturnValueOnce({
+        select: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockResolvedValue({
+          qualificationThreshold: 0,
+        }),
+      });
+      // Call 3: Active configuration point multiplier (1.0)
+      TierConfiguration.findOne.mockReturnValueOnce({
+        lean: jest.fn().mockResolvedValue({
+          pointMultiplier: 1.0,
+        }),
+      });
+
+      const summary = await loyaltyService.getUserLoyaltySummary("user123");
+
+      // Formula: (50 - 0) / ((100 - 1) - 0) * 100 = 50 / 99 * 100 = 50.5050... => 51%
+      expect(summary.progressPercentage).toBe(51);
+      expect(summary.remainingPoints).toBe(50); // 100 - 50 = 50
+    });
+
     it("should fetch tier progression metadata correctly", async () => {
       TierConfiguration.find = jest.fn().mockReturnValue({
         populate: jest.fn().mockReturnThis(),
@@ -138,7 +192,11 @@ describe("Loyalty and Tier Progression Engine", () => {
       expect(mockProgress.qualificationPoints).toBe(75);
     });
 
-    it("should award campaign bonus affecting ONLY redeemable balance", async () => {
+    it("should award campaign bonus and sync QP to match redeemable balance if QP is lower", async () => {
+      UserTierProgress.findOneAndUpdate = jest.fn().mockReturnValue({
+        populate: jest.fn().mockResolvedValue(mockProgress),
+      });
+
       await loyaltyService.addBonusPoints("user123", 150, "Spring Campaign Reward");
 
       expect(LoyaltyTransaction.create).toHaveBeenCalledWith(expect.objectContaining({
@@ -147,7 +205,23 @@ describe("Loyalty and Tier Progression Engine", () => {
         source: LOYALTY_TRANSACTION_SOURCES.CAMPAIGN_BONUS,
       }));
       expect(mockUser.totalPoints).toBe(350); // 200 + 150
-      expect(mockProgress.qualificationPoints).toBe(50); // Unchanged
+      expect(mockProgress.qualificationPoints).toBe(350); // Synced to match totalPoints
+      expect(mockProgress.save).toHaveBeenCalled();
+    });
+
+    it("should award campaign bonus and leave QP unchanged if QP is already higher than redeemable balance", async () => {
+      mockProgress.qualificationPoints = 500;
+      mockProgress.save.mockClear();
+
+      UserTierProgress.findOneAndUpdate = jest.fn().mockReturnValue({
+        populate: jest.fn().mockResolvedValue(mockProgress),
+      });
+
+      await loyaltyService.addBonusPoints("user123", 150, "Spring Campaign Reward");
+
+      expect(mockUser.totalPoints).toBe(350); // 200 + 150
+      expect(mockProgress.qualificationPoints).toBe(500); // Unchanged since 500 >= 350
+      expect(mockProgress.save).not.toHaveBeenCalled();
     });
   });
 
@@ -238,6 +312,426 @@ describe("Loyalty and Tier Progression Engine", () => {
       await loyaltyController.deleteBenefit(mockReq, mockRes);
       expect(TierBenefit.findByIdAndDelete).toHaveBeenCalledWith("someId");
       expect(mockRes.status).toHaveBeenCalledWith(200);
+    });
+  });
+
+  describe("Tier Configuration Overlap Validation", () => {
+    let mockSeasonActive, mockSeasonInactive, mockTiersList;
+
+    beforeEach(() => {
+      mockSeasonActive = {
+        _id: "seasonActive",
+        name: "Active Season",
+        active: true,
+      };
+
+      mockSeasonInactive = {
+        _id: "seasonInactive",
+        name: "Inactive Season",
+        active: false,
+      };
+
+      mockTiersList = [
+        { _id: "tierBeginner", name: "Beginner", key: "beginner", rank: 0 },
+        { _id: "tierBronze", name: "Bronze", key: "bronze", rank: 1 },
+        { _id: "tierSilver", name: "Silver", key: "silver", rank: 2 },
+      ];
+
+      const activeSeasonQuery = Promise.resolve(mockSeasonActive);
+      activeSeasonQuery.lean = jest.fn().mockResolvedValue(mockSeasonActive);
+      LoyaltySeason.findById.mockReturnValue(activeSeasonQuery);
+
+      Tier.findById.mockImplementation((id) => {
+        const t = mockTiersList.find(x => x._id === id);
+        const tierQuery = Promise.resolve(t);
+        tierQuery.lean = jest.fn().mockResolvedValue(t);
+        return tierQuery;
+      });
+    });
+
+    it("should allow creating a config if the threshold is strictly ascending by rank", async () => {
+      TierConfiguration.find.mockReturnValue({
+        populate: jest.fn().mockResolvedValue([
+          {
+            _id: "configBeginner",
+            seasonId: "seasonActive",
+            tierId: mockTiersList[0],
+            qualificationThreshold: 0,
+          }
+        ])
+      });
+
+      TierConfiguration.create.mockResolvedValue({
+        _id: "newConfig",
+        seasonId: "seasonActive",
+        tierId: "tierBronze",
+        qualificationThreshold: 100,
+        toObject: jest.fn().mockReturnThis(),
+      });
+
+      const result = await loyaltyService.createTierConfiguration("admin123", {
+        seasonId: "seasonActive",
+        tierId: "tierBronze",
+        qualificationThreshold: 100,
+      });
+
+      expect(result.qualificationThreshold).toBe(100);
+      expect(TierConfiguration.create).toHaveBeenCalled();
+    });
+
+    it("should throw a conflict error if new config threshold is <= lower rank tier threshold", async () => {
+      TierConfiguration.find.mockReturnValue({
+        populate: jest.fn().mockResolvedValue([
+          {
+            _id: "configBeginner",
+            seasonId: "seasonActive",
+            tierId: mockTiersList[0],
+            qualificationThreshold: 100,
+          }
+        ])
+      });
+
+      await expect(
+        loyaltyService.createTierConfiguration("admin123", {
+          seasonId: "seasonActive",
+          tierId: "tierBronze",
+          qualificationThreshold: 50,
+        })
+      ).rejects.toThrow();
+    });
+
+    it("should throw a conflict error if updated threshold >= higher rank tier threshold", async () => {
+      const mockConfigPopulated = {
+        _id: "configBronze",
+        seasonId: mockSeasonActive,
+        tierId: mockTiersList[1],
+        qualificationThreshold: 100,
+        toObject: jest.fn().mockReturnValue({ qualificationThreshold: 100 }),
+      };
+      const configQuery = Promise.resolve(mockConfigPopulated);
+      configQuery.populate = jest.fn().mockReturnValue(configQuery);
+      TierConfiguration.findById.mockReturnValue(configQuery);
+
+      TierConfiguration.find.mockReturnValue({
+        populate: jest.fn().mockResolvedValue([
+          {
+            _id: "configSilver",
+            seasonId: "seasonActive",
+            tierId: mockTiersList[2],
+            qualificationThreshold: 500,
+          }
+        ])
+      });
+
+      await expect(
+        loyaltyService.updateTierConfiguration("admin123", "configBronze", {
+          qualificationThreshold: 600,
+        })
+      ).rejects.toThrow();
+    });
+
+    it("should bypass validation if the season is inactive", async () => {
+      const inactiveSeasonQuery = Promise.resolve(mockSeasonInactive);
+      inactiveSeasonQuery.lean = jest.fn().mockResolvedValue(mockSeasonInactive);
+      LoyaltySeason.findById.mockReturnValue(inactiveSeasonQuery);
+
+      TierConfiguration.find.mockReturnValue({
+        populate: jest.fn().mockResolvedValue([
+          {
+            _id: "configBeginner",
+            seasonId: "seasonInactive",
+            tierId: mockTiersList[0],
+            qualificationThreshold: 100,
+          }
+        ])
+      });
+
+      TierConfiguration.create.mockResolvedValue({
+        _id: "newConfig",
+        seasonId: "seasonInactive",
+        tierId: "tierBronze",
+        qualificationThreshold: 50,
+        toObject: jest.fn().mockReturnThis(),
+      });
+
+      const result = await loyaltyService.createTierConfiguration("admin123", {
+        seasonId: "seasonInactive",
+        tierId: "tierBronze",
+        qualificationThreshold: 50,
+      });
+
+      expect(result.qualificationThreshold).toBe(50);
+    });
+  });
+
+  describe("Tier Recalculation on Configuration Threshold Change", () => {
+    let mockSeasonActive, mockTiersList, mockConfigsList;
+
+    beforeEach(() => {
+      mockSeasonActive = {
+        _id: "seasonActive",
+        name: "Active Season",
+        active: true,
+      };
+
+      mockTiersList = [
+        { _id: "tierBeginner", name: "Beginner", key: "beginner", rank: 0 },
+        { _id: "tierBronze", name: "Bronze", key: "bronze", rank: 1 },
+        { _id: "tierSilver", name: "Silver", key: "silver", rank: 2 },
+      ];
+
+      mockConfigsList = [
+        { tierId: mockTiersList[0], qualificationThreshold: 0 },
+        { tierId: mockTiersList[1], qualificationThreshold: 100 },
+        { tierId: mockTiersList[2], qualificationThreshold: 500 },
+      ];
+
+      jest.clearAllMocks();
+      LoyaltySeason.findById.mockReturnValue({
+        lean: jest.fn().mockResolvedValue(mockSeasonActive),
+      });
+      Tier.findById.mockImplementation((id) => {
+        const t = mockTiersList.find(x => x._id === id);
+        return { lean: jest.fn().mockResolvedValue(t) };
+      });
+      
+      UserTierProgress.bulkWrite = jest.fn().mockResolvedValue({});
+      User.bulkWrite = jest.fn().mockResolvedValue({});
+      User.find = jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockResolvedValue([{
+          _id: "user123",
+          fcmTokens: ["token1"],
+          enableNotification: true,
+        }]),
+      });
+    });
+
+    it("should upgrade a user if the threshold of the next tier is lowered below their current QP", async () => {
+      loyaltyAuditService.buildChanges.mockReturnValue([
+        { field: "qualificationThreshold", oldValue: 500, newValue: 110 },
+      ]);
+      const mockProgress = {
+        _id: "progress123",
+        userId: "user123",
+        seasonId: "seasonActive",
+        currentTierId: mockTiersList[1],
+        qualificationPoints: 120,
+      };
+
+      UserTierProgress.find.mockReturnValue({
+        populate: jest.fn().mockResolvedValue([mockProgress]),
+      });
+
+      const mockConfigPopulated = {
+        _id: "configSilver",
+        seasonId: mockSeasonActive,
+        tierId: mockTiersList[2],
+        qualificationThreshold: 500,
+        toObject: jest.fn().mockReturnValue({ qualificationThreshold: 500 }),
+      };
+      
+      const configQuery = Promise.resolve(mockConfigPopulated);
+      configQuery.populate = jest.fn().mockReturnValue(configQuery);
+      TierConfiguration.findById.mockReturnValue(configQuery);
+
+      TierConfiguration.findByIdAndUpdate.mockResolvedValue({
+        _id: "configSilver",
+        seasonId: "seasonActive",
+        tierId: "tierSilver",
+        qualificationThreshold: 110,
+        toObject: jest.fn().mockReturnValue({ qualificationThreshold: 110 }),
+      });
+
+      TierConfiguration.find.mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockResolvedValue([
+          { tierId: mockTiersList[0], qualificationThreshold: 0 },
+          { tierId: mockTiersList[1], qualificationThreshold: 100 },
+          { tierId: mockTiersList[2], qualificationThreshold: 110 },
+        ]),
+      });
+
+      TierConfiguration.find.mockReturnValueOnce({
+        populate: jest.fn().mockResolvedValue([
+          { tierId: mockTiersList[0], qualificationThreshold: 0 },
+          { tierId: mockTiersList[1], qualificationThreshold: 100 },
+        ]),
+      });
+
+      await loyaltyService.updateTierConfiguration("admin123", "configSilver", {
+        qualificationThreshold: 110,
+      });
+
+      expect(UserTierProgress.bulkWrite).toHaveBeenCalledWith(expect.arrayContaining([
+        expect.objectContaining({
+          updateOne: expect.objectContaining({
+            filter: { _id: "progress123" },
+            update: expect.objectContaining({
+              $set: expect.objectContaining({
+                currentTierId: "tierSilver",
+              })
+            })
+          })
+        })
+      ]));
+
+      expect(User.bulkWrite).toHaveBeenCalledWith(expect.arrayContaining([
+        expect.objectContaining({
+          updateOne: expect.objectContaining({
+            filter: { _id: "user123" },
+            update: expect.objectContaining({
+              $set: expect.objectContaining({
+                currentTierId: "tierSilver",
+              })
+            })
+          })
+        })
+      ]));
+    });
+
+    it("should downgrade a user if the threshold of their current tier is raised above their current QP", async () => {
+      loyaltyAuditService.buildChanges.mockReturnValue([
+        { field: "qualificationThreshold", oldValue: 100, newValue: 150 },
+      ]);
+      const mockProgress = {
+        _id: "progress123",
+        userId: "user123",
+        seasonId: "seasonActive",
+        currentTierId: mockTiersList[1],
+        qualificationPoints: 120,
+      };
+
+      UserTierProgress.find.mockReturnValue({
+        populate: jest.fn().mockResolvedValue([mockProgress]),
+      });
+
+      const mockConfigPopulated = {
+        _id: "configBronze",
+        seasonId: mockSeasonActive,
+        tierId: mockTiersList[1],
+        qualificationThreshold: 100,
+        toObject: jest.fn().mockReturnValue({ qualificationThreshold: 100 }),
+      };
+      
+      const configQuery = Promise.resolve(mockConfigPopulated);
+      configQuery.populate = jest.fn().mockReturnValue(configQuery);
+      TierConfiguration.findById.mockReturnValue(configQuery);
+
+      TierConfiguration.findByIdAndUpdate.mockResolvedValue({
+        _id: "configBronze",
+        seasonId: "seasonActive",
+        tierId: "tierBronze",
+        qualificationThreshold: 150,
+        toObject: jest.fn().mockReturnValue({ qualificationThreshold: 150 }),
+      });
+
+      TierConfiguration.find.mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockResolvedValue([
+          { tierId: mockTiersList[0], qualificationThreshold: 0 },
+          { tierId: mockTiersList[1], qualificationThreshold: 150 },
+          { tierId: mockTiersList[2], qualificationThreshold: 500 },
+        ]),
+      });
+
+      TierConfiguration.find.mockReturnValueOnce({
+        populate: jest.fn().mockResolvedValue([
+          { tierId: mockTiersList[0], qualificationThreshold: 0 },
+          { tierId: mockTiersList[2], qualificationThreshold: 500 },
+        ]),
+      });
+
+      await loyaltyService.updateTierConfiguration("admin123", "configBronze", {
+        qualificationThreshold: 150,
+      });
+
+      expect(UserTierProgress.bulkWrite).toHaveBeenCalledWith(expect.arrayContaining([
+        expect.objectContaining({
+          updateOne: expect.objectContaining({
+            filter: { _id: "progress123" },
+            update: expect.objectContaining({
+              $set: expect.objectContaining({
+                currentTierId: "tierBeginner",
+              })
+            })
+          })
+        })
+      ]));
+
+      expect(User.bulkWrite).toHaveBeenCalledWith(expect.arrayContaining([
+        expect.objectContaining({
+          updateOne: expect.objectContaining({
+            filter: { _id: "user123" },
+            update: expect.objectContaining({
+              $set: expect.objectContaining({
+                currentTierId: "tierBeginner",
+              })
+            })
+          })
+        })
+      ]));
+    });
+  });
+
+  describe("Active Tier Range Overlap Validation", () => {
+    let mockLean;
+
+    beforeEach(() => {
+      Tier.findById = jest.fn();
+      mockLean = jest.fn();
+      Tier.find = jest.fn().mockReturnValue({
+        lean: mockLean,
+      });
+    });
+
+    it("should allow active tier creation if there are no overlaps with other active tiers", async () => {
+      mockLean.mockResolvedValue([
+        { _id: "tierBeginner", name: "Beginner", qualificationPoint: 0, threshold: 100, active: true },
+        { _id: "tierBronze", name: "Bronze", qualificationPoint: 100, threshold: 400, active: true },
+      ]);
+
+      const payload = {
+        name: "Silver",
+        qualificationPoint: 500,
+        threshold: 500,
+        active: true,
+      };
+
+      await expect(loyaltyService.validateTierRange(payload)).resolves.not.toThrow();
+    });
+
+    it("should throw error if new active tier overlaps with an existing active tier", async () => {
+      mockLean.mockResolvedValue([
+        { _id: "tierBeginner", name: "Beginner", qualificationPoint: 0, threshold: 100, active: true },
+        { _id: "tierBronze", name: "Bronze", qualificationPoint: 100, threshold: 400, active: true },
+      ]);
+
+      const payload = {
+        name: "Conflicting Tier",
+        qualificationPoint: 400,
+        threshold: 500,
+        active: true,
+      };
+
+      await expect(loyaltyService.validateTierRange(payload)).rejects.toThrow(
+        /Conflict detected: The active range/
+      );
+    });
+
+    it("should bypass overlap check if the new tier is inactive", async () => {
+      mockLean.mockResolvedValue([
+        { _id: "tierBeginner", name: "Beginner", qualificationPoint: 0, threshold: 100, active: true },
+      ]);
+
+      const payload = {
+        name: "Conflicting Inactive Tier",
+        qualificationPoint: 50,
+        threshold: 100,
+        active: false,
+      };
+
+      await expect(loyaltyService.validateTierRange(payload)).resolves.not.toThrow();
     });
   });
 });

@@ -8,6 +8,8 @@ const tierSchema = new mongoose.Schema(
     badgeUrl: { type: String, default: "" },
     rank: { type: Number, required: true, unique: true }, // 0: Beginner, 1: Bronze, etc.
     active: { type: Boolean, default: true },
+    qualificationPoint: { type: Number, default: 0 },
+    threshold: { type: Number, default: 0 },
   },
   {
     timestamps: true,

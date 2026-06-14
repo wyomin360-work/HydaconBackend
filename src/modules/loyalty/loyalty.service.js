@@ -15,6 +15,8 @@ const {
   createTierConfigHistorySnapshot,
 } = require("./loyalty-audit.service");
 const { LOYALTY_TRANSACTION_TYPES, LOYALTY_TRANSACTION_SOURCES } = require("../../constants/loyalty");
+const { APP_NOTIFICATIONS } = require("../../constants/notifications");
+const { formatNotification } = require("../../utils/heplers");
 
 function normalizeDateRange(startDate, endDate) {
   const start = new Date(startDate);
@@ -51,11 +53,11 @@ async function seedDefaultLoyaltyData() {
   let tierCount = await Tier.countDocuments();
   if (tierCount === 0) {
     const defaultTiers = [
-      { name: "Beginner", key: "beginner", colorIdentity: "#8E8E93", badgeUrl: "badge_beginner", rank: 0 },
-      { name: "Bronze", key: "bronze", colorIdentity: "#CD7F32", badgeUrl: "badge_bronze", rank: 1 },
-      { name: "Silver", key: "silver", colorIdentity: "#C0C0C0", badgeUrl: "badge_silver", rank: 2 },
-      { name: "Gold", key: "gold", colorIdentity: "#FFD700", badgeUrl: "badge_gold", rank: 3 },
-      { name: "Platinum", key: "platinum", colorIdentity: "#E5E4E2", badgeUrl: "badge_platinum", rank: 4 },
+      { name: "Beginner", key: "beginner", colorIdentity: "#8E8E93", badgeUrl: "badge_beginner", rank: 0, qualificationPoint: 0, threshold: 100 },
+      { name: "Bronze", key: "bronze", colorIdentity: "#CD7F32", badgeUrl: "badge_bronze", rank: 1, qualificationPoint: 100, threshold: 400 },
+      { name: "Silver", key: "silver", colorIdentity: "#C0C0C0", badgeUrl: "badge_silver", rank: 2, qualificationPoint: 500, threshold: 500 },
+      { name: "Gold", key: "gold", colorIdentity: "#FFD700", badgeUrl: "badge_gold", rank: 3, qualificationPoint: 1000, threshold: 1000 },
+      { name: "Platinum", key: "platinum", colorIdentity: "#E5E4E2", badgeUrl: "badge_platinum", rank: 4, qualificationPoint: 2000, threshold: 100000 },
     ];
     await Tier.create(defaultTiers);
     console.log("🌱 Default loyalty tiers successfully seeded.");
@@ -214,6 +216,19 @@ async function addBonusPoints(userId, points, description, referenceId = null) {
   user.lifetimePoints = (user.lifetimePoints || 0) + points;
   await user.save();
 
+  // 3. Sync QP to ensure UserTierProgress.qualificationPoints >= user.totalPoints
+  if (activeSeason) {
+    const progress = await getOrCreateUserProgress(userId);
+    if (progress && progress.qualificationPoints < user.totalPoints) {
+      progress.qualificationPoints = user.totalPoints;
+      progress.lastEvaluatedAt = new Date();
+      await progress.save();
+
+      // Evaluate dynamic upgrades after modifying progress points
+      await evaluateTierUpgrade(userId, activeSeason._id);
+    }
+  }
+
   return { message: "Bonus points successfully added", points };
 }
 
@@ -271,8 +286,11 @@ async function evaluateTierUpgrade(userId, seasonId) {
         try {
           await sendFcmNotifications(
             user.fcmTokens,
-            "Tier Upgraded! 🎉",
-            `Awesome! You've been upgraded from ${oldTierName} to ${newTier.name} tier! 🚀`
+            APP_NOTIFICATIONS.loyalty.tierUpgraded.title,
+            formatNotification(APP_NOTIFICATIONS.loyalty.tierUpgraded.body, {
+              oldTierName,
+              newTierName: newTier.name,
+            })
           );
         } catch (error) {
           console.error("⚠️ Failed to send tier upgrade FCM notification:", error);
@@ -414,7 +432,7 @@ async function getUserLoyaltySummary(userId) {
     : null;
 
     const startPoints = currentThreshold ? currentThreshold.qualificationThreshold : 0;
-    const targetPoints = nextConfig.qualificationThreshold;
+    const targetPoints = nextConfig.qualificationThreshold - 1;
     const denominator = targetPoints - startPoints;
 
     if (denominator > 0) {
@@ -836,6 +854,89 @@ async function deactivateSeason(adminId, seasonId) {
   return deactivated;
 }
 
+async function validateTierRange(payload, excludeTierId = null) {
+  let active = payload.active;
+  let qualificationPoint = payload.qualificationPoint;
+  let threshold = payload.threshold;
+
+  if (excludeTierId) {
+    const existing = await Tier.findById(excludeTierId).lean();
+    if (existing) {
+      if (active === undefined) active = existing.active;
+      if (qualificationPoint === undefined) qualificationPoint = existing.qualificationPoint;
+      if (threshold === undefined) threshold = existing.threshold;
+    }
+  }
+
+  if (active !== false) {
+    const qp = Number(qualificationPoint || 0);
+    const th = Number(threshold || 0);
+    if (qp < 0) {
+      sendFailResponse("Qualification point must be a non-negative number");
+    }
+    if (th < 0) {
+      sendFailResponse("Threshold must be a non-negative number");
+    }
+
+    const start = qp;
+    const end = qp + th;
+
+    const query = { active: true };
+    if (excludeTierId) {
+      query._id = { $ne: excludeTierId };
+    }
+
+    const activeTiers = await Tier.find(query).lean();
+
+    for (const tier of activeTiers) {
+      const tierQp = Number(tier.qualificationPoint || 0);
+      const tierTh = Number(tier.threshold || 0);
+      const tierStart = tierQp;
+      const tierEnd = tierQp + tierTh;
+
+      if (start < tierEnd && tierStart < end) {
+        sendFailResponse(
+          `Conflict detected: The active range [${start}, ${end}) overlaps with existing active tier "${tier.name}" [${tierStart}, ${tierEnd}).`
+        );
+      }
+    }
+  }
+}
+
+async function validateTierConfigurationThreshold(seasonId, tierId, newThreshold, excludeConfigId = null) {
+  const season = await LoyaltySeason.findById(seasonId).lean();
+  if (season && season.active) {
+    const currentTier = await Tier.findById(tierId).lean();
+    if (!currentTier) return;
+
+    const allConfigs = await TierConfiguration.find({
+      seasonId,
+      isArchived: { $ne: true },
+      _id: { $ne: excludeConfigId },
+    }).populate("tierId");
+
+    for (const config of allConfigs) {
+      if (!config.tierId) continue;
+
+      if (config.tierId.rank < currentTier.rank) {
+        if (config.qualificationThreshold >= newThreshold) {
+          sendFailResponse(
+            `Qualification threshold conflicts with lower rank tier "${config.tierId.name}" (threshold: ${config.qualificationThreshold}). Thresholds must be strictly ascending.`
+          );
+        }
+      }
+
+      if (config.tierId.rank > currentTier.rank) {
+        if (config.qualificationThreshold <= newThreshold) {
+          sendFailResponse(
+            `Qualification threshold conflicts with higher rank tier "${config.tierId.name}" (threshold: ${config.qualificationThreshold}). Thresholds must be strictly ascending.`
+          );
+        }
+      }
+    }
+  }
+}
+
 async function createTierConfiguration(adminId, payload) {
   const season = await LoyaltySeason.findById(payload.seasonId).lean();
   if (!season || season.isArchived) {
@@ -846,6 +947,8 @@ async function createTierConfiguration(adminId, payload) {
   if (!tier) {
     sendFailResponse("Tier not found", 404);
   }
+
+  await validateTierConfigurationThreshold(payload.seasonId, payload.tierId, payload.qualificationThreshold);
 
   const config = await TierConfiguration.create(payload);
   await createTierConfigHistorySnapshot({ configDoc: config, changedBy: adminId });
@@ -870,10 +973,127 @@ async function createTierConfiguration(adminId, payload) {
   return config;
 }
 
+async function recalculateSeasonTiers(seasonId) {
+  const configs = await TierConfiguration.find({ seasonId, active: true, isArchived: { $ne: true } })
+    .populate("tierId")
+    .lean();
+
+  if (configs.length === 0) return;
+
+  const sortedConfigs = configs.sort((a, b) => b.qualificationThreshold - a.qualificationThreshold);
+  const rankZeroConfig = configs.find(c => c.tierId && c.tierId.rank === 0);
+
+  const progresses = await UserTierProgress.find({ seasonId }).populate("currentTierId");
+
+  const progressBulkOps = [];
+  const userBulkOps = [];
+  const notificationsToSend = [];
+
+  for (const progress of progresses) {
+    let qualifiedConfig = null;
+    for (const config of sortedConfigs) {
+      if (progress.qualificationPoints >= config.qualificationThreshold) {
+        qualifiedConfig = config;
+        break;
+      }
+    }
+
+    if (!qualifiedConfig && rankZeroConfig) {
+      qualifiedConfig = rankZeroConfig;
+    }
+
+    if (qualifiedConfig && qualifiedConfig.tierId) {
+      const oldTier = progress.currentTierId;
+      const newTier = qualifiedConfig.tierId;
+
+      if (!oldTier || String(oldTier._id) !== String(newTier._id)) {
+        const oldTierName = oldTier?.name || "None";
+        const oldRank = oldTier?.rank || 0;
+        const newRank = newTier.rank || 0;
+        const isUpgrade = newRank > oldRank;
+        const lastEvaluatedAt = new Date();
+
+        progressBulkOps.push({
+          updateOne: {
+            filter: { _id: progress._id },
+            update: {
+              $set: {
+                previousTierId: oldTier?._id || null,
+                currentTierId: newTier._id,
+                lastEvaluatedAt,
+              }
+            }
+          }
+        });
+
+        userBulkOps.push({
+          updateOne: {
+            filter: { _id: progress.userId },
+            update: {
+              $set: {
+                currentTierId: newTier._id
+              }
+            }
+          }
+        });
+
+        notificationsToSend.push({
+          userId: progress.userId,
+          oldTierName,
+          newTierName: newTier.name,
+          isUpgrade,
+        });
+      }
+    }
+  }
+
+  if (progressBulkOps.length > 0) {
+    await Promise.all([
+      UserTierProgress.bulkWrite(progressBulkOps),
+      User.bulkWrite(userBulkOps),
+    ]);
+
+    const affectedUserIds = notificationsToSend.map(n => n.userId);
+    const users = await User.find({ _id: { $in: affectedUserIds } })
+      .select("fcmTokens enableNotification")
+      .lean();
+
+    const userMap = new Map(users.map(u => [String(u._id), u]));
+
+    for (const notif of notificationsToSend) {
+      const user = userMap.get(String(notif.userId));
+      if (user && user.fcmTokens?.length && user.enableNotification) {
+        const notifTemplate = notif.isUpgrade
+          ? APP_NOTIFICATIONS.loyalty.tierUpgraded
+          : APP_NOTIFICATIONS.loyalty.tierUpdated;
+
+        const title = notifTemplate.title;
+        const body = formatNotification(notifTemplate.body, {
+          oldTierName: notif.oldTierName,
+          newTierName: notif.newTierName,
+        });
+
+        sendFcmNotifications(user.fcmTokens, title, body).catch(error => {
+          console.error("⚠️ Failed to send tier adjustment FCM notification:", error);
+        });
+      }
+    }
+  }
+}
+
 async function updateTierConfiguration(adminId, configId, payload) {
   const existing = await TierConfiguration.findById(configId).populate("tierId").populate("seasonId");
   if (!existing) {
     sendFailResponse("Tier configuration not found", 404);
+  }
+
+  if (payload.qualificationThreshold !== undefined) {
+    await validateTierConfigurationThreshold(
+      existing.seasonId._id || existing.seasonId,
+      existing.tierId._id || existing.tierId,
+      payload.qualificationThreshold,
+      configId
+    );
   }
 
   const updated = await TierConfiguration.findByIdAndUpdate(configId, payload, { new: true });
@@ -897,6 +1117,11 @@ async function updateTierConfiguration(adminId, configId, payload) {
       tierName: existing?.tierId?.name || null,
       changes,
     });
+
+    const thresholdChanged = changes.some(c => c.field === "qualificationThreshold");
+    if (thresholdChanged && existing.seasonId && existing.seasonId.active) {
+      await recalculateSeasonTiers(existing.seasonId._id || existing.seasonId.id || existing.seasonId);
+    }
   }
 
   return updated;
@@ -1098,4 +1323,5 @@ module.exports = {
   archiveSeason,
   archiveTierConfiguration,
   getSeasonById,
+  validateTierRange,
 };

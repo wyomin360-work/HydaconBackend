@@ -32,8 +32,9 @@ async function getTierProgression(req, res) {
  * Admin API: Creates a new loyalty tier definition.
  */
 async function createTier(req, res) {
-  const { name, key, colorIdentity, badgeUrl, rank } = req.body;
-  const tier = await Tier.create({ name, key, colorIdentity, badgeUrl, rank });
+  const { name, key, colorIdentity, badgeUrl, rank, qualificationPoint, threshold, active } = req.body;
+  await loyaltyService.validateTierRange(req.body);
+  const tier = await Tier.create({ name, key, colorIdentity, badgeUrl, rank, qualificationPoint, threshold, active });
   return sendResponse(res, tier, 201);
 }
 
@@ -50,6 +51,7 @@ async function listTiers(req, res) {
  */
 async function updateTier(req, res) {
   const tierId = req.params.id;
+  await loyaltyService.validateTierRange(req.body, tierId);
   const tier = await Tier.findByIdAndUpdate(tierId, req.body, { new: true });
   return sendResponse(res, tier, 200);
 }
