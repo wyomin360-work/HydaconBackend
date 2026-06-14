@@ -19,10 +19,11 @@ async function verifyUser(req, res, next) {
 
   if (!verifiedToken) sendFailResponse("Token Expired", 401);
 
-  const user = await User.findById(verifiedToken.userId);
+  const user = await User.findById(verifiedToken.userId).populate("roleId");
   if (!user) sendFailResponse("User not found", 404);
 
   req.userId = verifiedToken?.userId;
+  req.user = user;
   next();
 }
 
@@ -48,6 +49,7 @@ async function verifyAdmin(req, res, next) {
   }
 
   req.userId = verifiedToken?.adminId;
+  req.user = admin;
   next();
 }
 
@@ -71,13 +73,15 @@ async function verifyAdminOrUser(req, res, next) {
   if (entity) {
     req.userId = verifiedToken.adminId;
     req.role = ROLES.ADMIN;
+    req.user = entity;
     return next();
   }
 
-  entity = await User.findById(verifiedToken.userId);
+  entity = await User.findById(verifiedToken.userId).populate("roleId");
   if (entity) {
     req.userId = verifiedToken.userId;
     req.role = ROLES.USER;
+    req.user = entity;
     return next();
   }
 
