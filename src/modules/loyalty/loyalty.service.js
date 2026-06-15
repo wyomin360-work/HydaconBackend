@@ -259,13 +259,22 @@ async function processQrScanPoints(userId, points, referenceId) {
     referenceId,
   });
 
-  // 2. Increment user QP
-  progress.currentPoint += points;
-  progress.lastEvaluatedAt = new Date();
-  await progress.save();
+  // 2. Increment user QP atomically using $inc
+  const updatedProgress = await UserTierProgress.findOneAndUpdate(
+    { userId, seasonId: progress.seasonId },
+    {
+      $inc: { currentPoint: points },
+      $set: { lastEvaluatedAt: new Date() },
+    },
+    { new: true }
+  );
+
+  if (!updatedProgress) {
+    return null;
+  }
 
   // 3. Evaluate dynamic upgrades
-  const updatedProgress = await evaluateTierUpgrade(userId, progress.seasonId);
+  await evaluateTierUpgrade(userId, progress.seasonId);
 
   return updatedProgress;
 }
@@ -290,18 +299,27 @@ async function addBonusPoints(userId, points, description, referenceId = null) {
     referenceId,
   });
 
-  // 2. Add to user totalPoints
-  user.totalPoints += points;
-  user.lifetimePoints = (user.lifetimePoints || 0) + points;
-  await user.save();
+  // 2. Add to user totalPoints atomically using $inc
+  const updatedUser = await User.findByIdAndUpdate(
+    userId,
+    {
+      $inc: { totalPoints: points, lifetimePoints: points },
+    },
+    { new: true }
+  );
 
-  // 3. Sync QP to ensure UserTierProgress.currentPoint >= user.totalPoints
+  // 3. Sync QP to ensure UserTierProgress.currentPoint >= updatedUser.totalPoints
   if (activeSeason) {
     const progress = await getOrCreateUserProgress(userId);
-    if (progress && progress.currentPoint < user.totalPoints) {
-      progress.currentPoint = user.totalPoints;
-      progress.lastEvaluatedAt = new Date();
-      await progress.save();
+    if (progress && progress.currentPoint < updatedUser.totalPoints) {
+      // Use atomic max update or direct set to sync the points
+      await UserTierProgress.findOneAndUpdate(
+        { userId, seasonId: activeSeason._id },
+        {
+          $max: { currentPoint: updatedUser.totalPoints },
+          $set: { lastEvaluatedAt: new Date() },
+        }
+      );
 
       // Evaluate dynamic upgrades after modifying progress points
       await evaluateTierUpgrade(userId, activeSeason._id);

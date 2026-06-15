@@ -189,12 +189,15 @@ async function createRedeem(redeemData, reqUser = null) {
   reward.redeemedBy = userId;
   reward.active = false;
 
-  // update user
-  user.totalPoints += weightedPoints;
-  user.lifetimePoints = (user.lifetimePoints || 0) + weightedPoints;
+  // update user atomically using $inc
+  await User.findByIdAndUpdate(userId, {
+    $inc: {
+      totalPoints: weightedPoints,
+      lifetimePoints: weightedPoints,
+    },
+  });
 
-  // save
-  await user.save();
+  // save reward
   await reward.save();
 
   // Process QP & Tier Upgrade in loyalty engine

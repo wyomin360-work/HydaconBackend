@@ -286,12 +286,17 @@ describe("Loyalty and Tier Progression Engine", () => {
           source: LOYALTY_TRANSACTION_SOURCES.QR_SCAN,
         }),
       );
-      expect(mockProgress.currentPoint).toBe(75);
+      expect(UserTierProgress.findOneAndUpdate).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({ $inc: { currentPoint: 25 } }),
+        expect.any(Object)
+      );
     });
 
     it("should award campaign bonus and sync QP to match redeemable balance if QP is lower", async () => {
+      User.findByIdAndUpdate = jest.fn().mockResolvedValue({ ...mockUser, totalPoints: 350 });
       UserTierProgress.findOneAndUpdate = jest.fn().mockReturnValue({
-        populate: jest.fn().mockResolvedValue(mockProgress),
+        populate: jest.fn().mockResolvedValue(mockProgress)
       });
 
       await loyaltyService.addBonusPoints(
@@ -307,17 +312,18 @@ describe("Loyalty and Tier Progression Engine", () => {
           source: LOYALTY_TRANSACTION_SOURCES.CAMPAIGN_BONUS,
         }),
       );
-      expect(mockUser.totalPoints).toBe(350); // 200 + 150
-      expect(mockProgress.currentPoint).toBe(350); // Synced to match totalPoints
-      expect(mockProgress.save).toHaveBeenCalled();
+      expect(User.findByIdAndUpdate).toHaveBeenCalledWith("user123", expect.objectContaining({ $inc: { totalPoints: 150, lifetimePoints: 150 } }), expect.any(Object));
+      expect(UserTierProgress.findOneAndUpdate).toHaveBeenCalledWith(
+        { userId: "user123", seasonId: "season123" },
+        expect.objectContaining({ $max: { currentPoint: 350 } })
+      );
     });
 
     it("should award campaign bonus and leave QP unchanged if QP is already higher than redeemable balance", async () => {
       mockProgress.currentPoint = 500;
-      mockProgress.save.mockClear();
-
+      User.findByIdAndUpdate = jest.fn().mockResolvedValue({ ...mockUser, totalPoints: 350 });
       UserTierProgress.findOneAndUpdate = jest.fn().mockReturnValue({
-        populate: jest.fn().mockResolvedValue(mockProgress),
+        populate: jest.fn().mockResolvedValue(mockProgress)
       });
 
       await loyaltyService.addBonusPoints(
@@ -326,9 +332,8 @@ describe("Loyalty and Tier Progression Engine", () => {
         "Spring Campaign Reward",
       );
 
-      expect(mockUser.totalPoints).toBe(350); // 200 + 150
-      expect(mockProgress.currentPoint).toBe(500); // Unchanged since 500 >= 350
-      expect(mockProgress.save).not.toHaveBeenCalled();
+      expect(User.findByIdAndUpdate).toHaveBeenCalledWith("user123", expect.objectContaining({ $inc: { totalPoints: 150, lifetimePoints: 150 } }), expect.any(Object));
+      expect(UserTierProgress.findOneAndUpdate).toHaveBeenCalledTimes(1); // Only called by getOrCreateUserProgress
     });
   });
 
@@ -1137,8 +1142,11 @@ describe("Loyalty and Tier Progression Engine", () => {
       ];
 
       LoyaltySeason.findOne
-        .mockResolvedValueOnce(endedSeason)
-        .mockResolvedValueOnce(nextSeason);
+        .mockResolvedValueOnce(endedSeason) // 1. endedSeason for rollover
+        .mockResolvedValueOnce(nextSeason) // 2. nextSeason for rollover lookup
+        .mockResolvedValueOnce(nextSeason); // 3. seasonToActivate
+
+      LoyaltySeason.find.mockResolvedValueOnce([endedSeason]); // for deactivating old active seasons
 
       UserTierProgress.find.mockResolvedValue(mockEndedProgress);
       

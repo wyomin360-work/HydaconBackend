@@ -23,6 +23,7 @@ const loyaltySeasonSchema = new mongoose.Schema(
     deactivatedAt: { type: Date, default: null },
     isArchived: { type: Boolean, default: false, index: true },
     bannerImages: { type: [String], default: [] },
+    rolloverProcessed: { type: Boolean, default: false },
   },
   {
     timestamps: true,

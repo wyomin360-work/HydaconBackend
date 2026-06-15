@@ -46,19 +46,6 @@ const userTierProgressSchema = new mongoose.Schema(
 // Compound index to ensure one progress entry per user per season
 userTierProgressSchema.index({ userId: 1, seasonId: 1 }, { unique: true });
 
-userTierProgressSchema.pre("save", async function (next) {
-  try {
-    const User = mongoose.model("User");
-    const user = await User.findById(this.userId);
-    if (user && this.currentPoint < user.totalPoints) {
-      this.currentPoint = user.totalPoints;
-    }
-  } catch (err) {
-    console.error("Error in UserTierProgress pre-save hook:", err);
-  }
-  next();
-});
-
 const UserTierProgress = mongoose.model(
   "UserTierProgress",
   userTierProgressSchema,

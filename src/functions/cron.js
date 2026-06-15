@@ -20,40 +20,26 @@ function initCronJobs() {
       console.log("🔄 Running Season Rollover Task...");
       const now = new Date();
 
-      // Find if the currently active season has ended
-      const activeSeason = await LoyaltySeason.findOne({
-        active: true,
+      // 1. Process rollover for any ended season that hasn't been rolled over yet
+      const endedSeason = await LoyaltySeason.findOne({
+        endDate: { $lt: now },
         isArchived: { $ne: true },
+        rolloverProcessed: false,
       });
-      if (activeSeason && activeSeason.endDate < now) {
-        console.log(
-          `Season ${activeSeason.name} ended. Processing rollover...`,
-        );
 
-        // Find the next season to activate
+      if (endedSeason) {
+        console.log(`Season ${endedSeason.name} ended. Processing rollover...`);
+
+        // Find the next season to rollover into
         const nextSeason = await LoyaltySeason.findOne({
-          active: false,
           isArchived: { $ne: true },
-          startDate: { $lte: now },
-          endDate: { $gte: now },
+          startDate: { $lte: now }, // The one that should be active now
         });
 
-        if (nextSeason) {
-          // Deactivate old season and activate new one
-          activeSeason.active = false;
-          activeSeason.deactivatedAt = now;
-          await activeSeason.save();
-
-          nextSeason.active = true;
-          nextSeason.activatedAt = now;
-          nextSeason.deactivatedAt = null;
-          await nextSeason.save();
-          console.log(`Activated new season: ${nextSeason.name}`);
-
+        if (nextSeason && nextSeason._id.toString() !== endedSeason._id.toString()) {
           // Handle Rollover Logic for Users
-          // Calculate carry-forward for each user based on activeSeason's carryForwardBehavior
           const allProgress = await UserTierProgress.find({
-            seasonId: activeSeason._id,
+            seasonId: endedSeason._id,
           });
 
           const nextConfigs = await TierConfiguration.find({
@@ -67,17 +53,17 @@ function initCronJobs() {
           for (const progress of allProgress) {
             let carryForwardPoints = 0;
             if (
-              activeSeason.carryForwardBehavior === CARRY_FORWARD_BEHAVIOR.FULL
+              endedSeason.carryForwardBehavior === CARRY_FORWARD_BEHAVIOR.FULL
             ) {
               carryForwardPoints = progress.currentPoint;
             } else if (
-              activeSeason.carryForwardBehavior ===
+              endedSeason.carryForwardBehavior ===
                 CARRY_FORWARD_BEHAVIOR.PERCENTAGE &&
-              activeSeason.carryForwardPercentage
+              endedSeason.carryForwardPercentage
             ) {
               carryForwardPoints = Math.floor(
                 progress.currentPoint *
-                  (activeSeason.carryForwardPercentage / 100),
+                  (endedSeason.carryForwardPercentage / 100),
               );
             }
 
@@ -119,9 +105,44 @@ function initCronJobs() {
               });
             }
           }
+          
+          console.log(`Rollover completed for ${endedSeason.name}`);
         } else {
-          console.log("No next season found to activate.");
+          console.log("No next season found to rollover into. Marking as processed anyway.");
         }
+        
+        // Mark as processed so we don't run it again
+        endedSeason.rolloverProcessed = true;
+        await endedSeason.save();
+      }
+
+      // 2. Manage season active states independently
+      // Deactivate old active seasons
+      const oldActiveSeasons = await LoyaltySeason.find({
+        active: true,
+        isArchived: { $ne: true },
+        endDate: { $lt: now }
+      });
+      for (const season of oldActiveSeasons) {
+        season.active = false;
+        season.deactivatedAt = now;
+        await season.save();
+        console.log(`Deactivated old season: ${season.name}`);
+      }
+
+      // Activate new season if one exists for the current time
+      const seasonToActivate = await LoyaltySeason.findOne({
+        active: false,
+        isArchived: { $ne: true },
+        startDate: { $lte: now },
+        endDate: { $gte: now }
+      });
+      if (seasonToActivate) {
+        seasonToActivate.active = true;
+        seasonToActivate.activatedAt = now;
+        seasonToActivate.deactivatedAt = null;
+        await seasonToActivate.save();
+        console.log(`Activated current season: ${seasonToActivate.name}`);
       }
     } catch (error) {
       console.error(" Error in Season Rollover Task:", error);
