@@ -21,7 +21,7 @@ const tierSchema = new mongoose.Schema(
         return ret;
       },
     },
-  }
+  },
 );
 
 const Tier = mongoose.model("Tier", tierSchema);

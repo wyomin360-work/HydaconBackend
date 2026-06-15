@@ -72,7 +72,10 @@ async function createRedeem(redeemData, reqUser = null) {
   if (!user) sendFailResponse("unable to find user");
 
   if (user.scanBanUntil && new Date(user.scanBanUntil) > now) {
-    sendFailResponse("You are temporarily banned from scanning due to repeated invalid attempts. Please try again later.", 403);
+    sendFailResponse(
+      "You are temporarily banned from scanning due to repeated invalid attempts. Please try again later.",
+      403,
+    );
   }
 
   // KYC verification gate - block redemption for unverified users
@@ -100,7 +103,9 @@ async function createRedeem(redeemData, reqUser = null) {
   let reward = null;
 
   if (rewardUidCode) {
-    const query = actualRewardId ? { _id: actualRewardId, uidCode: rewardUidCode } : { uidCode: rewardUidCode };
+    const query = actualRewardId
+      ? { _id: actualRewardId, uidCode: rewardUidCode }
+      : { uidCode: rewardUidCode };
     reward = await Reward.findOne(query);
   }
 
@@ -137,20 +142,28 @@ async function createRedeem(redeemData, reqUser = null) {
   // 1. Get tier multiplier
   const loyaltyService = require("../loyalty/loyalty.service");
   const TierConfiguration = require("../../schemas/tier-configuration.schema");
-  const userProgress = await loyaltyService.getOrCreateUserProgress(userId);
-  const tierConfig = await TierConfiguration.findOne({
-    seasonId: userProgress.seasonId,
-    tierId: userProgress.currentTierId?._id,
-  }).lean();
-  const tierMultiplier = tierConfig?.pointMultiplier || 1.0;
+  const activeSeason = await loyaltyService.resolveActiveSeason();
+  let tierMultiplier = 1.0;
+  if (activeSeason) {
+    const userProgress = await loyaltyService.getOrCreateUserProgress(userId);
+    if (userProgress) {
+      const tierConfig = await TierConfiguration.findOne({
+        seasonId: userProgress.seasonId,
+        tierId: userProgress.currentTierId?._id || userProgress.currentTierId,
+      }).lean();
+      tierMultiplier = tierConfig?.pointMultiplier || 1.0;
+    }
+  }
 
   // Weighted Rewards Logic
   const roleMultiplier = user.roleId?.pointMultiplier || 1;
-  const weightedPoints = Math.round((reward?.point || 0) * roleMultiplier * tierMultiplier);
+  const weightedPoints = Math.round(
+    (reward?.point || 0) * roleMultiplier * tierMultiplier,
+  );
 
   let scannerRole = null;
   let scannerId = null;
-  
+
   if (reqUser) {
     scannerId = reqUser._id || reqUser.id;
     scannerRole = reqUser.roleId?.name || reqUser.role || null;
@@ -185,7 +198,13 @@ async function createRedeem(redeemData, reqUser = null) {
   await reward.save();
 
   // Process QP & Tier Upgrade in loyalty engine
-  await loyaltyService.processQrScanPoints(userId, weightedPoints, newRedeem._id);
+  if (activeSeason) {
+    await loyaltyService.processQrScanPoints(
+      userId,
+      weightedPoints,
+      newRedeem._id,
+    );
+  }
   if (user?.fcmTokens?.length && user?.enableNotification) {
     await sendFcmNotifications(
       user.fcmTokens,

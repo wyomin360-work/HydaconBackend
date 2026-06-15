@@ -9,31 +9,31 @@ const router = express.Router();
 router.get(
   campaignsPath.USER_LIST,
   verification.verifyUser,
-  handleError(controller.listCampaignsForUser)
+  handleError(controller.listCampaignsForUser),
 );
 
 router.get(
   campaignsPath.ADMIN_LIST,
   verification.verifyAdmin,
-  handleError(controller.listCampaignsAdmin)
+  handleError(controller.listCampaignsAdmin),
 );
 
 router.post(
   campaignsPath.ADMIN_CREATE,
   verification.verifyAdmin,
-  handleError(controller.createCampaign)
+  handleError(controller.createCampaign),
 );
 
 router.patch(
   campaignsPath.ADMIN_UPDATE,
   verification.verifyAdmin,
-  handleError(controller.updateCampaign)
+  handleError(controller.updateCampaign),
 );
 
 router.delete(
   campaignsPath.ADMIN_DELETE,
   verification.verifyAdmin,
-  handleError(controller.deleteCampaign)
+  handleError(controller.deleteCampaign),
 );
 
 module.exports = router;

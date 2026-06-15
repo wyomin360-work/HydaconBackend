@@ -34,11 +34,14 @@ const loyaltySeasonSchema = new mongoose.Schema(
         return ret;
       },
     },
-  }
+  },
 );
 
 loyaltySeasonSchema.index({ startDate: 1, endDate: 1 });
-loyaltySeasonSchema.index({ active: 1 }, { unique: true, partialFilterExpression: { active: true } });
+loyaltySeasonSchema.index(
+  { active: 1 },
+  { unique: true, partialFilterExpression: { active: true } },
+);
 
 const LoyaltySeason = mongoose.model("LoyaltySeason", loyaltySeasonSchema);
 module.exports = LoyaltySeason;

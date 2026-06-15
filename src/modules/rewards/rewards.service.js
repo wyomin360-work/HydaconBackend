@@ -94,8 +94,8 @@ async function createRewards(rewardData) {
 
   const generateComplexRewardUID = () => {
     // Generate a short, human-readable 8-character alphanumeric code for easier manual entry
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // excluded easily confused chars (I, O, 1, 0)
-    let code = '';
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // excluded easily confused chars (I, O, 1, 0)
+    let code = "";
     for (let i = 0; i < 8; i++) {
       code += chars.charAt(Math.floor(Math.random() * chars.length));
     }

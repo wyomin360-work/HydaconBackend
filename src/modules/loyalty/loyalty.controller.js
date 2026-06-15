@@ -32,9 +32,27 @@ async function getTierProgression(req, res) {
  * Admin API: Creates a new loyalty tier definition.
  */
 async function createTier(req, res) {
-  const { name, key, colorIdentity, badgeUrl, rank, qualificationPoint, threshold, active } = req.body;
+  const {
+    name,
+    key,
+    colorIdentity,
+    badgeUrl,
+    rank,
+    qualificationPoint,
+    threshold,
+    active,
+  } = req.body;
   await loyaltyService.validateTierRange(req.body);
-  const tier = await Tier.create({ name, key, colorIdentity, badgeUrl, rank, qualificationPoint, threshold, active });
+  const tier = await Tier.create({
+    name,
+    key,
+    colorIdentity,
+    badgeUrl,
+    rank,
+    qualificationPoint,
+    threshold,
+    active,
+  });
   return sendResponse(res, tier, 201);
 }
 
@@ -77,7 +95,10 @@ async function listSeasons(req, res) {
  */
 async function activateSeason(req, res) {
   const seasonId = req.params.id;
-  const activeSeason = await loyaltyService.activateSeason(req.userId, seasonId);
+  const activeSeason = await loyaltyService.activateSeason(
+    req.userId,
+    seasonId,
+  );
   return sendResponse(res, activeSeason, 200);
 }
 
@@ -85,7 +106,10 @@ async function activateSeason(req, res) {
  * Admin API: Creates a dynamic tier configuration for a season.
  */
 async function createTierConfiguration(req, res) {
-  const config = await loyaltyService.createTierConfiguration(req.userId, req.body);
+  const config = await loyaltyService.createTierConfiguration(
+    req.userId,
+    req.body,
+  );
   return sendResponse(res, config, 201);
 }
 
@@ -102,7 +126,11 @@ async function listTierConfigurations(req, res) {
  */
 async function updateTierConfiguration(req, res) {
   const configId = req.params.id;
-  const config = await loyaltyService.updateTierConfiguration(req.userId, configId, req.body);
+  const config = await loyaltyService.updateTierConfiguration(
+    req.userId,
+    configId,
+    req.body,
+  );
   return sendResponse(res, config, 200);
 }
 
@@ -129,14 +157,22 @@ async function listBenefits(req, res) {
 async function updateSeason(req, res) {
   const seasonId = req.params.id;
   if (req.body.active === true) {
-    await LoyaltySeason.updateMany({ _id: { $ne: seasonId } }, { active: false });
+    await LoyaltySeason.updateMany(
+      { _id: { $ne: seasonId } },
+      { active: false },
+    );
   }
-  const season = await LoyaltySeason.findByIdAndUpdate(seasonId, req.body, { new: true });
+  const season = await LoyaltySeason.findByIdAndUpdate(seasonId, req.body, {
+    new: true,
+  });
   return sendResponse(res, season, 200);
 }
 
 async function deactivateSeason(req, res) {
-  const season = await loyaltyService.deactivateSeason(req.userId, req.params.id);
+  const season = await loyaltyService.deactivateSeason(
+    req.userId,
+    req.params.id,
+  );
   return sendResponse(res, season, 200);
 }
 
@@ -169,7 +205,10 @@ async function getConfigAuditLogById(req, res) {
 }
 
 async function getTierConfigurationHistory(req, res) {
-  const history = await loyaltyService.getTierConfigurationHistory(req.params.id, req.query);
+  const history = await loyaltyService.getTierConfigurationHistory(
+    req.params.id,
+    req.query,
+  );
   return sendResponse(res, history, 200);
 }
 
@@ -188,7 +227,11 @@ async function deleteTier(req, res) {
 async function deleteTierConfiguration(req, res) {
   const configId = req.params.id;
   await TierConfiguration.findByIdAndDelete(configId);
-  return sendResponse(res, { message: "Tier configuration deleted successfully" }, 200);
+  return sendResponse(
+    res,
+    { message: "Tier configuration deleted successfully" },
+    200,
+  );
 }
 
 /**
@@ -196,7 +239,9 @@ async function deleteTierConfiguration(req, res) {
  */
 async function updateBenefit(req, res) {
   const benefitId = req.params.id;
-  const benefit = await TierBenefit.findByIdAndUpdate(benefitId, req.body, { new: true });
+  const benefit = await TierBenefit.findByIdAndUpdate(benefitId, req.body, {
+    new: true,
+  });
   return sendResponse(res, benefit, 200);
 }
 
@@ -213,7 +258,11 @@ async function addPoints(req, res) {
   const userId = req.userId;
   const { points = 100 } = req.body;
   // Dev endpoint: uses processQrScanPoints to award QP + trigger tier upgrades
-  const result = await loyaltyService.processQrScanPoints(userId, Number(points), `dev-add-${Date.now()}`);
+  const result = await loyaltyService.processQrScanPoints(
+    userId,
+    Number(points),
+    `dev-add-${Date.now()}`,
+  );
   return sendResponse(res, result, 200);
 }
 
