@@ -205,7 +205,7 @@ async function getOrCreateUserProgress(userId, seasonId = null) {
     return null;
   }
 
-  const beginnerTier = await Tier.findOne({ rank: 0 });
+  const beginnerTier = await Tier.findOne().sort({ rank: 1 });
   if (!beginnerTier) {
     sendFailResponse("Loyalty tiers are not properly configured.");
   }
@@ -460,7 +460,7 @@ async function getUserLoyaltySummary(userId) {
   if (!user) sendFailResponse("User not found");
 
   if (!activeSeason) {
-    const beginnerTier = await Tier.findOne({ rank: 0 }).lean();
+    const beginnerTier = await Tier.findOne().sort({ rank: 1 }).lean();
     return {
       currentTier: {
         id: beginnerTier?._id || "beginner",
@@ -470,6 +470,7 @@ async function getUserLoyaltySummary(userId) {
         badgeUrl: beginnerTier?.badgeUrl || "",
         pointMultiplier: 1.0,
         threshold: 0,
+        qualificationPoint: 0,
       },
       previousTier: null,
       nextTier: null,
@@ -611,6 +612,7 @@ async function getUserLoyaltySummary(userId) {
       badgeUrl: currentTier?.badgeUrl || "",
       pointMultiplier: activeConfig?.pointMultiplier || 1.0,
       threshold: activeConfig?.threshold ?? 0,
+      qualificationPoint: activeConfig?.qualificationPoint ?? 0,
     },
     previousTier: previousTier
       ? {
@@ -626,7 +628,8 @@ async function getUserLoyaltySummary(userId) {
           id: nextTier._id,
           name: nextTier.name,
           badgeUrl: nextTier.badgeUrl,
-          threshold: nextConfig.qualificationPoint ?? 0,
+          threshold: nextConfig.threshold ?? 0,
+          qualificationPoint: nextConfig.qualificationPoint ?? 0,
         }
       : null,
     currentPoint: progress.currentPoint,

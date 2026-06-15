@@ -169,6 +169,7 @@ describe("Loyalty and Tier Progression Engine", () => {
     User.findById.mockResolvedValue(mockUser);
     User.findByIdAndUpdate.mockResolvedValue(mockUser);
     const mockTierQuery = {
+      sort: jest.fn().mockReturnThis(),
       lean: jest.fn().mockReturnThis(),
       then: jest.fn((resolve) => resolve(mockTiers[0])),
     };
@@ -1156,6 +1157,7 @@ describe("Loyalty and Tier Progression Engine", () => {
       });
 
       Tier.findOne.mockReturnValue({
+        sort: jest.fn().mockReturnThis(),
         lean: jest.fn().mockResolvedValue(nextTiers[0]),
       });
 
