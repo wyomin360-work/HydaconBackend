@@ -13,6 +13,7 @@ const { decrypt, encrypt } = require("../../utils/encryption");
 const { attachId, formatNotification } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const { sendFcmNotifications } = require("../../functions/fcm");
+const { LOYALTY_TRANSACTION_TYPES } = require("../../constants/loyalty");
 
 // ----------------------
 // Transaction List
@@ -139,11 +140,36 @@ async function createTransaction(data, userId) {
   const { amount } = data;
   let withdrawNotification = APP_NOTIFICATIONS.withdraw;
 
-  const user = await User.findById(userId);
+  const user = await User.findById(userId).populate("currentTierId");
   if (!user) sendFailResponse("User not found");
 
   if (user.kycStatus !== User.KYC_STATUS.APPROVED)
     sendFailResponse("KYC verification is required to withdraw amount");
+
+  // 1000 Point First Redemption Rule
+  const tierRank = user.currentTierId?.rank || 0;
+  if (tierRank <= 1) { // Beginner(0) or Bronze(1)
+    let lifetimePoints = user.lifetimePoints || 0;
+    if (lifetimePoints < 1000) {
+      const LoyaltyTransaction = require("../../schemas/loyalty-transaction.schema");
+      const result = await LoyaltyTransaction.aggregate([
+        { $match: { userId: user._id, type: { $in: [LOYALTY_TRANSACTION_TYPES.REDEEMABLE, LOYALTY_TRANSACTION_TYPES.BOTH] }, points: { $gt: 0 } } },
+        { $group: { _id: null, total: { $sum: "$points" } } }
+      ]);
+      const calculatedPoints = result[0]?.total || 0;
+      lifetimePoints = Math.max(lifetimePoints, calculatedPoints);
+      
+      // Update DB if fallback calculation crosses the threshold
+      if (calculatedPoints > (user.lifetimePoints || 0)) {
+        user.lifetimePoints = calculatedPoints;
+        await user.save();
+      }
+    }
+    
+    if (lifetimePoints < 1000) {
+      sendFailResponse("You must accumulate 1000 lifetime points before your first redemption. Keep scanning!");
+    }
+  }
   if (!user.bankDetails?.accountNumber)
     sendFailResponse("Add bank details to withdraw amount");
 

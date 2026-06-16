@@ -5,14 +5,22 @@ const Product = require("../../src/schemas/product.schema");
 const Reward = require("../../src/schemas/reward.schema");
 const Redeem = require("../../src/schemas/redeem.schema");
 
-// Mocking the schemas
+// Mocking the schemas and services
 jest.mock("../../src/schemas/user.schema");
 jest.mock("../../src/schemas/role.schema");
 jest.mock("../../src/schemas/product.schema");
 jest.mock("../../src/schemas/reward.schema");
 jest.mock("../../src/schemas/redeem.schema");
+jest.mock("../../src/schemas/tier-configuration.schema");
 jest.mock("../../src/functions/fcm", () => ({
   sendFcmNotifications: jest.fn(),
+}));
+jest.mock("../../src/modules/loyalty/loyalty.service", () => ({
+  getOrCreateUserProgress: jest.fn().mockResolvedValue({
+    seasonId: "season123",
+    currentTierId: { _id: "tier123" },
+  }),
+  processQrScanPoints: jest.fn().mockResolvedValue(true),
 }));
 
 describe("Weighted Rewards Calculation", () => {
@@ -20,6 +28,11 @@ describe("Weighted Rewards Calculation", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+
+    const TierConfiguration = require("../../src/schemas/tier-configuration.schema");
+    TierConfiguration.findOne.mockReturnValue({
+      lean: jest.fn().mockResolvedValue({ pointMultiplier: 1.0 }),
+    });
 
     mockRole = {
       _id: "role123",

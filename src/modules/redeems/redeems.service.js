@@ -61,7 +61,7 @@ async function redeemDetails(redeemId) {
   return { data: redeem };
 }
 
-async function createRedeem(redeemData) {
+async function createRedeem(redeemData, reqUser = null) {
   const { userId, productId, rewardId, rewardUidCode, location } = redeemData;
   const now = new Date();
   let rewardNotification = APP_NOTIFICATIONS.rewards;
@@ -70,6 +70,10 @@ async function createRedeem(redeemData) {
 
   const user = await User.findById(userId).populate("roleId");
   if (!user) sendFailResponse("unable to find user");
+
+  if (user.scanBanUntil && new Date(user.scanBanUntil) > now) {
+    sendFailResponse("You are temporarily banned from scanning due to repeated invalid attempts. Please try again later.", 403);
+  }
 
   // KYC verification gate - block redemption for unverified users
   const allowedKycStatuses = [KYC_STATUS.APPROVED];
@@ -81,31 +85,88 @@ async function createRedeem(redeemData) {
     );
   }
 
-  const product = await Product.findById(productId);
-  if (!product) sendFailResponse("product not found");
+  const incrementFraud = async (userDoc) => {
+    userDoc.failedScanAttempts = (userDoc.failedScanAttempts || 0) + 1;
+    if (userDoc.failedScanAttempts >= 5) {
+      userDoc.scanBanUntil = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours ban
+      userDoc.failedScanAttempts = 0;
+    }
+    await userDoc.save();
+  };
 
-  const reward = await Reward.findOne({
-    _id: rewardId,
-    uidCode: rewardUidCode,
-  });
-  if (!reward) sendFailResponse("reward not found");
-  if (!reward.active) sendFailResponse("reward is inactive");
-  if (new Date(reward.expiresAt) < now) sendFailResponse("reward is expired");
-  if (reward.isRedeemed) sendFailResponse("reward already redeemed");
+  // Resolve reward if only rewardUidCode is provided (Manual Entry)
+  let actualRewardId = rewardId;
+  let actualProductId = productId;
+  let reward = null;
+
+  if (rewardUidCode) {
+    const query = actualRewardId ? { _id: actualRewardId, uidCode: rewardUidCode } : { uidCode: rewardUidCode };
+    reward = await Reward.findOne(query);
+  }
+
+  if (!reward) {
+    await incrementFraud(user);
+    sendFailResponse("reward not found or invalid code");
+  }
+
+  actualRewardId = reward._id;
+  actualProductId = reward.productId;
+
+  const product = await Product.findById(actualProductId);
+  if (!product) {
+    await incrementFraud(user);
+    sendFailResponse("product not found");
+  }
+  if (!reward.active) {
+    await incrementFraud(user);
+    sendFailResponse("reward is inactive");
+  }
+  if (new Date(reward.expiresAt) < now) {
+    await incrementFraud(user);
+    sendFailResponse("reward is expired");
+  }
+  if (reward.isRedeemed) {
+    await incrementFraud(user);
+    sendFailResponse("reward already redeemed");
+  }
+
+  // Reset failed attempts on success
+  user.failedScanAttempts = 0;
+  user.scanBanUntil = null;
+
+  // 1. Get tier multiplier
+  const loyaltyService = require("../loyalty/loyalty.service");
+  const TierConfiguration = require("../../schemas/tier-configuration.schema");
+  const userProgress = await loyaltyService.getOrCreateUserProgress(userId);
+  const tierConfig = await TierConfiguration.findOne({
+    seasonId: userProgress.seasonId,
+    tierId: userProgress.currentTierId?._id,
+  }).lean();
+  const tierMultiplier = tierConfig?.pointMultiplier || 1.0;
 
   // Weighted Rewards Logic
-  const multiplier = user.roleId?.pointMultiplier || 1;
-  const weightedPoints = (reward?.point || 0) * multiplier;
+  const roleMultiplier = user.roleId?.pointMultiplier || 1;
+  const weightedPoints = Math.round((reward?.point || 0) * roleMultiplier * tierMultiplier);
+
+  let scannerRole = null;
+  let scannerId = null;
+  
+  if (reqUser) {
+    scannerId = reqUser._id || reqUser.id;
+    scannerRole = reqUser.roleId?.name || reqUser.role || null;
+  }
 
   const newRedeem = await Redeem.create({
     userId,
-    productId,
-    rewardId,
+    productId: actualProductId,
+    rewardId: actualRewardId,
     rewardUidCode,
     rewardPoints: weightedPoints,
     status: REDEEM_STATUS.SUCCESS,
     location,
     cardBg: bgColor,
+    scannerRole,
+    scannerId,
   });
   if (!newRedeem) sendFailResponse("reward redeem failed");
 
@@ -117,10 +178,15 @@ async function createRedeem(redeemData) {
 
   // update user
   user.totalPoints += weightedPoints;
+  user.lifetimePoints = (user.lifetimePoints || 0) + weightedPoints;
+  user.totalScans = (user.totalScans || 0) + 1;
 
   // save
   await user.save();
   await reward.save();
+
+  // Process QP & Tier Upgrade in loyalty engine
+  await loyaltyService.processQrScanPoints(userId, weightedPoints, newRedeem._id);
   if (user?.fcmTokens?.length && user?.enableNotification) {
     await sendFcmNotifications(
       user.fcmTokens,

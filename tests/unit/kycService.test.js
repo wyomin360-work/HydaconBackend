@@ -192,6 +192,7 @@ describe("kyc.service unit tests", () => {
       };
       User.findById.mockResolvedValue(mockUser);
 
+      // Re-upload pan document (which was the rejected one)
       const result = await kycService.uploadDocument(
         "userId123",
         "pan",
@@ -269,6 +270,7 @@ describe("kyc.service unit tests", () => {
             originalUrl: "/uploads/images/aadhaar.jpg",
             status: "PENDING",
           },
+          // pan and shopPhoto are missing
         },
         kycStatus: "NOT_STARTED",
         save: jest.fn().mockResolvedValue(true),
@@ -368,7 +370,7 @@ describe("kyc.service unit tests", () => {
       await expect(
         kycService.reviewKycDocument("userId123", {
           status: "REJECTED",
-          rejectionReason: "incomplete documents",
+          rejectionReason: "incomplete profile documents",
         }),
       ).rejects.toThrow(
         "Cannot reject KYC entirely because not all documents have been uploaded",

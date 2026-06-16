@@ -20,6 +20,10 @@ const roleRoutes = require("../modules/roles/role.routes");
 const rolePaths = require("../modules/roles/role.paths");
 const kycRoutes = require("../modules/kyc/kyc.routes");
 const kycPaths = require("../modules/kyc/kyc.paths");
+const loyaltyRoutes = require("../modules/loyalty/loyalty.routes");
+const loyaltyPaths = require("../modules/loyalty/loyalty.paths");
+const campaignsRoutes = require("../modules/campaigns/campaigns.routes");
+const campaignsPaths = require("../modules/campaigns/campaigns.paths");
 
 const globalRoutes = express.Router();
 
@@ -33,5 +37,7 @@ globalRoutes.use(redeemsPath.root, redeemRoutes);
 globalRoutes.use(transactionsPath.root, transactionRoutes);
 globalRoutes.use(rolePaths.root, roleRoutes);
 globalRoutes.use(kycPaths.root, kycRoutes);
+globalRoutes.use(loyaltyPaths.root, loyaltyRoutes);
+globalRoutes.use(campaignsPaths.root, campaignsRoutes);
 
 module.exports = globalRoutes;

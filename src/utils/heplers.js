@@ -151,9 +151,12 @@ const calculateProfileCompletion = (user, roleName = "") => {
     // 11. Shop Name
     if (user.shopName) filledFields++;
   }
-console.log(user)
+
   return Math.round((filledFields / totalFields) * 100);
 };
+
+
+
 function parseUserAgent(userAgent, headers = {}) {
   const info = {
     userAgent: userAgent || null,
@@ -242,6 +245,6 @@ module.exports = {
   generateRandomPassword,
   formatNotification,
   calculateProfileCompletion,
-  parseUserAgent,
   buildPhoneLookupVariants,
+  parseUserAgent,
 };
