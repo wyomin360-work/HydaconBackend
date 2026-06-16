@@ -608,7 +608,7 @@ async function getUserLoyaltySummary(userId) {
       id: currentTier?._id,
       name: currentTier?.name || "Beginner",
       key: currentTier?.key || "beginner",
-      colorIdentity: currentTier?.colorIdentity || "#8E8E93",
+      colorIdentity: currentTier?.colorIdentity,
       badgeUrl: currentTier?.badgeUrl || "",
       pointMultiplier: activeConfig?.pointMultiplier || 1.0,
       threshold: activeConfig?.threshold ?? 0,
@@ -630,6 +630,7 @@ async function getUserLoyaltySummary(userId) {
           badgeUrl: nextTier.badgeUrl,
           threshold: nextConfig.threshold ?? 0,
           qualificationPoint: nextConfig.qualificationPoint ?? 0,
+          colorIdentity: nextConfig?.colorIdentity
         }
       : null,
     currentPoint: progress.currentPoint,
