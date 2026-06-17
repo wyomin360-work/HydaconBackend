@@ -196,6 +196,7 @@ async function createRedeem(redeemData, reqUser = null) {
       lifetimePoints: weightedPoints,
     },
   });
+  user.totalScans = (user.totalScans || 0) + 1;
 
   // save reward
   await reward.save();

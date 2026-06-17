@@ -55,6 +55,7 @@ const userSchema = new mongoose.Schema(
     totalPoints: { type: Number, default: 0 },
     lifetimePoints: { type: Number, default: 0 },
     totalWithdraw: { type: Number, default: 0 },
+    totalScans: { type: Number, default: 0 },
     authKey: { type: String, required: false },
     agreedToTerms: { type: Boolean, default: true },
     enableNotification: { type: Boolean, default: true },
@@ -65,6 +66,7 @@ const userSchema = new mongoose.Schema(
     experience: { type: Number, required: false, default: null },
     areaOfOperation: { type: String, required: false, default: null },
     profileCompletionPercentage: { type: Number, default: 0 },
+    isActive: { type: Boolean, default: true },
     isFlagged: { type: Boolean, default: false },
     flaggedReason: { type: String, default: null },
     authType: {

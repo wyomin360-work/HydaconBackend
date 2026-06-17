@@ -16,7 +16,7 @@ const createRedeemRequestType = {
       additionalProperties: false,
     },
   },
-  required: ["userId", "productId", "rewardId", "rewardUidCode"],
+  required: ["userId", "rewardUidCode"],
   additionalProperties: false,
 };
 

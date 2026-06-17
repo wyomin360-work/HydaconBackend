@@ -1,12 +1,15 @@
 module.exports = {
   root: "/user",
   details: "/details",
+  adminDetails: "/admin-details/:id",
   list: "/list",
   roles: "/roles",
   onboardingRoles: "/onboarding/roles",
   updateProfile: "/profile/update",
   profilePhoto: "/profile/photo",
   flagUser: "/flag/:id",
+  toggleStatus: "/status/:id",
+  deleteUser: "/delete/:id",
   updatePreferences: "/preference/update",
   fcmToken: "/fcm-token",
   phone: {

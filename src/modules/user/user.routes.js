@@ -80,6 +80,12 @@ router.get(
   handleError(controller.userDetails),
 );
 
+router.get(
+  userPaths.adminDetails,
+  verification.verifyAdmin,
+  handleError(controller.getAdminUserDetails),
+);
+
 router.patch(
   userPaths.updateProfile,
   verification.verifyUser,
@@ -159,6 +165,18 @@ router.patch(
   userPaths.flagUser,
   verification.verifyAdmin,
   handleError(controller.flagUser),
+);
+
+router.patch(
+  userPaths.toggleStatus,
+  verification.verifyAdmin,
+  handleError(controller.toggleUserStatus),
+);
+
+router.delete(
+  userPaths.deleteUser,
+  verification.verifyAdmin,
+  handleError(controller.deleteUser),
 );
 
 module.exports = router;
