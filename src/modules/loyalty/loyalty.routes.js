@@ -10,138 +10,137 @@ const router = express.Router();
 router.get(
   loyaltyPaths.summary,
   verification.verifyUser,
-  handleError(controller.getUserSummary)
+  handleError(controller.getUserSummary),
 );
 
 // User Tier Progression Metadata Endpoint (Mobile App integration)
 router.get(
   loyaltyPaths.progression,
   verification.verifyUser,
-  handleError(controller.getTierProgression)
+  handleError(controller.getTierProgression),
 );
-
 
 // Admin Loyalty Tier Management Endpoints
 router.post(
   loyaltyPaths.admin.tiers,
   verification.verifyAdmin,
-  handleError(controller.createTier)
+  handleError(controller.createTier),
 );
 router.get(
   loyaltyPaths.admin.tiers,
   verification.verifyAdmin,
-  handleError(controller.listTiers)
+  handleError(controller.listTiers),
 );
 router.patch(
   loyaltyPaths.admin.tiersDetail,
   verification.verifyAdmin,
-  handleError(controller.updateTier)
+  handleError(controller.updateTier),
 );
 router.delete(
   loyaltyPaths.admin.tiersDetail,
   verification.verifyAdmin,
-  handleError(controller.deleteTier)
+  handleError(controller.deleteTier),
 );
 
 // Admin Loyalty Seasons Endpoints
 router.post(
   loyaltyPaths.admin.seasons,
   verification.verifyAdmin,
-  handleError(controller.createSeason)
+  handleError(controller.createSeason),
 );
 router.get(
   loyaltyPaths.admin.seasons,
   verification.verifyAdmin,
-  handleError(controller.listSeasons)
+  handleError(controller.listSeasons),
 );
 router.get(
   loyaltyPaths.admin.seasonSummary,
   verification.verifyAdmin,
-  handleError(controller.getSeasonManagementSummary)
+  handleError(controller.getSeasonManagementSummary),
 );
 router.patch(
   loyaltyPaths.admin.seasonsActivate,
   verification.verifyAdmin,
-  handleError(controller.activateSeason)
+  handleError(controller.activateSeason),
 );
 router.patch(
   loyaltyPaths.admin.seasonsDeactivate,
   verification.verifyAdmin,
-  handleError(controller.deactivateSeason)
+  handleError(controller.deactivateSeason),
 );
 router.patch(
   loyaltyPaths.admin.seasonsDetail,
   verification.verifyAdmin,
-  handleError(controller.updateSeason)
+  handleError(controller.updateSeason),
 );
 router.delete(
   loyaltyPaths.admin.seasonsDetail,
   verification.verifyAdmin,
-  handleError(controller.deleteSeason)
+  handleError(controller.deleteSeason),
 );
 router.get(
   loyaltyPaths.admin.seasonsDetail,
   verification.verifyAdmin,
-  handleError(controller.getSeasonById)
+  handleError(controller.getSeasonById),
 );
 
 // Admin Loyalty Seasonal Configurations
 router.post(
   loyaltyPaths.admin.tierConfigurations,
   verification.verifyAdmin,
-  handleError(controller.createTierConfiguration)
+  handleError(controller.createTierConfiguration),
 );
 router.get(
   loyaltyPaths.admin.tierConfigurations,
   verification.verifyAdmin,
-  handleError(controller.listTierConfigurations)
+  handleError(controller.listTierConfigurations),
 );
 router.get(
   loyaltyPaths.admin.tierConfigurationHistory,
   verification.verifyAdmin,
-  handleError(controller.getTierConfigurationHistory)
+  handleError(controller.getTierConfigurationHistory),
 );
 router.get(
   loyaltyPaths.admin.configAuditLogs,
   verification.verifyAdmin,
-  handleError(controller.listConfigurationAuditLogs)
+  handleError(controller.listConfigurationAuditLogs),
 );
 router.get(
   loyaltyPaths.admin.configAuditLogDetail,
   verification.verifyAdmin,
-  handleError(controller.getConfigAuditLogById)
+  handleError(controller.getConfigAuditLogById),
 );
 router.patch(
   loyaltyPaths.admin.tierConfigurationsDetail,
   verification.verifyAdmin,
-  handleError(controller.updateTierConfiguration)
+  handleError(controller.updateTierConfiguration),
 );
 router.delete(
   loyaltyPaths.admin.tierConfigurationsDetail,
   verification.verifyAdmin,
-  handleError(controller.deleteTierConfiguration)
+  handleError(controller.deleteTierConfiguration),
 );
 
 // Admin Benefits Endpoints
 router.post(
   loyaltyPaths.admin.benefits,
   verification.verifyAdmin,
-  handleError(controller.createBenefit)
+  handleError(controller.createBenefit),
 );
 router.get(
   loyaltyPaths.admin.benefits,
   verification.verifyAdmin,
-  handleError(controller.listBenefits)
+  handleError(controller.listBenefits),
 );
 router.patch(
   loyaltyPaths.admin.benefitsDetail,
   verification.verifyAdmin,
-  handleError(controller.updateBenefit)
+  handleError(controller.updateBenefit),
 );
 router.delete(
   loyaltyPaths.admin.benefitsDetail,
   verification.verifyAdmin,
-  handleError(controller.deleteBenefit)
+  handleError(controller.deleteBenefit),
 );
 
 module.exports = router;

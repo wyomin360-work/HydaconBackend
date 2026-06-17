@@ -21,6 +21,7 @@ jest.mock("../../src/modules/loyalty/loyalty.service", () => ({
     currentTierId: { _id: "tier123" },
   }),
   processQrScanPoints: jest.fn().mockResolvedValue(true),
+  resolveActiveSeason: jest.fn().mockResolvedValue({ _id: "season123" }),
 }));
 
 describe("Weighted Rewards Calculation", () => {
@@ -69,6 +70,7 @@ describe("Weighted Rewards Calculation", () => {
     User.findById.mockReturnValue({
       populate: jest.fn().mockImplementation(() => Promise.resolve(mockUser)),
     });
+    User.findByIdAndUpdate = jest.fn().mockResolvedValue(mockUser);
     Product.findById.mockResolvedValue(mockProduct);
     Reward.findOne.mockResolvedValue(mockReward);
     Redeem.create.mockImplementation((data) => Promise.resolve(data));
@@ -89,7 +91,7 @@ describe("Weighted Rewards Calculation", () => {
     const response = await createRedeem(redeemData);
 
     expect(response.data.pointsRewarded).toBe(50);
-    expect(mockUser.totalPoints).toBe(50);
+    expect(User.findByIdAndUpdate).toHaveBeenCalledWith("user123", expect.objectContaining({ $inc: { totalPoints: 50, lifetimePoints: 50 } }));
   });
 
   it("should award 10 points to a Retailer (5 points * 2 multiplier)", async () => {
@@ -107,7 +109,7 @@ describe("Weighted Rewards Calculation", () => {
     const response = await createRedeem(redeemData);
 
     expect(response.data.pointsRewarded).toBe(10);
-    expect(mockUser.totalPoints).toBe(10);
+    expect(User.findByIdAndUpdate).toHaveBeenCalledWith("user123", expect.objectContaining({ $inc: { totalPoints: 10, lifetimePoints: 10 } }));
   });
 
   it("should award base 5 points if user has no role multiplier", async () => {
@@ -124,6 +126,6 @@ describe("Weighted Rewards Calculation", () => {
     const response = await createRedeem(redeemData);
 
     expect(response.data.pointsRewarded).toBe(5);
-    expect(mockUser.totalPoints).toBe(5);
+    expect(User.findByIdAndUpdate).toHaveBeenCalledWith("user123", expect.objectContaining({ $inc: { totalPoints: 5, lifetimePoints: 5 } }));
   });
 });

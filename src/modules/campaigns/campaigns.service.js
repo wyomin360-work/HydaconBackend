@@ -11,22 +11,28 @@ async function listCampaignsForUser(userId) {
   const tierId = user.currentTierId?._id;
 
   let query = { isActive: true };
-  
+
   if (tierId) {
     // Only fetch campaigns where visibilityTiers is empty (visible to all) OR includes user's tier
     query.$or = [
       { visibilityTiers: { $size: 0 } },
-      { visibilityTiers: tierId }
+      { visibilityTiers: tierId },
     ];
   }
 
-  const campaigns = await Campaign.find(query).populate("visibilityTiers").populate("eligibilityTiers").lean();
-  
+  const campaigns = await Campaign.find(query)
+    .populate("visibilityTiers")
+    .populate("eligibilityTiers")
+    .lean();
+
   // Attach isLocked flag if user is not in eligibilityTiers
-  const campaignsWithLock = campaigns.map(c => {
+  const campaignsWithLock = campaigns.map((c) => {
     let isLocked = false;
     if (c.eligibilityTiers && c.eligibilityTiers.length > 0) {
-      if (!tierId || !c.eligibilityTiers.some(t => t._id.toString() === tierId.toString())) {
+      if (
+        !tierId ||
+        !c.eligibilityTiers.some((t) => t._id.toString() === tierId.toString())
+      ) {
         isLocked = true;
       }
     }
@@ -80,7 +86,9 @@ async function updateCampaign(adminId, campaignId, data) {
   const admin = await Admin.findById(adminId);
   if (!admin) sendFailResponse("Admin not found");
 
-  const updatedCampaign = await Campaign.findByIdAndUpdate(campaignId, data, { new: true });
+  const updatedCampaign = await Campaign.findByIdAndUpdate(campaignId, data, {
+    new: true,
+  });
   if (!updatedCampaign) sendFailResponse("Campaign not found");
 
   return { message: "Campaign updated successfully", data: updatedCampaign };

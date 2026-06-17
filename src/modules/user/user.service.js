@@ -4,7 +4,7 @@ const RefreshToken = require("../../schemas/refreshtoken.schema");
 const path = require("path");
 const sharp = require("sharp");
 const fs = require("fs");
-const AuditLog = require("../../schemas/audit-log.schema");
+const { logAudit } = require("../audit-log/audit-log.service");
 const mongoose = require("mongoose");
 const { AUDIT_LOG_ACTIONS } = require("../../constants/audit-logs");
 const {
@@ -760,22 +760,23 @@ async function finalizeNumberChange({
       user.phone = normalizedPhone;
       updatedUser = await user.save({ session });
 
-      const auditLog = new AuditLog({
-        userId: user._id,
-        action: AUDIT_LOG_ACTIONS.PHONE_NUMBER_CHANGE,
-        oldNumber: oldPhone,
-        newNumber: normalizedPhone,
-        timestamp: new Date(),
-        ipAddress: ipAddress || null,
-        deviceInfo: {
-          userAgent: deviceInfo?.userAgent || null,
-          deviceId: deviceInfo?.deviceId || null,
-          deviceName: deviceInfo?.deviceName || null,
-          platform: deviceInfo?.platform || null,
-          appVersion: deviceInfo?.appVersion || null,
+      await logAudit(
+        AUDIT_LOG_ACTIONS.PHONE_NUMBER_CHANGE,
+        {
+          userId: user._id,
+          oldNumber: oldPhone,
+          newNumber: normalizedPhone,
+          ipAddress: ipAddress || null,
+          deviceInfo: {
+            userAgent: deviceInfo?.userAgent || null,
+            deviceId: deviceInfo?.deviceId || null,
+            deviceName: deviceInfo?.deviceName || null,
+            platform: deviceInfo?.platform || null,
+            appVersion: deviceInfo?.appVersion || null,
+          },
         },
-      });
-      await auditLog.save({ session });
+        { session },
+      );
 
       await ServiceRequest.updateMany(
         {

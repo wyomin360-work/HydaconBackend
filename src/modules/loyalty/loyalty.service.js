@@ -10,11 +10,22 @@ const User = require("../../schemas/user.schema");
 const { sendFcmNotifications } = require("../../functions/fcm");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const {
-  logConfigurationAudit,
+  logAudit,
   buildChanges,
+} = require("../audit-log/audit-log.service");
+const {
   createTierConfigHistorySnapshot,
 } = require("./loyalty-audit.service");
-const { LOYALTY_TRANSACTION_TYPES, LOYALTY_TRANSACTION_SOURCES } = require("../../constants/loyalty");
+
+async function logConfigurationAudit(payload) {
+  return logAudit(payload.action, payload);
+}
+const {
+  LOYALTY_TRANSACTION_TYPES,
+  LOYALTY_TRANSACTION_SOURCES,
+} = require("../../constants/loyalty");
+const { APP_NOTIFICATIONS } = require("../../constants/notifications");
+const { formatNotification } = require("../../utils/heplers");
 
 function normalizeDateRange(startDate, endDate) {
   const start = new Date(startDate);
@@ -28,10 +39,30 @@ function normalizeDateRange(startDate, endDate) {
   return { start, end };
 }
 
-async function ensureSeasonDateRangeHasNoOverlap({ startDate, endDate, excludeSeasonId = null }) {
-  // Overlap check disabled to allow creating multiple seasons.
-  // The system relies on the `active` flag to determine the current season.
-  return;
+async function ensureSeasonDateRangeHasNoOverlap({
+  startDate,
+  endDate,
+  excludeSeasonId = null,
+}) {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+
+  const query = {
+    isArchived: { $ne: true },
+    startDate: { $lte: end },
+    endDate: { $gte: start },
+  };
+
+  if (excludeSeasonId) {
+    query._id = { $ne: excludeSeasonId };
+  }
+
+  const overlappingSeason = await LoyaltySeason.findOne(query);
+  if (overlappingSeason) {
+    sendFailResponse(
+      `Conflict: The season date range overlaps with an existing season "${overlappingSeason.name}".`
+    );
+  }
 }
 
 async function resolveActiveSeason() {
@@ -51,11 +82,51 @@ async function seedDefaultLoyaltyData() {
   let tierCount = await Tier.countDocuments();
   if (tierCount === 0) {
     const defaultTiers = [
-      { name: "Beginner", key: "beginner", colorIdentity: "#8E8E93", badgeUrl: "badge_beginner", rank: 0 },
-      { name: "Bronze", key: "bronze", colorIdentity: "#CD7F32", badgeUrl: "badge_bronze", rank: 1 },
-      { name: "Silver", key: "silver", colorIdentity: "#C0C0C0", badgeUrl: "badge_silver", rank: 2 },
-      { name: "Gold", key: "gold", colorIdentity: "#FFD700", badgeUrl: "badge_gold", rank: 3 },
-      { name: "Platinum", key: "platinum", colorIdentity: "#E5E4E2", badgeUrl: "badge_platinum", rank: 4 },
+      {
+        name: "Beginner",
+        key: "beginner",
+        colorIdentity: "#8E8E93",
+        badgeUrl: "badge_beginner",
+        rank: 0,
+        qualificationPoint: 0,
+        threshold: 100,
+      },
+      {
+        name: "Bronze",
+        key: "bronze",
+        colorIdentity: "#CD7F32",
+        badgeUrl: "badge_bronze",
+        rank: 1,
+        qualificationPoint: 100,
+        threshold: 400,
+      },
+      {
+        name: "Silver",
+        key: "silver",
+        colorIdentity: "#C0C0C0",
+        badgeUrl: "badge_silver",
+        rank: 2,
+        qualificationPoint: 500,
+        threshold: 500,
+      },
+      {
+        name: "Gold",
+        key: "gold",
+        colorIdentity: "#FFD700",
+        badgeUrl: "badge_gold",
+        rank: 3,
+        qualificationPoint: 1000,
+        threshold: 1000,
+      },
+      {
+        name: "Platinum",
+        key: "platinum",
+        colorIdentity: "#E5E4E2",
+        badgeUrl: "badge_platinum",
+        rank: 4,
+        qualificationPoint: 2000,
+        threshold: 100000,
+      },
     ];
     await Tier.create(defaultTiers);
     console.log("🌱 Default loyalty tiers successfully seeded.");
@@ -83,7 +154,9 @@ async function seedDefaultLoyaltyData() {
   }
 
   // 3. Seed Tier Configurations for this Season
-  let configCount = await TierConfiguration.countDocuments({ seasonId: activeSeason._id });
+  let configCount = await TierConfiguration.countDocuments({
+    seasonId: activeSeason._id,
+  });
   if (configCount === 0) {
     const tiers = await Tier.find().sort({ rank: 1 });
     const configTemplates = {
@@ -96,16 +169,21 @@ async function seedDefaultLoyaltyData() {
 
     const configurations = [];
     for (const tier of tiers) {
-      const template = configTemplates[tier.key] || { threshold: 0, multiplier: 1.0 };
+      const template = configTemplates[tier.key] || {
+        threshold: 0,
+        multiplier: 1.0,
+      };
       configurations.push({
         tierId: tier._id,
         seasonId: activeSeason._id,
-        qualificationThreshold: template.threshold,
+        qualificationPoint: template.threshold,
+        threshold: tier.threshold || 0,
         pointMultiplier: template.multiplier,
         active: true,
       });
     }
     await TierConfiguration.create(configurations);
+    await recalculateTierConfigurationThresholds(activeSeason._id);
     console.log("🌱 Default loyalty configurations successfully seeded.");
   }
 
@@ -124,10 +202,10 @@ async function getOrCreateUserProgress(userId, seasonId = null) {
   }
 
   if (!activeSeason) {
-    sendFailResponse("No active loyalty season available.");
+    return null;
   }
 
-  const beginnerTier = await Tier.findOne({ rank: 0 });
+  const beginnerTier = await Tier.findOne().sort({ rank: 1 });
   if (!beginnerTier) {
     sendFailResponse("Loyalty tiers are not properly configured.");
   }
@@ -139,10 +217,11 @@ async function getOrCreateUserProgress(userId, seasonId = null) {
         userId,
         seasonId: activeSeason._id,
         currentTierId: beginnerTier._id,
-        qualificationPoints: 0,
-      }
+        lastCelebratedTierId: beginnerTier._id,
+        currentPoint: 0,
+      },
     },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
+    { upsert: true, new: true, setDefaultsOnInsert: true },
   ).populate("currentTierId");
 
   // Ensure user has a cached currentTierId
@@ -161,10 +240,13 @@ async function getOrCreateUserProgress(userId, seasonId = null) {
 async function processQrScanPoints(userId, points, referenceId) {
   const activeSeason = await resolveActiveSeason();
   if (!activeSeason) {
-    sendFailResponse("No active loyalty season available.");
+    return null;
   }
 
   const progress = await getOrCreateUserProgress(userId);
+  if (!progress) {
+    return null;
+  }
 
   // 1. Log transaction
   await LoyaltyTransaction.create({
@@ -177,13 +259,22 @@ async function processQrScanPoints(userId, points, referenceId) {
     referenceId,
   });
 
-  // 2. Increment user QP
-  progress.qualificationPoints += points;
-  progress.lastEvaluatedAt = new Date();
-  await progress.save();
+  // 2. Increment user QP atomically using $inc
+  const updatedProgress = await UserTierProgress.findOneAndUpdate(
+    { userId, seasonId: progress.seasonId },
+    {
+      $inc: { currentPoint: points },
+      $set: { lastEvaluatedAt: new Date() },
+    },
+    { new: true }
+  );
+
+  if (!updatedProgress) {
+    return null;
+  }
 
   // 3. Evaluate dynamic upgrades
-  const updatedProgress = await evaluateTierUpgrade(userId, progress.seasonId);
+  await evaluateTierUpgrade(userId, progress.seasonId);
 
   return updatedProgress;
 }
@@ -208,10 +299,32 @@ async function addBonusPoints(userId, points, description, referenceId = null) {
     referenceId,
   });
 
-  // 2. Add to user totalPoints
-  user.totalPoints += points;
-  user.lifetimePoints = (user.lifetimePoints || 0) + points;
-  await user.save();
+  // 2. Add to user totalPoints atomically using $inc
+  const updatedUser = await User.findByIdAndUpdate(
+    userId,
+    {
+      $inc: { totalPoints: points, lifetimePoints: points },
+    },
+    { new: true }
+  );
+
+  // 3. Sync QP to ensure UserTierProgress.currentPoint >= updatedUser.totalPoints
+  if (activeSeason) {
+    const progress = await getOrCreateUserProgress(userId);
+    if (progress && progress.currentPoint < updatedUser.totalPoints) {
+      // Use atomic max update or direct set to sync the points
+      await UserTierProgress.findOneAndUpdate(
+        { userId, seasonId: activeSeason._id },
+        {
+          $max: { currentPoint: updatedUser.totalPoints },
+          $set: { lastEvaluatedAt: new Date() },
+        }
+      );
+
+      // Evaluate dynamic upgrades after modifying progress points
+      await evaluateTierUpgrade(userId, activeSeason._id);
+    }
+  }
 
   return { message: "Bonus points successfully added", points };
 }
@@ -221,33 +334,48 @@ async function addBonusPoints(userId, points, description, referenceId = null) {
  * Returns the updated progress document enriched with a `levelUpEvent` payload.
  */
 async function evaluateTierUpgrade(userId, seasonId) {
-  const progress = await UserTierProgress.findOne({ userId, seasonId }).populate("currentTierId");
+  const progress = await UserTierProgress.findOne({
+    userId,
+    seasonId,
+  }).populate("currentTierId");
   if (!progress) return null;
 
   // Get active configurations for the season
-  const configs = await TierConfiguration.find({ seasonId, active: true, isArchived: { $ne: true } })
+  const configs = await TierConfiguration.find({
+    seasonId,
+    active: true,
+    isArchived: { $ne: true },
+  })
     .populate("tierId")
     .lean();
 
   if (configs.length === 0) {
-    return Object.assign(progress.toObject?.() ?? progress, { levelUpEvent: { upgraded: false } });
+    return Object.assign(progress.toObject?.() ?? progress, {
+      levelUpEvent: { upgraded: false },
+    });
   }
 
-  // Sort by threshold DESC to evaluate highest qualification first
+  // Sort by qualificationPoint DESC to evaluate highest qualification first
   const sortedConfigs = configs.sort((a, b) => {
-    return b.qualificationThreshold - a.qualificationThreshold;
+    const valA = a.qualificationPoint ?? 0;
+    const valB = b.qualificationPoint ?? 0;
+    return valB - valA;
   });
 
   let qualifiedConfig = null;
   for (const config of sortedConfigs) {
-    if (progress.qualificationPoints >= config.qualificationThreshold) {
+    const thresholdVal = config.qualificationPoint ?? 0;
+    if (progress.currentPoint >= thresholdVal) {
       qualifiedConfig = config;
       break;
     }
   }
 
   // If we found a qualified tier config and it is a higher rank than the current tier
-  if (qualifiedConfig && qualifiedConfig.tierId.rank > (progress.currentTierId?.rank || 0)) {
+  if (
+    qualifiedConfig &&
+    qualifiedConfig.tierId.rank > (progress.currentTierId?.rank || 0)
+  ) {
     const oldTier = progress.currentTierId;
     const oldTierName = oldTier?.name || "None";
     const newTier = qualifiedConfig.tierId;
@@ -270,11 +398,17 @@ async function evaluateTierUpgrade(userId, seasonId) {
         try {
           await sendFcmNotifications(
             user.fcmTokens,
-            "Tier Upgraded! 🎉",
-            `Awesome! You've been upgraded from ${oldTierName} to ${newTier.name} tier! 🚀`
+            APP_NOTIFICATIONS.loyalty.tierUpgraded.title,
+            formatNotification(APP_NOTIFICATIONS.loyalty.tierUpgraded.body, {
+              oldTierName,
+              newTierName: newTier.name,
+            }),
           );
         } catch (error) {
-          console.error("⚠️ Failed to send tier upgrade FCM notification:", error);
+          console.error(
+            "⚠️ Failed to send tier upgrade FCM notification:",
+            error,
+          );
         }
       }
     }
@@ -285,16 +419,20 @@ async function evaluateTierUpgrade(userId, seasonId) {
       .populate("previousTierId")
       .exec();
 
-    const result = updatedProgress.toObject ? updatedProgress.toObject() : updatedProgress;
+    const result = updatedProgress.toObject
+      ? updatedProgress.toObject()
+      : updatedProgress;
     result.levelUpEvent = {
       upgraded: true,
-      previousTier: oldTier ? {
-        id: oldTier._id,
-        name: oldTier.name,
-        key: oldTier.key,
-        colorIdentity: oldTier.colorIdentity,
-        badgeUrl: oldTier.badgeUrl,
-      } : null,
+      previousTier: oldTier
+        ? {
+          id: oldTier._id,
+          name: oldTier.name,
+          key: oldTier.key,
+          colorIdentity: oldTier.colorIdentity,
+          badgeUrl: oldTier.badgeUrl,
+        }
+        : null,
       newTier: {
         id: newTier._id,
         name: newTier.name,
@@ -318,36 +456,108 @@ async function evaluateTierUpgrade(userId, seasonId) {
  */
 async function getUserLoyaltySummary(userId) {
   const activeSeason = await resolveActiveSeason();
+  const user = await User.findById(userId);
+  if (!user) sendFailResponse("User not found");
+
   if (!activeSeason) {
-    sendFailResponse("No active loyalty season available.");
+    const beginnerTier = await Tier.findOne().sort({ rank: 1 }).lean();
+    return {
+      currentTier: {
+        id: beginnerTier?._id || "beginner",
+        name: beginnerTier?.name || "Beginner",
+        key: beginnerTier?.key || "beginner",
+        colorIdentity: beginnerTier?.colorIdentity || "#8E8E93",
+        badgeUrl: beginnerTier?.badgeUrl || "",
+        pointMultiplier: 1.0,
+        threshold: 0,
+        qualificationPoint: 0,
+      },
+      previousTier: null,
+      nextTier: null,
+      currentPoint: 0,
+      remainingPoints: 0,
+      progressPercentage: 0,
+      redeemableBalance: user?.totalPoints || 0,
+      activeSeason: null,
+      levelUpEvent: { upgraded: false },
+    };
   }
 
-  // Populate both currentTierId and previousTierId in one query
-  const progress = await (async () => {
-    const p = await getOrCreateUserProgress(userId);
-    // Re-fetch with previousTierId populated
-    return UserTierProgress.findById(p._id)
-      .populate("currentTierId")
-      .populate("previousTierId")
-      .lean();
-  })();
+  // Populate currentTierId, previousTierId, and lastCelebratedTierId in one query
+  const progressDoc = await getOrCreateUserProgress(userId);
+  if (!progressDoc) {
+    sendFailResponse("User progress not found");
+  }
+  let progress = await UserTierProgress.findById(progressDoc._id)
+    .populate("currentTierId")
+    .populate("previousTierId")
+    .populate("lastCelebratedTierId")
+    .lean();
 
   const currentTier = progress.currentTierId;
   const previousTier = progress.previousTierId || null;
-  const user = await User.findById(userId);
+  let lastCelebratedTier = progress.lastCelebratedTierId || null;
+
+  // If lastCelebratedTierId is missing (legacy DB docs), initialize it to the current tier
+  if (!progress.lastCelebratedTierId) {
+    await UserTierProgress.findByIdAndUpdate(progress._id, {
+      lastCelebratedTierId: currentTier?._id || null,
+    });
+    lastCelebratedTier = currentTier;
+  }
+
+  let levelUpEvent = { upgraded: false };
+  const currentRank = currentTier?.rank ?? 0;
+  const lastCelebratedRank = lastCelebratedTier?.rank ?? 0;
+
+  if (currentRank > lastCelebratedRank) {
+    levelUpEvent = {
+      upgraded: true,
+      previousTier: lastCelebratedTier
+        ? {
+          id: lastCelebratedTier._id,
+          name: lastCelebratedTier.name,
+          key: lastCelebratedTier.key,
+          colorIdentity: lastCelebratedTier.colorIdentity,
+          badgeUrl: lastCelebratedTier.badgeUrl,
+        }
+        : previousTier
+          ? {
+            id: previousTier._id,
+            name: previousTier.name,
+            key: previousTier.key,
+            colorIdentity: previousTier.colorIdentity,
+            badgeUrl: previousTier.badgeUrl,
+          }
+          : null,
+      newTier: {
+        id: currentTier._id,
+        name: currentTier.name,
+        key: currentTier.key,
+        colorIdentity: currentTier.colorIdentity,
+        badgeUrl: currentTier.badgeUrl,
+      },
+      upgradedAt: progress.updatedAt || new Date(),
+    };
+
+    // Mark as celebrated in DB so it won't show again on subsequent requests
+    await UserTierProgress.findByIdAndUpdate(progress._id, {
+      lastCelebratedTierId: currentTier._id,
+    });
+  }
 
   // Find next tier config in active season
   const nextConfig = await TierConfiguration.findOne({
     seasonId: progress.seasonId,
     active: true,
     isArchived: { $ne: true },
-    qualificationThreshold: { $gt: progress.qualificationPoints },
+    qualificationPoint: { $gt: progress.currentPoint },
   })
     .populate({
       path: "tierId",
-      match: { rank: { $gt: currentTier?.rank || 0 } }
+      match: { rank: { $gt: currentTier?.rank || 0 } },
     })
-    .sort({ qualificationThreshold: 1 })
+    .sort({ qualificationPoint: 1 })
     .lean();
 
   // Filter if the populated tierId matched or not
@@ -357,25 +567,28 @@ async function getUserLoyaltySummary(userId) {
 
   if (nextConfig && nextConfig.tierId) {
     nextTier = nextConfig.tierId;
-    remainingPoints = nextConfig.qualificationThreshold - progress.qualificationPoints;
+    remainingPoints =
+      (nextConfig.qualificationPoint ?? 0) - progress.currentPoint;
 
     const currentThreshold = currentTier
       ? await TierConfiguration.findOne({
-          seasonId: progress.seasonId,
-          tierId: currentTier._id,
-          isArchived: { $ne: true },
-        })
-          .select("qualificationThreshold")
-          .lean()
+        seasonId: progress.seasonId,
+        tierId: currentTier._id,
+        isArchived: { $ne: true },
+      })
+        .select("qualificationPoint")
+        .lean()
       : null;
 
-    const startPoints = currentThreshold ? currentThreshold.qualificationThreshold : 0;
-    const targetPoints = nextConfig.qualificationThreshold;
+    const startPoints = currentThreshold
+      ? (currentThreshold.qualificationPoint ?? 0)
+      : 0;
+    const targetPoints = (nextConfig.qualificationPoint ?? 0) - 1;
     const denominator = targetPoints - startPoints;
 
     if (denominator > 0) {
       progressPercentage = Math.round(
-        ((progress.qualificationPoints - startPoints) / denominator) * 100
+        ((progress.currentPoint - startPoints) / denominator) * 100,
       );
       progressPercentage = Math.max(0, Math.min(100, progressPercentage));
     } else {
@@ -395,24 +608,32 @@ async function getUserLoyaltySummary(userId) {
       id: currentTier?._id,
       name: currentTier?.name || "Beginner",
       key: currentTier?.key || "beginner",
-      colorIdentity: currentTier?.colorIdentity || "#8E8E93",
+      colorIdentity: currentTier?.colorIdentity,
       badgeUrl: currentTier?.badgeUrl || "",
       pointMultiplier: activeConfig?.pointMultiplier || 1.0,
+      threshold: activeConfig?.threshold ?? 0,
+      qualificationPoint: activeConfig?.qualificationPoint ?? 0,
     },
-    previousTier: previousTier ? {
-      id: previousTier._id,
-      name: previousTier.name,
-      key: previousTier.key,
-      colorIdentity: previousTier.colorIdentity,
-      badgeUrl: previousTier.badgeUrl,
-    } : null,
-    nextTier: nextTier ? {
-      id: nextTier._id,
-      name: nextTier.name,
-      badgeUrl: nextTier.badgeUrl,
-      threshold: nextConfig.qualificationThreshold,
-    } : null,
-    qualificationPoints: progress.qualificationPoints,
+    previousTier: previousTier
+      ? {
+        id: previousTier._id,
+        name: previousTier.name,
+        key: previousTier.key,
+        colorIdentity: previousTier.colorIdentity,
+        badgeUrl: previousTier.badgeUrl,
+      }
+      : null,
+    nextTier: nextTier
+      ? {
+        id: nextTier._id,
+        name: nextTier.name,
+        badgeUrl: nextTier.badgeUrl,
+        threshold: nextConfig.threshold ?? 0,
+        qualificationPoint: nextConfig.qualificationPoint ?? 0,
+        colorIdentity: nextConfig?.colorIdentity
+      }
+      : null,
+    currentPoint: progress.currentPoint,
     remainingPoints,
     progressPercentage,
     redeemableBalance: user?.totalPoints || 0,
@@ -421,7 +642,9 @@ async function getUserLoyaltySummary(userId) {
       name: activeSeason?.name || "Default Season",
       code: activeSeason?.code || "DEFAULT",
       endDate: activeSeason?.endDate,
+      bannerImages:activeSeason?.bannerImages ?? []
     },
+    levelUpEvent,
   };
 }
 
@@ -478,7 +701,11 @@ async function listSeasons(query = {}) {
   if (query.active === "false") filters.active = false;
 
   const [seasons, total] = await Promise.all([
-    LoyaltySeason.find(filters).sort({ startDate: -1 }).skip(skip).limit(limit).lean(),
+    LoyaltySeason.find(filters)
+      .sort({ startDate: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
     LoyaltySeason.countDocuments(filters),
   ]);
 
@@ -517,7 +744,7 @@ async function listTierConfigurations(query = {}) {
   if (query.search) {
     filters.$or = [
       { "metadata.campaignTag": { $regex: query.search, $options: "i" } },
-      { "metadata.region": { $regex: query.search, $options: "i" } }
+      { "metadata.region": { $regex: query.search, $options: "i" } },
     ];
   }
 
@@ -583,7 +810,7 @@ async function listBenefits(query = {}) {
 async function getTierProgressionMetadata(userId) {
   const activeSeason = await resolveActiveSeason();
   if (!activeSeason) {
-    sendFailResponse("No active loyalty season available.");
+    return [];
   }
 
   const configs = await TierConfiguration.find({
@@ -599,16 +826,28 @@ async function getTierProgressionMetadata(userId) {
 }
 
 async function createSeason(adminId, payload) {
-  const { name, code, startDate, endDate, active = false } = payload;
+  const isNested =
+    payload.seasonDetails !== undefined || payload.seasoDetaisl !== undefined;
+  const details = isNested
+    ? payload.seasonDetails || payload.seasoDetaisl
+    : payload;
+  const tierConfigs = isNested
+    ? payload.tierConfigurations || payload.tierconfigurations || []
+    : [];
+
+  const { name, code, startDate, endDate, active = false } = details;
   const { start, end } = normalizeDateRange(startDate, endDate);
   await ensureSeasonDateRangeHasNoOverlap({ startDate: start, endDate: end });
 
   if (active) {
-    await LoyaltySeason.updateMany({ active: true }, { active: false, deactivatedAt: new Date() });
+    await LoyaltySeason.updateMany(
+      { active: true },
+      { active: false, deactivatedAt: new Date() },
+    );
   }
 
   const season = await LoyaltySeason.create({
-    ...payload,
+    ...details,
     name,
     code,
     startDate: start,
@@ -634,13 +873,49 @@ async function createSeason(adminId, payload) {
     ]),
   });
 
+  // Handle tier configurations if present
+  let configsArray = Array.isArray(tierConfigs) ? tierConfigs : [];
+  if (
+    tierConfigs &&
+    typeof tierConfigs === "object" &&
+    !Array.isArray(tierConfigs)
+  ) {
+    configsArray = Object.entries(tierConfigs).map(([key, val]) => ({
+      tierId: val.tierId || key,
+      ...val,
+    }));
+  }
+
+  if (configsArray.length > 0) {
+    // Fetch tiers to sort configurations by rank ascending
+    const allTiers = await Tier.find().lean();
+    const tierMap = new Map(allTiers.map((t) => [t._id.toString(), t]));
+
+    const sortedConfigs = [...configsArray].sort((a, b) => {
+      const rankA = tierMap.get(a.tierId.toString())?.rank || 0;
+      const rankB = tierMap.get(b.tierId.toString())?.rank || 0;
+      return rankA - rankB;
+    });
+
+    for (const config of sortedConfigs) {
+      await createTierConfiguration(adminId, {
+        ...config,
+        seasonId: season._id.toString(),
+      });
+    }
+  }
+
   return season;
 }
 
 async function updateSeason(adminId, seasonId, payload) {
   let existingSeason = await LoyaltySeason.findById(seasonId);
   if (!existingSeason) {
-    const fallbackUpdated = await LoyaltySeason.findByIdAndUpdate(seasonId, payload, { new: true });
+    const fallbackUpdated = await LoyaltySeason.findByIdAndUpdate(
+      seasonId,
+      payload,
+      { new: true },
+    );
     if (fallbackUpdated) {
       return fallbackUpdated;
     }
@@ -665,29 +940,36 @@ async function updateSeason(adminId, seasonId, payload) {
   }
 
   if (payload.active === true) {
-    await LoyaltySeason.updateMany({ _id: { $ne: seasonId }, active: true }, { active: false, deactivatedAt: new Date() });
+    await LoyaltySeason.updateMany(
+      { _id: { $ne: seasonId }, active: true },
+      { active: false, deactivatedAt: new Date() },
+    );
     nextData.activatedAt = new Date();
     nextData.deactivatedAt = null;
   }
 
   if (payload.active === false) {
-    const activeCount = await LoyaltySeason.countDocuments({ active: true });
-    if (existingSeason.active && activeCount <= 1) {
-      sendFailResponse("At least one season must remain active");
-    }
     nextData.deactivatedAt = new Date();
   }
 
-  const updatedSeason = await LoyaltySeason.findByIdAndUpdate(seasonId, nextData, { new: true });
-  const changes = buildChanges(existingSeason.toObject(), updatedSeason.toObject(), [
-    "name",
-    "code",
-    "startDate",
-    "endDate",
-    "active",
-    "carryForwardBehavior",
-    "carryForwardPercentage",
-  ]);
+  const updatedSeason = await LoyaltySeason.findByIdAndUpdate(
+    seasonId,
+    nextData,
+    { new: true },
+  );
+  const changes = buildChanges(
+    existingSeason.toObject(),
+    updatedSeason.toObject(),
+    [
+      "name",
+      "code",
+      "startDate",
+      "endDate",
+      "active",
+      "carryForwardBehavior",
+      "carryForwardPercentage",
+    ],
+  );
 
   if (changes.length) {
     await logConfigurationAudit({
@@ -708,7 +990,10 @@ async function activateSeason(adminId, seasonId) {
     sendFailResponse("Season not found", 404);
   }
 
-  await LoyaltySeason.updateMany({ _id: { $ne: seasonId }, active: true }, { active: false, deactivatedAt: new Date() });
+  await LoyaltySeason.updateMany(
+    { _id: { $ne: seasonId }, active: true },
+    { active: false, deactivatedAt: new Date() },
+  );
   const activeSeason = await LoyaltySeason.findByIdAndUpdate(
     seasonId,
     { active: true, activatedAt: new Date(), deactivatedAt: null },
@@ -736,48 +1021,11 @@ async function deactivateSeason(adminId, seasonId) {
   }
 
   const now = new Date();
-  const activeCount = await LoyaltySeason.countDocuments({ active: true, isArchived: { $ne: true } });
   const deactivated = await LoyaltySeason.findByIdAndUpdate(
     seasonId,
     { active: false, deactivatedAt: now },
     { new: true },
   );
-
-  // If this was the last active season, automatically promote a fallback season.
-  if (activeCount <= 1) {
-    let fallbackSeason = await LoyaltySeason.findOne({
-      _id: { $ne: seasonId },
-      isArchived: { $ne: true },
-      startDate: { $lte: now },
-      endDate: { $gte: now },
-    });
-
-    if (!fallbackSeason) {
-      fallbackSeason = await LoyaltySeason.findOne({
-        _id: { $ne: seasonId },
-        isArchived: { $ne: true },
-      }).sort({ startDate: 1 });
-    }
-
-    if (!fallbackSeason) {
-      sendFailResponse("Cannot deactivate the only available season");
-    }
-
-    await LoyaltySeason.findByIdAndUpdate(fallbackSeason._id, {
-      active: true,
-      activatedAt: now,
-      deactivatedAt: null,
-    });
-
-    await logConfigurationAudit({
-      action: "SEASON_ACTIVATED",
-      changedBy: adminId,
-      seasonId: fallbackSeason._id,
-      seasonName: fallbackSeason.name,
-      changes: [{ field: "active", oldValue: false, newValue: true }],
-      metadata: { reason: "AUTO_ACTIVATED_ON_DEACTIVATE" },
-    });
-  }
 
   await logConfigurationAudit({
     action: "SEASON_DEACTIVATED",
@@ -788,6 +1036,166 @@ async function deactivateSeason(adminId, seasonId) {
   });
 
   return deactivated;
+}
+
+async function validateTierRange(payload, excludeTierId = null) {
+  let active = payload.active;
+  let qualificationPoint = payload.qualificationPoint;
+  let threshold = payload.threshold;
+  let rank = payload.rank;
+
+  if (excludeTierId) {
+    const existing = await Tier.findById(excludeTierId).lean();
+    if (existing) {
+      if (active === undefined) active = existing.active;
+      if (qualificationPoint === undefined)
+        qualificationPoint = existing.qualificationPoint;
+      if (threshold === undefined) threshold = existing.threshold;
+      if (rank === undefined) rank = existing.rank;
+    }
+  }
+
+  if (active !== false) {
+    const qp = Number(qualificationPoint || 0);
+    const th = Number(threshold || 0);
+    const currentRank = Number(rank || 0);
+
+    if (qp < 0) {
+      sendFailResponse("Qualification point must be a non-negative number");
+    }
+    if (th < 0) {
+      sendFailResponse("Threshold must be a non-negative number");
+    }
+
+    const start = qp;
+    const end = qp + th;
+
+    const query = { active: true };
+    if (excludeTierId) {
+      query._id = { $ne: excludeTierId };
+    }
+
+    const activeTiers = await Tier.find(query).lean();
+
+    for (const tier of activeTiers) {
+      const tierQp = Number(tier.qualificationPoint || 0);
+      const tierTh = Number(tier.threshold || 0);
+      const tierStart = tierQp;
+      const tierEnd = tierQp + tierTh;
+
+      if (start < tierEnd && tierStart < end) {
+        sendFailResponse(
+          `Conflict detected: The active range [${start}, ${end}) overlaps with existing active tier "${tier.name}" [${tierStart}, ${tierEnd}).`,
+        );
+      }
+
+      if (tier.rank < currentRank) {
+        if (tierQp >= qp) {
+          sendFailResponse(
+            `Qualification point conflicts with lower rank tier "${tier.name}" (QP: ${tierQp}). Qualification points must be strictly ascending with rank.`,
+          );
+        }
+      }
+
+      if (tier.rank > currentRank) {
+        if (tierQp <= qp) {
+          sendFailResponse(
+            `Qualification point conflicts with higher rank tier "${tier.name}" (QP: ${tierQp}). Qualification points must be strictly ascending with rank.`,
+          );
+        }
+      }
+    }
+  }
+}
+
+async function recalculateTierConfigurationThresholds(seasonId) {
+  const query = TierConfiguration.find({
+    seasonId,
+    active: true,
+    isArchived: { $ne: true },
+  }).populate("tierId");
+
+  const configs =
+    typeof query.lean === "function" ? await query.lean() : await query;
+
+  if (configs.length === 0) return;
+
+  const sortedConfigs = configs
+    .filter((c) => c.tierId)
+    .sort((a, b) => a.tierId.rank - b.tierId.rank);
+
+  const highestRankConfig = sortedConfigs[sortedConfigs.length - 1];
+
+  for (let i = 0; i < sortedConfigs.length; i++) {
+    const config = sortedConfigs[i];
+    const isFinal = i === sortedConfigs.length - 1;
+
+    if (config.isFinalTier !== isFinal) {
+      config.isFinalTier = isFinal;
+      await TierConfiguration.findByIdAndUpdate(config._id, {
+        isFinalTier: isFinal,
+      });
+    }
+
+    if (isFinal) {
+      continue;
+    }
+
+    if (i < sortedConfigs.length - 1) {
+      const nextConfig = sortedConfigs[i + 1];
+      const calculatedThreshold =
+        nextConfig.qualificationPoint - config.qualificationPoint;
+
+      await TierConfiguration.findByIdAndUpdate(config._id, {
+        threshold: calculatedThreshold,
+      });
+    }
+  }
+}
+
+async function validateTierConfigurationThreshold(
+  seasonId,
+  tierId,
+  newQp,
+  isActive,
+  excludeConfigId = null,
+) {
+  if (isActive === false) return; // Inactive configs don't conflict
+
+  const season = await LoyaltySeason.findById(seasonId).lean();
+  if (season) {
+    const currentTier = await Tier.findById(tierId).lean();
+    if (!currentTier) return;
+
+    const allConfigs = await TierConfiguration.find({
+      seasonId,
+      active: true,
+      isArchived: { $ne: true },
+      _id: { $ne: excludeConfigId },
+    }).populate("tierId");
+
+    const start = Number(newQp || 0);
+
+    for (const config of allConfigs) {
+      if (!config.tierId) continue;
+
+      if (config.tierId.rank < currentTier.rank) {
+        if (config.qualificationPoint >= start) {
+          sendFailResponse(
+            `Qualification point conflicts with lower rank tier "${config.tierId.name}" (QP: ${config.qualificationPoint}). Qualification points must be strictly ascending with rank.`,
+          );
+        }
+      }
+
+      if (config.tierId.rank > currentTier.rank) {
+        if (config.qualificationPoint <= start) {
+          sendFailResponse(
+            `Qualification point conflicts with higher rank tier "${config.tierId.name}" (QP: ${config.qualificationPoint}). Qualification points must be strictly ascending with rank.`,
+          );
+        }
+      }
+    }
+  }
 }
 
 async function createTierConfiguration(adminId, payload) {
@@ -801,8 +1209,30 @@ async function createTierConfiguration(adminId, payload) {
     sendFailResponse("Tier not found", 404);
   }
 
+  // Set default values if not defined in payload
+  const qp =
+    payload.qualificationPoint !== undefined
+      ? payload.qualificationPoint
+      : tier.qualificationPoint || 0;
+  const th =
+    payload.threshold !== undefined ? payload.threshold : tier.threshold || 0;
+
+  payload.qualificationPoint = qp;
+  payload.threshold = th;
+
+  await validateTierConfigurationThreshold(
+    payload.seasonId,
+    payload.tierId,
+    qp,
+    payload.active !== false,
+  );
+
   const config = await TierConfiguration.create(payload);
-  await createTierConfigHistorySnapshot({ configDoc: config, changedBy: adminId });
+  await recalculateTierConfigurationThresholds(config.seasonId);
+  await createTierConfigHistorySnapshot({
+    configDoc: config,
+    changedBy: adminId,
+  });
 
   await logConfigurationAudit({
     action: "TIER_CONFIG_CREATED",
@@ -813,10 +1243,12 @@ async function createTierConfiguration(adminId, payload) {
     seasonName: season.name,
     tierName: tier.name,
     changes: buildChanges({}, config.toObject(), [
-      "qualificationThreshold",
+      "qualificationPoint",
+      "threshold",
       "pointMultiplier",
       "benefits",
       "active",
+      "isFinalTier",
       "metadata",
     ]),
   });
@@ -824,23 +1256,178 @@ async function createTierConfiguration(adminId, payload) {
   return config;
 }
 
+async function recalculateSeasonTiers(seasonId) {
+  const configs = await TierConfiguration.find({
+    seasonId,
+    active: true,
+    isArchived: { $ne: true },
+  })
+    .populate("tierId")
+    .lean();
+
+  if (configs.length === 0) return;
+
+  const sortedConfigs = configs.sort(
+    (a, b) => (b.qualificationPoint ?? 0) - (a.qualificationPoint ?? 0),
+  );
+  const rankZeroConfig = configs.find((c) => c.tierId && c.tierId.rank === 0);
+
+  const progresses = await UserTierProgress.find({ seasonId }).populate(
+    "currentTierId",
+  );
+
+  const progressBulkOps = [];
+  const userBulkOps = [];
+  const notificationsToSend = [];
+
+  for (const progress of progresses) {
+    let qualifiedConfig = null;
+    for (const config of sortedConfigs) {
+      if (progress.currentPoint >= (config.qualificationPoint ?? 0)) {
+        qualifiedConfig = config;
+        break;
+      }
+    }
+
+    if (!qualifiedConfig && rankZeroConfig) {
+      qualifiedConfig = rankZeroConfig;
+    }
+
+    if (qualifiedConfig && qualifiedConfig.tierId) {
+      const oldTier = progress.currentTierId;
+      const newTier = qualifiedConfig.tierId;
+
+      if (!oldTier || String(oldTier._id) !== String(newTier._id)) {
+        const oldTierName = oldTier?.name || "None";
+        const oldRank = oldTier?.rank || 0;
+        const newRank = newTier.rank || 0;
+        const isUpgrade = newRank > oldRank;
+        const lastEvaluatedAt = new Date();
+
+        progressBulkOps.push({
+          updateOne: {
+            filter: { _id: progress._id },
+            update: {
+              $set: {
+                previousTierId: oldTier?._id || null,
+                currentTierId: newTier._id,
+                lastEvaluatedAt,
+              },
+            },
+          },
+        });
+
+        userBulkOps.push({
+          updateOne: {
+            filter: { _id: progress.userId },
+            update: {
+              $set: {
+                currentTierId: newTier._id,
+              },
+            },
+          },
+        });
+
+        notificationsToSend.push({
+          userId: progress.userId,
+          oldTierName,
+          newTierName: newTier.name,
+          isUpgrade,
+        });
+      } 
+    }
+  }
+
+  if (progressBulkOps.length > 0) {
+    await Promise.all([
+      UserTierProgress.bulkWrite(progressBulkOps),
+      User.bulkWrite(userBulkOps),
+    ]);
+
+    const affectedUserIds = notificationsToSend.map((n) => n.userId);
+    const users = await User.find({ _id: { $in: affectedUserIds } })
+      .select("fcmTokens enableNotification")
+      .lean();
+
+    const userMap = new Map(users.map((u) => [String(u._id), u]));
+
+    for (const notif of notificationsToSend) {
+      const user = userMap.get(String(notif.userId));
+      if (user && user.fcmTokens?.length && user.enableNotification) {
+        const notifTemplate = notif.isUpgrade
+          ? APP_NOTIFICATIONS.loyalty.tierUpgraded
+          : APP_NOTIFICATIONS.loyalty.tierUpdated;
+
+        const title = notifTemplate.title;
+        const body = formatNotification(notifTemplate.body, {
+          oldTierName: notif.oldTierName,
+          newTierName: notif.newTierName,
+        });
+
+        sendFcmNotifications(user.fcmTokens, title, body).catch((error) => {
+          console.error(
+            "⚠️ Failed to send tier adjustment FCM notification:",
+            error,
+          );
+        });
+      }
+    }
+  }
+}
+
 async function updateTierConfiguration(adminId, configId, payload) {
-  const existing = await TierConfiguration.findById(configId).populate("tierId").populate("seasonId");
+  const existing = await TierConfiguration.findById(configId)
+    .populate("tierId")
+    .populate("seasonId");
   if (!existing) {
     sendFailResponse("Tier configuration not found", 404);
   }
 
-  const updated = await TierConfiguration.findByIdAndUpdate(configId, payload, { new: true });
+  const qp =
+    payload.qualificationPoint !== undefined
+      ? payload.qualificationPoint
+      : existing.qualificationPoint;
+  const th =
+    payload.threshold !== undefined ? payload.threshold : existing.threshold;
+  const active =
+    payload.active !== undefined ? payload.active : existing.active;
+
+  if (
+    payload.qualificationPoint !== undefined ||
+    payload.active !== undefined
+  ) {
+    payload.qualificationPoint = qp;
+    payload.threshold = th;
+    await validateTierConfigurationThreshold(
+      existing.seasonId._id || existing.seasonId,
+      existing.tierId._id || existing.tierId,
+      qp,
+      active,
+      configId,
+    );
+  }
+
+  const updated = await TierConfiguration.findByIdAndUpdate(configId, payload, {
+    new: true,
+  });
+  await recalculateTierConfigurationThresholds(
+    existing.seasonId._id || existing.seasonId.id || existing.seasonId,
+  );
   const changes = buildChanges(existing.toObject(), updated.toObject(), [
-    "qualificationThreshold",
+    "qualificationPoint",
+    "threshold",
     "pointMultiplier",
     "benefits",
     "active",
+    "isFinalTier",
     "metadata",
   ]);
 
   if (changes.length) {
-    await createTierConfigHistorySnapshot({ configDoc: updated, changedBy: adminId });
+    await createTierConfigHistorySnapshot({
+      configDoc: updated,
+      changedBy: adminId,
+    });
     await logConfigurationAudit({
       action: "TIER_CONFIG_UPDATED",
       changedBy: adminId,
@@ -851,6 +1438,15 @@ async function updateTierConfiguration(adminId, configId, payload) {
       tierName: existing?.tierId?.name || null,
       changes,
     });
+
+    const thresholdChanged = changes.some(
+      (c) => c.field === "qualificationPoint" || c.field === "threshold",
+    );
+    if (thresholdChanged && existing.seasonId && existing.seasonId.active) {
+      await recalculateSeasonTiers(
+        existing.seasonId._id || existing.seasonId.id || existing.seasonId,
+      );
+    }
   }
 
   return updated;
@@ -906,7 +1502,11 @@ async function archiveTierConfiguration(adminId, configId) {
     { isArchived: true, active: false },
     { new: true },
   );
-  await createTierConfigHistorySnapshot({ configDoc: archived, changedBy: adminId });
+  await recalculateTierConfigurationThresholds(archived.seasonId);
+  await createTierConfigHistorySnapshot({
+    configDoc: archived,
+    changedBy: adminId,
+  });
 
   await logConfigurationAudit({
     action: "TIER_CONFIG_DELETED",
@@ -926,9 +1526,13 @@ async function getSeasonManagementSummary() {
   const activeSeason = await resolveActiveSeason();
   const seasons = await LoyaltySeason.find().sort({ startDate: -1 }).lean();
   const activeConfigs = activeSeason
-    ? await TierConfiguration.find({ seasonId: activeSeason._id, active: true, isArchived: { $ne: true } })
-        .populate("tierId")
-        .lean()
+    ? await TierConfiguration.find({
+      seasonId: activeSeason._id,
+      active: true,
+      isArchived: { $ne: true },
+    })
+      .populate("tierId")
+      .lean()
     : [];
 
   return {
@@ -946,7 +1550,8 @@ async function listConfigurationAuditLogs(query = {}) {
   const filters = {};
   if (query.seasonId) filters.seasonId = query.seasonId;
   if (query.tierId) filters.tierId = query.tierId;
-  if (query.tierConfigurationId) filters.tierConfigurationId = query.tierConfigurationId;
+  if (query.tierConfigurationId)
+    filters.tierConfigurationId = query.tierConfigurationId;
 
   const [logs, total] = await Promise.all([
     LoyaltyConfigAuditLog.find(filters)
@@ -1052,4 +1657,5 @@ module.exports = {
   archiveSeason,
   archiveTierConfiguration,
   getSeasonById,
+  validateTierRange,
 };

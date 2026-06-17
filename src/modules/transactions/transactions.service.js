@@ -148,26 +148,40 @@ async function createTransaction(data, userId) {
 
   // 1000 Point First Redemption Rule
   const tierRank = user.currentTierId?.rank || 0;
-  if (tierRank <= 1) { // Beginner(0) or Bronze(1)
+  if (tierRank <= 1) {
+    // Beginner(0) or Bronze(1)
     let lifetimePoints = user.lifetimePoints || 0;
     if (lifetimePoints < 1000) {
       const LoyaltyTransaction = require("../../schemas/loyalty-transaction.schema");
       const result = await LoyaltyTransaction.aggregate([
-        { $match: { userId: user._id, type: { $in: [LOYALTY_TRANSACTION_TYPES.REDEEMABLE, LOYALTY_TRANSACTION_TYPES.BOTH] }, points: { $gt: 0 } } },
-        { $group: { _id: null, total: { $sum: "$points" } } }
+        {
+          $match: {
+            userId: user._id,
+            type: {
+              $in: [
+                LOYALTY_TRANSACTION_TYPES.REDEEMABLE,
+                LOYALTY_TRANSACTION_TYPES.BOTH,
+              ],
+            },
+            points: { $gt: 0 },
+          },
+        },
+        { $group: { _id: null, total: { $sum: "$points" } } },
       ]);
       const calculatedPoints = result[0]?.total || 0;
       lifetimePoints = Math.max(lifetimePoints, calculatedPoints);
-      
+
       // Update DB if fallback calculation crosses the threshold
       if (calculatedPoints > (user.lifetimePoints || 0)) {
         user.lifetimePoints = calculatedPoints;
         await user.save();
       }
     }
-    
+
     if (lifetimePoints < 1000) {
-      sendFailResponse("You must accumulate 1000 lifetime points before your first redemption. Keep scanning!");
+      sendFailResponse(
+        "You must accumulate 1000 lifetime points before your first redemption. Keep scanning!",
+      );
     }
   }
   if (!user.bankDetails?.accountNumber)

@@ -18,7 +18,7 @@ const tierBenefitSchema = new mongoose.Schema(
         return ret;
       },
     },
-  }
+  },
 );
 
 const TierBenefit = mongoose.model("TierBenefit", tierBenefitSchema);

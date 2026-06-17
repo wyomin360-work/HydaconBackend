@@ -36,8 +36,15 @@ const tierConfigurationHistorySchema = new mongoose.Schema(
   },
 );
 
-tierConfigurationHistorySchema.index({ tierConfigurationId: 1, version: -1 }, { unique: true });
-tierConfigurationHistorySchema.index({ seasonId: 1, tierId: 1, effectiveFrom: -1 });
+tierConfigurationHistorySchema.index(
+  { tierConfigurationId: 1, version: -1 },
+  { unique: true },
+);
+tierConfigurationHistorySchema.index({
+  seasonId: 1,
+  tierId: 1,
+  effectiveFrom: -1,
+});
 
 const TierConfigurationHistory = mongoose.model(
   "TierConfigurationHistory",

@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { AUDIT_LOG_ACTIONS } = require("../constants/audit-logs");
 
 const fieldChangeSchema = new mongoose.Schema(
   {
@@ -13,16 +14,7 @@ const loyaltyConfigAuditSchema = new mongoose.Schema(
   {
     action: {
       type: String,
-      enum: [
-        "SEASON_CREATED",
-        "SEASON_UPDATED",
-        "SEASON_ACTIVATED",
-        "SEASON_DEACTIVATED",
-        "SEASON_DELETED",
-        "TIER_CONFIG_CREATED",
-        "TIER_CONFIG_UPDATED",
-        "TIER_CONFIG_DELETED",
-      ],
+      enum: Object.values(AUDIT_LOG_ACTIONS),
       required: true,
       index: true,
     },

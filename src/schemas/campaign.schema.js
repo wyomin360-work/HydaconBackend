@@ -27,7 +27,7 @@ const campaignSchema = new mongoose.Schema(
         return ret;
       },
     },
-  }
+  },
 );
 
 const Campaign = mongoose.model("Campaign", campaignSchema);
