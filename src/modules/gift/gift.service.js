@@ -1,6 +1,8 @@
 const GiftCategory = require("../../schemas/gift-category.schema");
 const Gift = require("../../schemas/gift.schema");
 const mongoose = require("mongoose");
+const GiftRedemption = require("../../schemas/gift-redemption.schema");
+const User = require("../../schemas/user.schema");
 
 // --- Categories ---
 
@@ -183,9 +185,6 @@ exports.deleteGift = async (giftId) => {
 };
 
 // --- Redemptions ---
-
-const GiftRedemption = require("../../schemas/gift-redemption.schema");
-const User = require("../../schemas/user.schema");
 
 exports.redeemGift = async (userId, data) => {
   const { giftId, shippingAddress } = data;
