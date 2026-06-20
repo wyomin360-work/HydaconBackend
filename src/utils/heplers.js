@@ -155,8 +155,6 @@ const calculateProfileCompletion = (user, roleName = "") => {
   return Math.round((filledFields / totalFields) * 100);
 };
 
-
-
 function parseUserAgent(userAgent, headers = {}) {
   const info = {
     userAgent: userAgent || null,

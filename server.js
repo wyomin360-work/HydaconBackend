@@ -3,7 +3,9 @@ require("dotenv").config();
 const { isSmsConfigured } = require("./src/functions/sms");
 const { initCronJobs } = require("./src/functions/cron");
 
-const { seedDefaultLoyaltyData } = require("./src/modules/loyalty/loyalty.service");
+const {
+  seedDefaultLoyaltyData,
+} = require("./src/modules/loyalty/loyalty.service");
 
 const app = require("./src/app");
 const Database = require("./src/config/mongodb.config");

@@ -37,7 +37,7 @@ const tierConfigurationSchema = new mongoose.Schema(
 // Compound index to ensure one tier config per tier per season
 tierConfigurationSchema.index(
   { tierId: 1, seasonId: 1 },
-  { unique: true, partialFilterExpression: { isArchived: false } }
+  { unique: true, partialFilterExpression: { isArchived: false } },
 );
 
 const TierConfiguration = mongoose.model(

@@ -36,7 +36,10 @@ function initCronJobs() {
           startDate: { $lte: now }, // The one that should be active now
         });
 
-        if (nextSeason && nextSeason._id.toString() !== endedSeason._id.toString()) {
+        if (
+          nextSeason &&
+          nextSeason._id.toString() !== endedSeason._id.toString()
+        ) {
           // Handle Rollover Logic for Users
           const allProgress = await UserTierProgress.find({
             seasonId: endedSeason._id,
@@ -46,7 +49,9 @@ function initCronJobs() {
             seasonId: nextSeason._id,
             active: true,
             isArchived: { $ne: true },
-          }).populate("tierId").lean();
+          })
+            .populate("tierId")
+            .lean();
 
           const beginnerTier = await Tier.findOne({ rank: 0 }).lean();
 
@@ -105,12 +110,14 @@ function initCronJobs() {
               });
             }
           }
-          
+
           console.log(`Rollover completed for ${endedSeason.name}`);
         } else {
-          console.log("No next season found to rollover into. Marking as processed anyway.");
+          console.log(
+            "No next season found to rollover into. Marking as processed anyway.",
+          );
         }
-        
+
         // Mark as processed so we don't run it again
         endedSeason.rolloverProcessed = true;
         await endedSeason.save();
@@ -121,7 +128,7 @@ function initCronJobs() {
       const oldActiveSeasons = await LoyaltySeason.find({
         active: true,
         isArchived: { $ne: true },
-        endDate: { $lt: now }
+        endDate: { $lt: now },
       });
       for (const season of oldActiveSeasons) {
         season.active = false;
@@ -135,7 +142,7 @@ function initCronJobs() {
         active: false,
         isArchived: { $ne: true },
         startDate: { $lte: now },
-        endDate: { $gte: now }
+        endDate: { $gte: now },
       });
       if (seasonToActivate) {
         seasonToActivate.active = true;

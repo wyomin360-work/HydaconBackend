@@ -108,7 +108,9 @@ async function login(userData) {
   }
 
   if (userExist.isActive === false) {
-    sendFailResponse("Your account has been deactivated. Please contact support.");
+    sendFailResponse(
+      "Your account has been deactivated. Please contact support.",
+    );
   }
 
   const isSamePassword = await compareHash(password, userExist.password);
@@ -192,7 +194,9 @@ async function providerAuth(data) {
     // ${userExist.authType}. Please log in using that method.`);
 
     if (userExist.isActive === false) {
-      sendFailResponse("Your account has been deactivated. Please contact support.");
+      sendFailResponse(
+        "Your account has been deactivated. Please contact support.",
+      );
     }
 
     const { refreshToken, accessToken } = await generateAndSaveToken({
@@ -874,7 +878,9 @@ async function simpleLoginWithOtp(data) {
   }
 
   if (user.isActive === false) {
-    sendFailResponse("Your account has been deactivated. Please contact support.");
+    sendFailResponse(
+      "Your account has been deactivated. Please contact support.",
+    );
   }
 
   // 4. Auth type check
@@ -1130,7 +1136,12 @@ async function userList(data) {
   sort[sortBy] = sortOrder === "asc" ? 1 : -1;
 
   const users =
-    (await User.find(query).populate("currentTierId", "name level").sort(sort).skip(skip).limit(limit).lean()) ?? [];
+    (await User.find(query)
+      .populate("currentTierId", "name level")
+      .sort(sort)
+      .skip(skip)
+      .limit(limit)
+      .lean()) ?? [];
 
   const totalUsers = await User.countDocuments(query);
 
@@ -1307,17 +1318,21 @@ async function getAdminUserDetails(userId) {
     .populate("roleId", "name level pointMultiplier")
     .populate("currentTierId", "name level pointMultiplier")
     .lean();
-    
+
   if (!user) sendFailResponse("User not found");
 
-  if (user.bankDetails && user.bankDetails.accountNumber && user.bankDetails.accountIv) {
+  if (
+    user.bankDetails &&
+    user.bankDetails.accountNumber &&
+    user.bankDetails.accountIv
+  ) {
     user.bankDetails.accountNumber = decrypt(
       user.bankDetails.accountNumber,
-      user.bankDetails.accountIv
+      user.bankDetails.accountIv,
     );
     user.bankDetails.ifscCode = decrypt(
       user.bankDetails.ifscCode,
-      user.bankDetails.ifscIv
+      user.bankDetails.ifscIv,
     );
     delete user.bankDetails.accountIv;
     delete user.bankDetails.ifscIv;
@@ -1325,15 +1340,37 @@ async function getAdminUserDetails(userId) {
 
   const Redeem = mongoose.model("Redeem");
   const purchasedProducts = await Redeem.aggregate([
-    { $match: { userId: new mongoose.Types.ObjectId(userId), status: "SUCCESS" } },
+    {
+      $match: {
+        userId: new mongoose.Types.ObjectId(userId),
+        status: "SUCCESS",
+      },
+    },
     { $group: { _id: "$productId", quantity: { $sum: 1 } } },
-    { $lookup: { from: "products", localField: "_id", foreignField: "_id", as: "product" } },
+    {
+      $lookup: {
+        from: "products",
+        localField: "_id",
+        foreignField: "_id",
+        as: "product",
+      },
+    },
     { $unwind: { path: "$product", preserveNullAndEmptyArrays: true } },
-    { $project: { _id: 0, productId: "$_id", name: "$product.name", quantity: 1 } },
-    { $sort: { quantity: -1 } }
+    {
+      $project: {
+        _id: 0,
+        productId: "$_id",
+        name: "$product.name",
+        quantity: 1,
+      },
+    },
+    { $sort: { quantity: -1 } },
   ]);
 
-  const accurateTotalScans = purchasedProducts.reduce((acc, curr) => acc + (curr.quantity || 0), 0);
+  const accurateTotalScans = purchasedProducts.reduce(
+    (acc, curr) => acc + (curr.quantity || 0),
+    0,
+  );
   user.totalScans = accurateTotalScans;
 
   return {

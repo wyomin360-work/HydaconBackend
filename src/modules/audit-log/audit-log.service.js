@@ -67,7 +67,9 @@ async function clearAllAuditLogs() {
     AuditLog.deleteMany({}),
     LoyaltyConfigAuditLog.deleteMany({}),
   ]);
-  console.log("🧹 All audit logs have been successfully cleared from the database.");
+  console.log(
+    "🧹 All audit logs have been successfully cleared from the database.",
+  );
 }
 
 module.exports = {

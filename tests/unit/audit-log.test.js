@@ -29,7 +29,10 @@ describe("Shared Audit Log Service", () => {
         },
       };
 
-      await auditLogService.logAudit(AUDIT_LOG_ACTIONS.PHONE_NUMBER_CHANGE, data);
+      await auditLogService.logAudit(
+        AUDIT_LOG_ACTIONS.PHONE_NUMBER_CHANGE,
+        data,
+      );
 
       expect(AuditLog).toHaveBeenCalledWith(
         expect.objectContaining({

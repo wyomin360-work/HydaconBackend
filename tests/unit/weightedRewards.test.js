@@ -91,7 +91,12 @@ describe("Weighted Rewards Calculation", () => {
     const response = await createRedeem(redeemData);
 
     expect(response.data.pointsRewarded).toBe(50);
-    expect(User.findByIdAndUpdate).toHaveBeenCalledWith("user123", expect.objectContaining({ $inc: { totalPoints: 50, lifetimePoints: 50 } }));
+    expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
+      "user123",
+      expect.objectContaining({
+        $inc: { totalPoints: 50, lifetimePoints: 50 },
+      }),
+    );
   });
 
   it("should award 10 points to a Retailer (5 points * 2 multiplier)", async () => {
@@ -109,7 +114,12 @@ describe("Weighted Rewards Calculation", () => {
     const response = await createRedeem(redeemData);
 
     expect(response.data.pointsRewarded).toBe(10);
-    expect(User.findByIdAndUpdate).toHaveBeenCalledWith("user123", expect.objectContaining({ $inc: { totalPoints: 10, lifetimePoints: 10 } }));
+    expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
+      "user123",
+      expect.objectContaining({
+        $inc: { totalPoints: 10, lifetimePoints: 10 },
+      }),
+    );
   });
 
   it("should award base 5 points if user has no role multiplier", async () => {
@@ -126,6 +136,9 @@ describe("Weighted Rewards Calculation", () => {
     const response = await createRedeem(redeemData);
 
     expect(response.data.pointsRewarded).toBe(5);
-    expect(User.findByIdAndUpdate).toHaveBeenCalledWith("user123", expect.objectContaining({ $inc: { totalPoints: 5, lifetimePoints: 5 } }));
+    expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
+      "user123",
+      expect.objectContaining({ $inc: { totalPoints: 5, lifetimePoints: 5 } }),
+    );
   });
 });
