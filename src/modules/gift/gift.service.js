@@ -187,6 +187,109 @@ exports.deleteGift = async (giftId) => {
 const GiftRedemption = require("../../schemas/gift-redemption.schema");
 const User = require("../../schemas/user.schema");
 
+const checkEligibility = async (user, gift, session = null) => {
+  const rules = {
+    coins: { required: gift.priceInCoins, current: user.hydaconCoins || 0, satisfied: (user.hydaconCoins || 0) >= gift.priceInCoins },
+    tier: { required: "None", current: "None", satisfied: true },
+    scans: { required: 0, current: 0, satisfied: true },
+    region: { required: [], current: user.areaOfOperation || "None", satisfied: true }
+  };
+
+  const reasons = [];
+
+  // Coins requirement
+  if (!rules.coins.satisfied) {
+    reasons.push(`Requires at least ${gift.priceInCoins.toLocaleString()} coins (Current: ${(user.hydaconCoins || 0).toLocaleString()})`);
+  }
+
+  // Tier requirement
+  if (gift.rewardRules && gift.rewardRules.minTierId) {
+    const Tier = mongoose.model("Tier");
+    const requiredTier = await Tier.findById(gift.rewardRules.minTierId).session(session);
+    if (requiredTier) {
+      rules.tier.required = requiredTier.name;
+      let userTier = null;
+      if (user.currentTierId) {
+        userTier = await Tier.findById(user.currentTierId).session(session);
+      }
+      rules.tier.current = userTier ? userTier.name : "Beginner";
+      const userRank = userTier ? userTier.rank : 0;
+      rules.tier.satisfied = userRank >= requiredTier.rank;
+      if (!rules.tier.satisfied) {
+        reasons.push(`Requires ${requiredTier.name} membership tier or above (Current: ${rules.tier.current})`);
+      }
+    }
+  }
+
+  // Scan requirement
+  if (gift.rewardRules && gift.rewardRules.minScansThisMonth > 0) {
+    const requiredScans = gift.rewardRules.minScansThisMonth;
+    rules.scans.required = requiredScans;
+
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const Redeem = mongoose.model("Redeem");
+    const scansCount = await Redeem.countDocuments({
+      userId: user._id,
+      createdAt: { $gte: startOfMonth }
+    }).session(session);
+
+    rules.scans.current = scansCount;
+    rules.scans.satisfied = scansCount >= requiredScans;
+    if (!rules.scans.satisfied) {
+      reasons.push(`Requires at least ${requiredScans} bag scans this month (Current: ${scansCount})`);
+    }
+  }
+
+  // Region restriction
+  if (gift.rewardRules && gift.rewardRules.regionRestrictions && gift.rewardRules.regionRestrictions.length > 0) {
+    const allowedRegions = gift.rewardRules.regionRestrictions;
+    rules.region.required = allowedRegions;
+    
+    const userRegion = user.areaOfOperation || "";
+    rules.region.satisfied = allowedRegions.some(
+      r => r.trim().toLowerCase() === userRegion.trim().toLowerCase()
+    );
+    if (!rules.region.satisfied) {
+      reasons.push(`Gift is not available in your region (${userRegion || "No region set"})`);
+    }
+  }
+
+  const eligible = rules.coins.satisfied && rules.tier.satisfied && rules.scans.satisfied && rules.region.satisfied;
+
+  return { eligible, reasons, rules };
+};
+
+exports.getGiftEligibility = async (userId, giftId) => {
+  try {
+    const user = await User.findById(userId);
+    const gift = await Gift.findById(giftId);
+    if (!user) return { success: false, message: "User not found" };
+    if (!gift) return { success: false, message: "Gift not found" };
+
+    const eligibility = await checkEligibility(user, gift);
+    return { success: true, data: eligibility };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+exports.getUserRedemptionDetails = async (userId, redemptionId) => {
+  try {
+    const redemption = await GiftRedemption.findById(redemptionId)
+      .populate("giftId", "name image priceInCoins description");
+    if (!redemption) return { success: false, message: "Redemption not found" };
+    if (String(redemption.userId) !== String(userId)) {
+      return { success: false, message: "Unauthorized access" };
+    }
+    return { success: true, data: redemption };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
 exports.redeemGift = async (userId, data) => {
   const { giftId, shippingAddress } = data;
   if (!giftId || !shippingAddress) return { success: false, message: "Gift ID and shipping address are required" };
@@ -200,17 +303,14 @@ exports.redeemGift = async (userId, data) => {
 
       if (!user) throw new Error("User not found");
       if (!gift || !gift.active) throw new Error("Gift not available");
-      if (user.hydaconCoins < gift.priceInCoins) throw new Error("Insufficient Hydacon Coins");
+
+      const eligibility = await checkEligibility(user, gift, session);
+      if (!eligibility.eligible) {
+        throw new Error(eligibility.reasons.join(", "));
+      }
 
       const availableStock = gift.stockQuantity - gift.reservedQuantity;
       if (availableStock <= 0) throw new Error("Gift is out of stock");
-
-      if (gift.rewardRules) {
-        if (gift.rewardRules.minTierId && String(gift.rewardRules.minTierId) !== String(user.currentTierId)) {
-           // Should ideally check hierarchy if tier is higher, but direct match for now
-        }
-        // Min scans check could go here based on user.totalScans in the month.
-      }
 
       user.hydaconCoins -= gift.priceInCoins;
       gift.reservedQuantity += 1;
@@ -243,7 +343,7 @@ exports.userRedemptions = async (userId, data) => {
     const skip = (page - 1) * limit;
 
     const records = await GiftRedemption.find({ userId })
-      .populate("giftId", "name image")
+      .populate({ path: "giftId", select: "name image categoryId", populate: { path: "categoryId", select: "name active" } })
       .skip(skip)
       .limit(limit)
       .sort({ createdAt: -1 });

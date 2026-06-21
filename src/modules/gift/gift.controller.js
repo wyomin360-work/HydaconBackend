@@ -104,3 +104,17 @@ exports.getAnalytics = async (req, res) => {
   const response = await giftService.getAnalytics();
   return sendResponse(res, response);
 };
+
+exports.getGiftEligibility = async (req, res) => {
+  const giftId = req.params?.giftId;
+  const userId = req.userId;
+  const response = await giftService.getGiftEligibility(userId, giftId);
+  return sendResponse(res, response);
+};
+
+exports.getUserRedemptionDetails = async (req, res) => {
+  const redemptionId = req.params?.redemptionId;
+  const userId = req.userId;
+  const response = await giftService.getUserRedemptionDetails(userId, redemptionId);
+  return sendResponse(res, response);
+};

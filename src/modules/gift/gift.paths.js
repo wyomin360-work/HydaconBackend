@@ -10,6 +10,8 @@ module.exports = {
   // User Routes
   userList: "/user/list",
   userDetails: "/user/details/:giftId",
+  userEligibility: "/user/eligibility/:giftId",
+  userRedemptionDetails: "/user/redemptions/:redemptionId",
   
   // Category Routes (Admin)
   categoryList: "/categories/list",

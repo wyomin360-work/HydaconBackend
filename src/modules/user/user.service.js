@@ -357,7 +357,7 @@ async function updatePassword(data) {
 // User Details
 // ----------------------
 async function getUserDetails(userId) {
-  const user = await User.findById(userId).populate("roleId").lean();
+  const user = await User.findById(userId).populate("roleId").populate("currentTierId").lean();
   if (!user) sendFailResponse("User not found");
   let returnData = {};
 

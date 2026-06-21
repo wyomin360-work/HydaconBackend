@@ -81,6 +81,16 @@ router.get(
   verification.verifyUser,
   handleError(giftController.getGiftDetails),
 );
+router.get(
+  giftPaths.userEligibility,
+  verification.verifyUser,
+  handleError(giftController.getGiftEligibility),
+);
+router.get(
+  giftPaths.userRedemptionDetails,
+  verification.verifyUser,
+  handleError(giftController.getUserRedemptionDetails),
+);
 
 // Redemptions
 router.post(
@@ -117,5 +127,5 @@ router.get(
   verification.verifyAdmin,
   handleError(giftController.getAnalytics),
 );
-
 module.exports = router;
+
