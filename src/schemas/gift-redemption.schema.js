@@ -1,4 +1,5 @@
 const { default: mongoose } = require("mongoose");
+const { GIFT_REDEMPTION_STATUS } = require("../constants/gift");
 
 const shippingAddressSchema = new mongoose.Schema(
   {
@@ -27,8 +28,8 @@ const giftRedemptionSchema = new mongoose.Schema(
     status: {
       type: String,
       required: true,
-      enum: ["Processing", "Approved", "Packed", "Shipped", "Delivered", "Cancelled"],
-      default: "Processing"
+      enum: Object.values(GIFT_REDEMPTION_STATUS),
+      default: GIFT_REDEMPTION_STATUS.PROCESSING
     },
     shippingAddress: {
       type: shippingAddressSchema,

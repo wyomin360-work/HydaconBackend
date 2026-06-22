@@ -830,10 +830,10 @@ async function deliverOtpViaSms(phoneNumber, message) {
 
   if (!smsSent) {
     const error = smsResult?.error || "";
-    const isTwilioAuthError = error.includes("(20003)");
-    const message = isTwilioAuthError
-      ? "Failed to send OTP because Twilio authentication failed. Please check TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in .env."
-      : "Failed to send OTP to your mobile number. If you are using a Twilio trial account, verify the recipient number in your Twilio console.";
+    const isAuthError = error.includes("(20003)");
+    const message = isAuthError
+      ? "Failed to send OTP check your SMS configuration"
+      : "Failed to send OTP to your mobile number";
 
     sendFailResponse(message);
   }
@@ -1259,7 +1259,7 @@ async function getAdminUserDetails(userId) {
     .populate("roleId", "name level pointMultiplier")
     .populate("currentTierId", "name level pointMultiplier")
     .lean();
-    
+
   if (!user) sendFailResponse("User not found");
 
   if (user.bankDetails && user.bankDetails.accountNumber && user.bankDetails.accountIv) {
@@ -1311,19 +1311,19 @@ async function convertPointsToCoins(userId, data) {
       const AppConfig = require("../../schemas/app-config.schema");
       const config = await AppConfig.findOne().session(session);
       const ratio = config?.coinSettings?.pointToCoinRatio || 100;
-      
+
       const coinsToAdd = points / ratio;
 
       user.totalPoints -= points;
       user.hydaconCoins = (user.hydaconCoins || 0) + coinsToAdd;
       user.lifetimeHydaconCoins = (user.lifetimeHydaconCoins || 0) + coinsToAdd;
-      
+
       await user.save({ session });
-      
+
       // Optionally create a transaction log here if a schema existed for point->coin conversion.
       result = attachId(user);
     });
-    
+
     return {
       message: "Points converted successfully",
       data: result,

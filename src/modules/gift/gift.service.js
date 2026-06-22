@@ -3,13 +3,15 @@ const Gift = require("../../schemas/gift.schema");
 const mongoose = require("mongoose");
 const GiftRedemption = require("../../schemas/gift-redemption.schema");
 const User = require("../../schemas/user.schema");
+const { GIFT_REDEMPTION_STATUS } = require("../../constants/gift");
+const { getPaginationParams } = require("../../utils/heplers");
 
 // --- Categories ---
 
 exports.categoryList = async (data) => {
   try {
-    const { page = 1, limit = 10, search = "", sortBy = "createdAt", sortOrder = "desc" } = data;
-    const skip = (page - 1) * limit;
+    const { search = "", sortBy = "createdAt", sortOrder = "desc" } = data;
+    const { page: pageNum, limit: limitNum, skip } = getPaginationParams(data);
     let matchQuery = {};
 
     if (search) {
@@ -25,7 +27,7 @@ exports.categoryList = async (data) => {
 
     const records = await GiftCategory.find(matchQuery)
       .skip(skip)
-      .limit(limit)
+      .limit(limitNum)
       .sort(sort);
 
     const total = await GiftCategory.countDocuments(matchQuery);
@@ -35,9 +37,9 @@ exports.categoryList = async (data) => {
       data: {
         records,
         total,
-        totalPages: Math.ceil(total / limit),
-        page,
-        limit,
+        totalPages: Math.ceil(total / limitNum),
+        page: pageNum,
+        limit: limitNum,
       },
     };
   } catch (error) {
@@ -96,8 +98,8 @@ exports.deleteCategory = async (categoryId) => {
 
 exports.giftList = async (data, isAdmin) => {
   try {
-    const { page = 1, limit = 10, search = "", sortBy = "createdAt", sortOrder = "desc" } = data;
-    const skip = (page - 1) * limit;
+    const { search = "", sortBy = "createdAt", sortOrder = "desc" } = data;
+    const { page: pageNum, limit: limitNum, skip } = getPaginationParams(data);
     let matchQuery = {};
 
     if (search) {
@@ -121,7 +123,7 @@ exports.giftList = async (data, isAdmin) => {
       .populate("categoryId", "name active")
       .populate("rewardRules.minTierId", "name")
       .skip(skip)
-      .limit(limit)
+      .limit(limitNum)
       .sort(sort);
 
     const total = await Gift.countDocuments(matchQuery);
@@ -131,9 +133,9 @@ exports.giftList = async (data, isAdmin) => {
       data: {
         records,
         total,
-        totalPages: Math.ceil(total / limit),
-        page,
-        limit,
+        totalPages: Math.ceil(total / limitNum),
+        page: pageNum,
+        limit: limitNum,
       },
     };
   } catch (error) {
@@ -185,9 +187,6 @@ exports.deleteGift = async (giftId) => {
 };
 
 // --- Redemptions ---
-
-const GiftRedemption = require("../../schemas/gift-redemption.schema");
-const User = require("../../schemas/user.schema");
 
 const checkEligibility = async (user, gift, session = null) => {
   const rules = {
@@ -341,20 +340,19 @@ exports.redeemGift = async (userId, data) => {
 
 exports.userRedemptions = async (userId, data) => {
   try {
-    const { page = 1, limit = 10 } = data;
-    const skip = (page - 1) * limit;
+    const { page: pageNum, limit: limitNum, skip } = getPaginationParams(data);
 
     const records = await GiftRedemption.find({ userId })
       .populate({ path: "giftId", select: "name image categoryId", populate: { path: "categoryId", select: "name active" } })
       .skip(skip)
-      .limit(limit)
+      .limit(limitNum)
       .sort({ createdAt: -1 });
 
     const total = await GiftRedemption.countDocuments({ userId });
 
     return {
       success: true,
-      data: { records, total, totalPages: Math.ceil(total / limit), page, limit },
+      data: { records, total, totalPages: Math.ceil(total / limitNum), page: pageNum, limit: limitNum },
     };
   } catch (error) {
     return { success: false, message: error.message };
@@ -363,8 +361,7 @@ exports.userRedemptions = async (userId, data) => {
 
 exports.adminRedemptionList = async (data) => {
   try {
-    const { page = 1, limit = 10 } = data;
-    const skip = (page - 1) * limit;
+    const { page: pageNum, limit: limitNum, skip } = getPaginationParams(data);
     let matchQuery = {};
     if (data?.status) matchQuery.status = data.status;
 
@@ -372,14 +369,14 @@ exports.adminRedemptionList = async (data) => {
       .populate("userId", "name email phone")
       .populate("giftId", "name image priceInCoins")
       .skip(skip)
-      .limit(limit)
+      .limit(limitNum)
       .sort({ createdAt: -1 });
 
     const total = await GiftRedemption.countDocuments(matchQuery);
 
     return {
       success: true,
-      data: { records, total, totalPages: Math.ceil(total / limit), page, limit },
+      data: { records, total, totalPages: Math.ceil(total / limitNum), page: pageNum, limit: limitNum },
     };
   } catch (error) {
     return { success: false, message: error.message };
@@ -402,6 +399,11 @@ exports.adminRedemptionDetails = async (redemptionId) => {
 
 exports.adminUpdateRedemption = async (redemptionId, data) => {
   const { status, trackingNumber, courierDetails, cancellationReason } = data;
+
+  if (status && !Object.values(GIFT_REDEMPTION_STATUS).includes(status)) {
+    return { success: false, message: "Invalid redemption status" };
+  }
+
   const session = await mongoose.startSession();
 
   try {
@@ -410,8 +412,14 @@ exports.adminUpdateRedemption = async (redemptionId, data) => {
       const redemption = await GiftRedemption.findById(redemptionId).session(session);
       if (!redemption) throw new Error("Redemption not found");
 
+      if (status && status !== redemption.status) {
+        if (redemption.status === GIFT_REDEMPTION_STATUS.CANCELLED || redemption.status === GIFT_REDEMPTION_STATUS.DELIVERED) {
+          throw new Error(`Cannot change status from ${redemption.status} to ${status}`);
+        }
+      }
+
       // Handle cancellation logic (refund coins, reduce reserved/stock)
-      if (status === "Cancelled" && redemption.status !== "Cancelled") {
+      if (status === GIFT_REDEMPTION_STATUS.CANCELLED && redemption.status !== GIFT_REDEMPTION_STATUS.CANCELLED) {
         const user = await User.findById(redemption.userId).session(session);
         const gift = await Gift.findById(redemption.giftId).session(session);
 
@@ -426,7 +434,7 @@ exports.adminUpdateRedemption = async (redemptionId, data) => {
         }
       }
       // Handle delivered logic (reduce actual stock, reduce reserved)
-      else if (status === "Delivered" && redemption.status !== "Delivered") {
+      else if (status === GIFT_REDEMPTION_STATUS.DELIVERED && redemption.status !== GIFT_REDEMPTION_STATUS.DELIVERED) {
         const gift = await Gift.findById(redemption.giftId).session(session);
         if (gift) {
           gift.reservedQuantity = Math.max(0, gift.reservedQuantity - 1);
@@ -456,7 +464,7 @@ exports.getAnalytics = async () => {
   try {
     // 1. Most redeemed gifts
     const mostRedeemedGifts = await GiftRedemption.aggregate([
-      { $match: { status: { $ne: "Cancelled" } } },
+      { $match: { status: { $ne: GIFT_REDEMPTION_STATUS.CANCELLED } } },
       { $group: { _id: "$giftId", count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: 10 },
@@ -467,7 +475,7 @@ exports.getAnalytics = async () => {
 
     // 2. Coin consumption reports (by month)
     const coinConsumption = await GiftRedemption.aggregate([
-      { $match: { status: { $ne: "Cancelled" } } },
+      { $match: { status: { $ne: GIFT_REDEMPTION_STATUS.CANCELLED } } },
       {
         $group: {
           _id: {
