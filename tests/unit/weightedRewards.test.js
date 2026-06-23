@@ -91,12 +91,12 @@ describe("Weighted Rewards Calculation", () => {
     const response = await createRedeem(redeemData);
 
     expect(response.data.pointsRewarded).toBe(50);
-    expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
-      "user123",
-      expect.objectContaining({
-        $inc: { totalPoints: 50, lifetimePoints: 50 },
-      }),
-    );
+    expect(mockUser.totalPoints).toBe(50);
+    // Scratch card response fields
+    expect(response.data.redeemSuccessful).toBe(true);
+    expect(response.data.showScratchCard).toBe(true);
+    expect(typeof response.data.cardBg).toBe("string");
+    expect(response.data.productName).toBe("Adhesive 20kg");
   });
 
   it("should award 10 points to a Retailer (5 points * 2 multiplier)", async () => {

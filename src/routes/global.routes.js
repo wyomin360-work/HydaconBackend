@@ -24,6 +24,12 @@ const loyaltyRoutes = require("../modules/loyalty/loyalty.routes");
 const loyaltyPaths = require("../modules/loyalty/loyalty.paths");
 const campaignsRoutes = require("../modules/campaigns/campaigns.routes");
 const campaignsPaths = require("../modules/campaigns/campaigns.paths");
+const giftPaths = require("../modules/gift/gift.paths");
+const giftRoutes = require("../modules/gift/gift.routes");
+const contestsPaths = require("../modules/contests/contests.paths");
+const contestsRoutes = require("../modules/contests/contests.routes");
+const eventsPaths = require("../modules/events/events.paths");
+const eventsRoutes = require("../modules/events/events.routes");
 
 const globalRoutes = express.Router();
 
@@ -39,5 +45,8 @@ globalRoutes.use(rolePaths.root, roleRoutes);
 globalRoutes.use(kycPaths.root, kycRoutes);
 globalRoutes.use(loyaltyPaths.root, loyaltyRoutes);
 globalRoutes.use(campaignsPaths.root, campaignsRoutes);
+globalRoutes.use(giftPaths.root, giftRoutes);
+globalRoutes.use(contestsPaths.root, contestsRoutes);
+globalRoutes.use(eventsPaths.root, eventsRoutes);
 
 module.exports = globalRoutes;

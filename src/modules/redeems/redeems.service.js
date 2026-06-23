@@ -2,6 +2,7 @@ const { REDEEM_STATUS, LIGHT_CARD_COLORS } = require("../../constants/redeem");
 const { KYC_STATUS } = require("../../constants/user");
 const { APP_NOTIFICATIONS } = require("../../constants/notifications");
 const { sendFcmNotifications } = require("../../functions/fcm");
+const AppConfig = require("../../schemas/app-config.schema");
 const Product = require("../../schemas/product.schema");
 const Redeem = require("../../schemas/redeem.schema");
 const Reward = require("../../schemas/reward.schema");
@@ -202,13 +203,10 @@ async function createRedeem(redeemData, reqUser = null) {
   await reward.save();
 
   // Process QP & Tier Upgrade in loyalty engine
-  if (activeSeason) {
-    await loyaltyService.processQrScanPoints(
-      userId,
-      weightedPoints,
-      newRedeem._id,
-    );
-  }
+  const updatedProgress = await loyaltyService.processQrScanPoints(userId, weightedPoints, newRedeem._id);
+  // Sync user's contest entries with new qualification points (non-blocking)
+  const contestsService = require("../contests/contests.service");
+  contestsService.syncUserContestEntries(userId, updatedProgress?.qualificationPoints || 0).catch(() => {});
   if (user?.fcmTokens?.length && user?.enableNotification) {
     await sendFcmNotifications(
       user.fcmTokens,
@@ -219,9 +217,49 @@ async function createRedeem(redeemData, reqUser = null) {
       }),
     );
   }
+  // ── Scratch Card Decision ─────────────────────────────────────────────────
+  // Load scratch card settings from AppConfig (falls back to safe defaults).
+  const appConfig = await AppConfig.findOne().lean();
+  const scratchSettings = appConfig?.scratchCardSettings || {};
+  const scratchEnabled = scratchSettings.enabled !== false; // default true
+  const scratchProbability = scratchSettings.probability ?? 100;  // 0-100 %
+
+  // Roll a random number to decide if this scan triggers a scratch card
+  const roll = Math.random() * 100; // 0.00 – 99.99
+  const showScratchCard = scratchEnabled && roll < scratchProbability;
+
+  // Optional bonus points on top of scan points (only when scratch card shown)
+  let bonusPoints = 0;
+  if (showScratchCard) {
+    const minBonus = scratchSettings.minBonusPoints ?? 0;
+    const maxBonus = scratchSettings.maxBonusPoints ?? 0;
+    if (maxBonus > minBonus) {
+      bonusPoints = Math.round(minBonus + Math.random() * (maxBonus - minBonus));
+    } else {
+      bonusPoints = minBonus;
+    }
+    if (bonusPoints > 0) {
+      // Award the bonus on top of the scan points already credited
+      user.totalPoints += bonusPoints;
+      user.lifetimePoints = (user.lifetimePoints || 0) + bonusPoints;
+      await user.save();
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   return {
     message: "redeem successful",
-    data: { redeemSuccessful: true, pointsRewarded: weightedPoints },
+    data: {
+      redeemSuccessful: true,
+      showScratchCard,
+      pointsRewarded: weightedPoints,
+      bonusPoints,                          // extra points revealed on scratch
+      totalPointsAwarded: weightedPoints + bonusPoints,
+      redeemId: newRedeem._id,
+      cardBg: bgColor,
+      productName: product?.name || null,
+      productImage: product?.image || null,
+    },
   };
 }
 
