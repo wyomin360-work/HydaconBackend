@@ -223,4 +223,39 @@ describe("Gift Service & Rules Engine Tests", () => {
       expect(response.message).toBe("Unauthorized access");
     });
   });
+
+  describe("adminUpdateRedemption validation and terminal states", () => {
+    it("should fail validation if status is not valid", async () => {
+      const response = await giftService.adminUpdateRedemption("redemption123", { status: "InvalidStatus" });
+      expect(response.success).toBe(false);
+      expect(response.message).toBe("Invalid redemption status");
+    });
+
+    it("should throw error if attempting to change status from Cancelled", async () => {
+      const mockSession = {
+        startTransaction: jest.fn(),
+        commitTransaction: jest.fn(),
+        abortTransaction: jest.fn(),
+        endSession: jest.fn(),
+        withTransaction: jest.fn().mockImplementation(async (callback) => {
+          return await callback();
+        })
+      };
+      mongoose.startSession = jest.fn().mockResolvedValue(mockSession);
+
+      const mockCancelledRedemption = {
+        ...mockRedemption,
+        status: "Cancelled",
+        save: jest.fn().mockResolvedValue(true)
+      };
+
+      GiftRedemption.findById.mockReturnValue({
+        session: jest.fn().mockReturnValue(mockCancelledRedemption)
+      });
+
+      const response = await giftService.adminUpdateRedemption("redemption123", { status: "Shipped" });
+      expect(response.success).toBe(false);
+      expect(response.message).toContain("Cannot change status from Cancelled to Shipped");
+    });
+  });
 });
