@@ -1321,7 +1321,7 @@ async function convertPointsToCoins(userId, data) {
       await user.save({ session });
 
       // Optionally create a transaction log here if a schema existed for point->coin conversion.
-      result = attachId(user);
+      result = attachId(user.toObject());
     });
 
     return {
