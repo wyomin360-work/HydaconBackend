@@ -26,6 +26,18 @@ const coinSettingsSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const scratchCardSettingsSchema = new mongoose.Schema(
+  {
+    enabled: { type: Boolean, default: true },
+    // Percentage chance (0-100) that a successful scan shows a scratch card
+    probability: { type: Number, default: 100, min: 0, max: 100 },
+    // Bonus points range awarded on scratch reveal (on top of base scan points)
+    minBonusPoints: { type: Number, default: 0 },
+    maxBonusPoints: { type: Number, default: 0 },
+  },
+  { _id: false },
+);
+
 const appConfigSchema = new mongoose.Schema({
   name: { type: String, required: true },
   currentVersion: { type: String, required: true, default: "1.0.0" },
@@ -47,6 +59,10 @@ const appConfigSchema = new mongoose.Schema({
   coinSettings: {
     type: coinSettingsSchema,
     required: true,
+    default: () => ({}),
+  },
+  scratchCardSettings: {
+    type: scratchCardSettingsSchema,
     default: () => ({}),
   },
   lastUpdatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "Admin" },
