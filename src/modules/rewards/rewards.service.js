@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Product = require("../../schemas/product.schema");
 const Reward = require("../../schemas/reward.schema");
 const { randomHex, attachId } = require("../../utils/heplers");
@@ -46,6 +47,64 @@ async function listRewards(data) {
       query.expiresAt.$lte = new Date(filters.expiresBefore);
   }
 
+  // Filter by creation date or range, supporting legacy documents that don't have createdAt
+  if (filters.createdDate) {
+    const startOfDay = new Date(filters.createdDate);
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const endOfDay = new Date(filters.createdDate);
+    endOfDay.setUTCHours(23, 59, 59, 999);
+
+    const startId = mongoose.Types.ObjectId.createFromTime(
+      Math.floor(startOfDay.getTime() / 1000),
+    );
+    const endId = mongoose.Types.ObjectId.createFromTime(
+      Math.floor(endOfDay.getTime() / 1000),
+    );
+
+    query.$or = [
+      { createdAt: { $gte: startOfDay, $lte: endOfDay } },
+      {
+        createdAt: { $exists: false },
+        _id: { $gte: startId, $lte: endId },
+      },
+    ];
+  } else if (filters.createdAtAfter || filters.createdAtBefore) {
+    const conditions = [];
+    let start, end;
+    if (filters.createdAtAfter) {
+      start = new Date(filters.createdAtAfter);
+      conditions.push({ createdAt: { $gte: start } });
+    }
+    if (filters.createdAtBefore) {
+      end = new Date(filters.createdAtBefore);
+      conditions.push({ createdAt: { $lte: end } });
+    }
+
+    if (start || end) {
+      const idQuery = {};
+      if (start) {
+        idQuery.$gte = mongoose.Types.ObjectId.createFromTime(
+          Math.floor(start.getTime() / 1000),
+        );
+      }
+      if (end) {
+        idQuery.$lte = mongoose.Types.ObjectId.createFromTime(
+          Math.floor(end.getTime() / 1000),
+        );
+      }
+
+      query.$or = [
+        {
+          $and: conditions,
+        },
+        {
+          createdAt: { $exists: false },
+          _id: idQuery,
+        },
+      ];
+    }
+  }
+
   //  Search by uidCode or Product name
   if (search) {
     query.$or = [{ uidCode: { $regex: search, $options: "i" } }];
@@ -72,6 +131,113 @@ async function listRewards(data) {
       limit,
       totalPages: Math.ceil(totalDocuments / limit),
       total: totalDocuments,
+    },
+  };
+}
+
+async function listRewardsGroupedByDate(data) {
+  const { page = 1, limit = 20, productId, startDate, endDate, filters = {} } = data;
+  const skip = (page - 1) * limit;
+
+  const matchQuery = {};
+
+  if (productId) {
+    matchQuery.productId = new mongoose.Types.ObjectId(productId);
+  }
+
+  if (filters.active !== undefined) {
+    matchQuery.active = filters.active;
+  }
+
+  // Handle date range constraints (supporting legacy docs using _id fallback)
+  const rangeConditions = [];
+  let start, end;
+  if (startDate) {
+    start = new Date(startDate);
+    rangeConditions.push({ createdAt: { $gte: start } });
+  }
+  if (endDate) {
+    end = new Date(endDate);
+    if (endDate.length === 10) {
+      end.setUTCHours(23, 59, 59, 999);
+    }
+    rangeConditions.push({ createdAt: { $lte: end } });
+  }
+
+  if (start || end) {
+    const idQuery = {};
+    if (start) {
+      idQuery.$gte = mongoose.Types.ObjectId.createFromTime(
+        Math.floor(start.getTime() / 1000),
+      );
+    }
+    if (end) {
+      idQuery.$lte = mongoose.Types.ObjectId.createFromTime(
+        Math.floor(end.getTime() / 1000),
+      );
+    }
+
+    matchQuery.$or = [
+      { $and: rangeConditions },
+      {
+        createdAt: { $exists: false },
+        _id: idQuery,
+      },
+    ];
+  }
+
+  const pipeline = [
+    { $match: matchQuery },
+    {
+      $project: {
+        actualCreatedAt: { $ifNull: ["$createdAt", { $toDate: "$_id" }] },
+        active: 1,
+      },
+    },
+    {
+      $project: {
+        date: {
+          $dateToString: {
+            format: "%Y-%m-%d",
+            date: "$actualCreatedAt",
+            timezone: "UTC",
+          },
+        },
+        active: 1,
+      },
+    },
+    {
+      $group: {
+        _id: "$date",
+        activeCount: {
+          $sum: { $cond: [{ $eq: ["$active", true] }, 1, 0] },
+        },
+        inactiveCount: {
+          $sum: { $cond: [{ $eq: ["$active", false] }, 1, 0] },
+        },
+        totalCount: { $sum: 1 },
+      },
+    },
+    { $sort: { _id: -1 } },
+    {
+      $facet: {
+        metadata: [{ $count: "total" }],
+        data: [{ $skip: skip }, { $limit: limit }],
+      },
+    },
+  ];
+
+  const result = await Reward.aggregate(pipeline);
+  const total = result[0]?.metadata[0]?.total || 0;
+  const dates = result[0]?.data || [];
+
+  return {
+    data: {
+      dates,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      total,
     },
   };
 }
@@ -142,6 +308,7 @@ async function deleteAllReward() {
 
 module.exports = {
   listRewards,
+  listRewardsGroupedByDate,
   rewardDetails,
   createRewards,
   updateReward,

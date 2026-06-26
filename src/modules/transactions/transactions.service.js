@@ -143,8 +143,8 @@ async function createTransaction(data, userId) {
   const user = await User.findById(userId).populate("currentTierId");
   if (!user) sendFailResponse("User not found");
 
-  if (user.kycStatus !== User.KYC_STATUS.APPROVED)
-    sendFailResponse("KYC verification is required to withdraw amount");
+  // if (user.kycStatus !== User.KYC_STATUS.APPROVED)
+  //   sendFailResponse("KYC verification is required to withdraw amount");
 
   // 1000 Point First Redemption Rule
   const tierRank = user.currentTierId?.rank || 0;

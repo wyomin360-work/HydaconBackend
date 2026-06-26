@@ -224,7 +224,7 @@ async function userGetLeaderboard(contestId) {
  * General (all-time) leaderboard based on user.totalPoints.
  */
 async function generalLeaderboard(userId) {
-  const topUsers = await User.find({ active: true })
+  const topUsers = await User.find({ isActive: true })
     .select("name profileImage totalPoints currentTierId")
     .populate("currentTierId", "name colorIdentity badgeUrl")
     .sort({ totalPoints: -1 })
@@ -233,14 +233,55 @@ async function generalLeaderboard(userId) {
 
   let userRank = null;
   let userEntry = null;
+  let nearby = null;
+
   if (userId) {
-    const user = await User.findById(userId).select("totalPoints").lean();
+    const user = await User.findById(userId)
+      .select("name totalPoints profileImage currentTierId")
+      .populate("currentTierId", "name colorIdentity badgeUrl")
+      .lean();
+
     if (user) {
       userRank = await User.countDocuments({
-        active: true,
+        isActive: true,
         totalPoints: { $gt: user.totalPoints },
       }) + 1;
       userEntry = user;
+
+      // Find the user immediately above (next higher points or tie-break)
+      const userAbove = await User.findOne({
+        isActive: true,
+        $or: [
+          { totalPoints: { $gt: user.totalPoints } },
+          { totalPoints: user.totalPoints, _id: { $lt: user._id } }
+        ]
+      })
+      .select("name totalPoints profileImage currentTierId")
+      .populate("currentTierId", "name colorIdentity badgeUrl")
+      .sort({ totalPoints: 1, _id: -1 })
+      .lean();
+
+      // Find the user immediately below
+      const userBelow = await User.findOne({
+        isActive: true,
+        $or: [
+          { totalPoints: { $lt: user.totalPoints } },
+          { totalPoints: user.totalPoints, _id: { $gt: user._id } }
+        ]
+      })
+      .select("name totalPoints profileImage currentTierId")
+      .populate("currentTierId", "name colorIdentity badgeUrl")
+      .sort({ totalPoints: -1, _id: 1 })
+      .lean();
+
+      const aboveRank = userAbove ? await User.countDocuments({ isActive: true, totalPoints: { $gt: userAbove.totalPoints } }) + 1 : null;
+      const belowRank = userBelow ? await User.countDocuments({ isActive: true, totalPoints: { $gt: userBelow.totalPoints } }) + 1 : null;
+
+      nearby = {
+        above: userAbove ? { ...attachId(userAbove), rank: aboveRank } : null,
+        user: { ...attachId(user), rank: userRank },
+        below: userBelow ? { ...attachId(userBelow), rank: belowRank } : null,
+      };
     }
   }
 
@@ -248,10 +289,12 @@ async function generalLeaderboard(userId) {
     data: {
       leaderboard: attachId(topUsers),
       userRank,
-      userEntry,
+      userEntry: userEntry ? attachId(userEntry) : null,
+      nearby,
     },
   };
 }
+
 
 // ─── Contest Entry (called by loyalty engine on each scan) ───────────────────
 
