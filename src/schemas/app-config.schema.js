@@ -34,6 +34,10 @@ const scratchCardSettingsSchema = new mongoose.Schema(
     // Bonus points range awarded on scratch reveal (on top of base scan points)
     minBonusPoints: { type: Number, default: 0 },
     maxBonusPoints: { type: Number, default: 0 },
+    // Probability (0-100) that the scratch card reward is a physical gift (remainder = points)
+    giftProbability: { type: Number, default: 50, min: 0, max: 100 },
+    // Specific gift IDs eligible for scratch card rewards (empty = all active in-stock gifts)
+    selectedGiftIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "Gift" }],
   },
   { _id: false },
 );

@@ -9,7 +9,7 @@ const rewardSchema = new mongoose.Schema({
   redeemedAt: { type: Date },
   isRedeemed: { type: Boolean, default: false },
   active: { type: Boolean, default: true },
-});
+}, { timestamps: true });
 
 rewardSchema.virtual("product", {
   ref: "Product",

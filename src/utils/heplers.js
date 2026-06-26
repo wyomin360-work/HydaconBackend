@@ -230,6 +230,13 @@ function parseUserAgent(userAgent, headers = {}) {
   return info;
 }
 
+const getPaginationParams = (data) => {
+  const page = data?.page ? Number(data.page) : 1;
+  const limit = data?.limit ? Number(data.limit) : 10;
+  const skip = (page - 1) * limit;
+  return { page, limit, skip };
+};
+
 module.exports = {
   handleError,
   hashData,
@@ -245,4 +252,5 @@ module.exports = {
   calculateProfileCompletion,
   buildPhoneLookupVariants,
   parseUserAgent,
+  getPaginationParams,
 };

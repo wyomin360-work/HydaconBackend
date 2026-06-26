@@ -7,6 +7,7 @@ const {
   listRewardRequestType,
   createRewardRequestType,
   updateRewardRequestType,
+  listGroupedRewardsRequestType,
 } = require("../../validations/rewards.validations");
 
 const router = express.Router();
@@ -15,6 +16,11 @@ router.post(
   rewardsPath.list,
   validateRequest(listRewardRequestType),
   handleError(rewardsController.listRewards),
+);
+router.post(
+  rewardsPath.listGrouped,
+  validateRequest(listGroupedRewardsRequestType),
+  handleError(rewardsController.listRewardsGroupedByDate),
 );
 router.get(rewardsPath.details, handleError(rewardsController.rewardDetails));
 router.post(
