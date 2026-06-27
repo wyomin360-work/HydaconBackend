@@ -4,7 +4,7 @@ const mongoose = require("mongoose");
 const GiftRedemption = require("../../schemas/gift-redemption.schema");
 const User = require("../../schemas/user.schema");
 const { GIFT_REDEMPTION_STATUS } = require("../../constants/gift");
-const { getPaginationParams } = require("../../utils/heplers");
+const { getPaginationParams, attachId } = require("../../utils/heplers");
 
 // --- Categories ---
 
@@ -124,7 +124,8 @@ exports.giftList = async (data, isAdmin) => {
       .populate("rewardRules.minTierId", "name")
       .skip(skip)
       .limit(limitNum)
-      .sort(sort);
+      .sort(sort)
+      .lean()
 
     const total = await Gift.countDocuments(matchQuery);
 
