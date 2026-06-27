@@ -281,7 +281,11 @@ exports.getGiftEligibility = async (userId, giftId) => {
 exports.getUserRedemptionDetails = async (userId, redemptionId) => {
   try {
     const redemption = await GiftRedemption.findById(redemptionId)
-      .populate("giftId", "name image priceInCoins description");
+      .populate({
+        path: "giftId",
+        select: "name image priceInCoins description categoryId",
+        populate: { path: "categoryId", select: "name" }
+      });
     if (!redemption) return { success: false, message: "Redemption not found" };
     if (String(redemption.userId) !== String(userId)) {
       return { success: false, message: "Unauthorized access" };
