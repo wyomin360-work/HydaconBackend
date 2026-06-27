@@ -3,6 +3,10 @@ require("dotenv").config();
 const { isSmsConfigured } = require("./src/functions/sms");
 const { initCronJobs } = require("./src/functions/cron");
 
+const {
+  seedDefaultLoyaltyData,
+} = require("./src/modules/loyalty/loyalty.service");
+
 const app = require("./src/app");
 const Database = require("./src/config/mongodb.config");
 const { logger } = require("./src/config/pino.config");
@@ -38,6 +42,7 @@ app.use((req, res, next) => {
 const startServer = async () => {
   try {
     await db.connectDb();
+    // await seedDefaultLoyaltyData();
     initCronJobs();
     app.listen(PORT, () => {
       console.log(`🚀 Server is running on port ${PORT}`);

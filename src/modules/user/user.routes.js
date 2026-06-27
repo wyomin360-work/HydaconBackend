@@ -173,4 +173,16 @@ router.post(
   handleError(controller.convertPoints),
 );
 
+router.patch(
+  userPaths.toggleStatus,
+  verification.verifyAdmin,
+  handleError(controller.toggleUserStatus),
+);
+
+router.delete(
+  userPaths.deleteUser,
+  verification.verifyAdmin,
+  handleError(controller.deleteUser),
+);
+
 module.exports = router;

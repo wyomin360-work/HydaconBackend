@@ -68,6 +68,7 @@ const userSchema = new mongoose.Schema(
     experience: { type: Number, required: false, default: null },
     areaOfOperation: { type: String, required: false, default: null },
     profileCompletionPercentage: { type: Number, default: 0 },
+    isActive: { type: Boolean, default: true },
     isFlagged: { type: Boolean, default: false },
     flaggedReason: { type: String, default: null },
     authType: {

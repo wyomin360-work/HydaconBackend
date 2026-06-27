@@ -92,6 +92,17 @@ const APP_NOTIFICATIONS = {
       body: "Your KYC submission was rejected. Reason: {{reason}}",
     },
   },
+
+  loyalty: {
+    tierUpgraded: {
+      title: "Tier Upgraded! 🎉",
+      body: "Awesome! You've been upgraded from {{oldTierName}} to {{newTierName}} tier! 🚀",
+    },
+    tierUpdated: {
+      title: "Tier Updated",
+      body: "Your loyalty tier has been adjusted from {{oldTierName}} to {{newTierName}}.",
+    },
+  },
 };
 
 module.exports = { APP_NOTIFICATIONS };

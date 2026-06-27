@@ -4,7 +4,7 @@ const RefreshToken = require("../../schemas/refreshtoken.schema");
 const path = require("path");
 const sharp = require("sharp");
 const fs = require("fs");
-const AuditLog = require("../../schemas/audit-log.schema");
+const { logAudit } = require("../audit-log/audit-log.service");
 const mongoose = require("mongoose");
 const { AUDIT_LOG_ACTIONS } = require("../../constants/audit-logs");
 const {
@@ -107,6 +107,12 @@ async function login(userData) {
         ${userExist.authType}. Please log in using that method.`);
   }
 
+  if (userExist.isActive === false) {
+    sendFailResponse(
+      "Your account has been deactivated. Please contact support.",
+    );
+  }
+
   const isSamePassword = await compareHash(password, userExist.password);
   if (!isSamePassword) sendFailResponse("PassWord mismatch");
 
@@ -186,6 +192,12 @@ async function providerAuth(data) {
     // if (userExist && userExist.authType !== AuthTypes.GOOGLE)
     //     sendFailResponse(`This email is already registered with
     // ${userExist.authType}. Please log in using that method.`);
+
+    if (userExist.isActive === false) {
+      sendFailResponse(
+        "Your account has been deactivated. Please contact support.",
+      );
+    }
 
     const { refreshToken, accessToken } = await generateAndSaveToken({
       userId: userExist?._id,
@@ -752,22 +764,23 @@ async function finalizeNumberChange({
       user.phone = normalizedPhone;
       updatedUser = await user.save({ session });
 
-      const auditLog = new AuditLog({
-        userId: user._id,
-        action: AUDIT_LOG_ACTIONS.PHONE_NUMBER_CHANGE,
-        oldNumber: oldPhone,
-        newNumber: normalizedPhone,
-        timestamp: new Date(),
-        ipAddress: ipAddress || null,
-        deviceInfo: {
-          userAgent: deviceInfo?.userAgent || null,
-          deviceId: deviceInfo?.deviceId || null,
-          deviceName: deviceInfo?.deviceName || null,
-          platform: deviceInfo?.platform || null,
-          appVersion: deviceInfo?.appVersion || null,
+      await logAudit(
+        AUDIT_LOG_ACTIONS.PHONE_NUMBER_CHANGE,
+        {
+          userId: user._id,
+          oldNumber: oldPhone,
+          newNumber: normalizedPhone,
+          ipAddress: ipAddress || null,
+          deviceInfo: {
+            userAgent: deviceInfo?.userAgent || null,
+            deviceId: deviceInfo?.deviceId || null,
+            deviceName: deviceInfo?.deviceName || null,
+            platform: deviceInfo?.platform || null,
+            appVersion: deviceInfo?.appVersion || null,
+          },
         },
-      });
-      await auditLog.save({ session });
+        { session },
+      );
 
       await ServiceRequest.updateMany(
         {
@@ -862,6 +875,12 @@ async function simpleLoginWithOtp(data) {
   // 3. User check (This now triggers an error and stops the function if user is null)
   if (!user) {
     sendFailResponse("Account not found with given mobile number");
+  }
+
+  if (user.isActive === false) {
+    sendFailResponse(
+      "Your account has been deactivated. Please contact support.",
+    );
   }
 
   // 4. Auth type check
@@ -1117,7 +1136,12 @@ async function userList(data) {
   sort[sortBy] = sortOrder === "asc" ? 1 : -1;
 
   const users =
-    (await User.find(query).populate("currentTierId", "name level").sort(sort).skip(skip).limit(limit).lean()) ?? [];
+    (await User.find(query)
+      .populate("currentTierId", "name level")
+      .sort(sort)
+      .skip(skip)
+      .limit(limit)
+      .lean()) ?? [];
 
   const totalUsers = await User.countDocuments(query);
 
@@ -1252,6 +1276,41 @@ async function flagUser(userId, data) {
 }
 
 // ----------------------
+// Toggle User Status
+// ----------------------
+async function toggleUserStatus(userId, data) {
+  const { isActive } = data;
+  const user = await User.findById(userId);
+  if (!user) sendFailResponse("User not found");
+
+  user.isActive = !!isActive;
+  await user.save();
+
+  return {
+    message: isActive
+      ? "User activated successfully"
+      : "User inactivated successfully",
+    data: { isActive: user.isActive },
+  };
+}
+
+// ----------------------
+// Delete User
+// ----------------------
+async function deleteUser(userId) {
+  const user = await User.findById(userId);
+  if (!user) sendFailResponse("User not found");
+
+  await User.findByIdAndDelete(userId);
+  await RefreshToken.deleteMany({ userId });
+
+  return {
+    message: "User deleted successfully",
+    data: { isDeleted: true },
+  };
+}
+
+// ----------------------
 // Admin User Details
 // ----------------------
 async function getAdminUserDetails(userId) {
@@ -1260,16 +1319,21 @@ async function getAdminUserDetails(userId) {
     .populate("currentTierId", "name level pointMultiplier")
     .lean();
 
+
   if (!user) sendFailResponse("User not found");
 
-  if (user.bankDetails && user.bankDetails.accountNumber && user.bankDetails.accountIv) {
+  if (
+    user.bankDetails &&
+    user.bankDetails.accountNumber &&
+    user.bankDetails.accountIv
+  ) {
     user.bankDetails.accountNumber = decrypt(
       user.bankDetails.accountNumber,
-      user.bankDetails.accountIv
+      user.bankDetails.accountIv,
     );
     user.bankDetails.ifscCode = decrypt(
       user.bankDetails.ifscCode,
-      user.bankDetails.ifscIv
+      user.bankDetails.ifscIv,
     );
     delete user.bankDetails.accountIv;
     delete user.bankDetails.ifscIv;
@@ -1277,13 +1341,38 @@ async function getAdminUserDetails(userId) {
 
   const Redeem = mongoose.model("Redeem");
   const purchasedProducts = await Redeem.aggregate([
-    { $match: { userId: new mongoose.Types.ObjectId(userId), status: "SUCCESS" } },
+    {
+      $match: {
+        userId: new mongoose.Types.ObjectId(userId),
+        status: "SUCCESS",
+      },
+    },
     { $group: { _id: "$productId", quantity: { $sum: 1 } } },
-    { $lookup: { from: "products", localField: "_id", foreignField: "_id", as: "product" } },
+    {
+      $lookup: {
+        from: "products",
+        localField: "_id",
+        foreignField: "_id",
+        as: "product",
+      },
+    },
     { $unwind: { path: "$product", preserveNullAndEmptyArrays: true } },
-    { $project: { _id: 0, productId: "$_id", name: "$product.name", quantity: 1 } },
-    { $sort: { quantity: -1 } }
+    {
+      $project: {
+        _id: 0,
+        productId: "$_id",
+        name: "$product.name",
+        quantity: 1,
+      },
+    },
+    { $sort: { quantity: -1 } },
   ]);
+
+  const accurateTotalScans = purchasedProducts.reduce(
+    (acc, curr) => acc + (curr.quantity || 0),
+    0,
+  );
+  user.totalScans = accurateTotalScans;
 
   return {
     data: {
@@ -1360,4 +1449,6 @@ module.exports = {
   uploadProfilePhoto,
   flagUser,
   convertPointsToCoins,
+  toggleUserStatus,
+  deleteUser,
 };

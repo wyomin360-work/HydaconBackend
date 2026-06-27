@@ -23,6 +23,7 @@ const loyaltySeasonSchema = new mongoose.Schema(
     deactivatedAt: { type: Date, default: null },
     isArchived: { type: Boolean, default: false, index: true },
     bannerImages: { type: [String], default: [] },
+    rolloverProcessed: { type: Boolean, default: false },
   },
   {
     timestamps: true,
@@ -34,11 +35,14 @@ const loyaltySeasonSchema = new mongoose.Schema(
         return ret;
       },
     },
-  }
+  },
 );
 
 loyaltySeasonSchema.index({ startDate: 1, endDate: 1 });
-loyaltySeasonSchema.index({ active: 1 }, { unique: true, partialFilterExpression: { active: true } });
+loyaltySeasonSchema.index(
+  { active: 1 },
+  { unique: true, partialFilterExpression: { active: true } },
+);
 
 const LoyaltySeason = mongoose.model("LoyaltySeason", loyaltySeasonSchema);
 module.exports = LoyaltySeason;

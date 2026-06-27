@@ -1,11 +1,21 @@
 const mongoose = require("mongoose");
-const { LOYALTY_TRANSACTION_TYPES, LOYALTY_TRANSACTION_SOURCES } = require("../constants/loyalty");
-
+const {
+  LOYALTY_TRANSACTION_TYPES,
+  LOYALTY_TRANSACTION_SOURCES,
+} = require("../constants/loyalty");
 
 const loyaltyTransactionSchema = new mongoose.Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    seasonId: { type: mongoose.Schema.Types.ObjectId, ref: "LoyaltySeason", required: false },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    seasonId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "LoyaltySeason",
+      required: false,
+    },
     points: { type: Number, required: true }, // positive for addition, negative for deduction
     type: {
       type: String,
@@ -31,8 +41,11 @@ const loyaltyTransactionSchema = new mongoose.Schema(
         return ret;
       },
     },
-  }
+  },
 );
 
-const LoyaltyTransaction = mongoose.model("LoyaltyTransaction", loyaltyTransactionSchema);
+const LoyaltyTransaction = mongoose.model(
+  "LoyaltyTransaction",
+  loyaltyTransactionSchema,
+);
 module.exports = LoyaltyTransaction;
