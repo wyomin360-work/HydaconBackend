@@ -34,13 +34,13 @@ describe("Gift Service & Rules Engine Tests", () => {
       hydaconCoins: 500,
       currentTierId: "tierSilver",
       areaOfOperation: "California",
-      save: jest.fn().mockResolvedValue(true)
+      save: jest.fn().mockResolvedValue(true),
     };
 
     mockTier = {
       _id: "tierSilver",
       name: "Silver",
-      rank: 2
+      rank: 2,
     };
 
     mockGift = {
@@ -54,9 +54,9 @@ describe("Gift Service & Rules Engine Tests", () => {
       rewardRules: {
         minTierId: "tierSilver",
         minScansThisMonth: 5,
-        regionRestrictions: ["California", "Texas"]
+        regionRestrictions: ["California", "Texas"],
       },
-      save: jest.fn().mockResolvedValue(true)
+      save: jest.fn().mockResolvedValue(true),
     };
 
     mockRedemption = {
@@ -65,7 +65,7 @@ describe("Gift Service & Rules Engine Tests", () => {
       giftId: {
         _id: "gift123",
         name: "Premium Tool",
-        priceInCoins: 200
+        priceInCoins: 200,
       },
       coinsUsed: 200,
       status: "Processing",
@@ -73,8 +73,8 @@ describe("Gift Service & Rules Engine Tests", () => {
         addressLine1: "123 Main St",
         city: "San Jose",
         state: "CA",
-        pincode: "95112"
-      }
+        pincode: "95112",
+      },
     };
 
     // Mock Mongoose model lookups
@@ -95,7 +95,7 @@ describe("Gift Service & Rules Engine Tests", () => {
     });
     Redeem.countDocuments.mockImplementation(() => mockQuery(0));
     GiftRedemption.findById.mockReturnValue({
-      populate: jest.fn().mockResolvedValue(mockRedemption)
+      populate: jest.fn().mockResolvedValue(mockRedemption),
     });
   });
 
@@ -128,11 +128,11 @@ describe("Gift Service & Rules Engine Tests", () => {
 
     it("should fail when tier rank is insufficient", async () => {
       Redeem.countDocuments.mockImplementation(() => mockQuery(6));
-      
+
       // Mock required tier
       const reqTier = { _id: "tierGold", name: "Gold", rank: 3 };
       mockGift.rewardRules.minTierId = "tierGold";
-      
+
       // FindById implementation for Tier
       Tier.findById.mockImplementation((id) => {
         if (id === "tierSilver") return mockQuery(mockTier);
@@ -167,7 +167,9 @@ describe("Gift Service & Rules Engine Tests", () => {
       expect(result.success).toBe(true);
       expect(result.data.eligible).toBe(false);
       expect(result.data.rules.region.satisfied).toBe(false);
-      expect(result.data.reasons[0]).toContain("Gift is not available in your region");
+      expect(result.data.reasons[0]).toContain(
+        "Gift is not available in your region",
+      );
     });
   });
 
@@ -181,7 +183,7 @@ describe("Gift Service & Rules Engine Tests", () => {
         endSession: jest.fn(),
         withTransaction: jest.fn().mockImplementation(async (callback) => {
           return await callback();
-        })
+        }),
       };
       mongoose.startSession = jest.fn().mockResolvedValue(mockSession);
 
@@ -199,7 +201,7 @@ describe("Gift Service & Rules Engine Tests", () => {
 
       const response = await giftService.redeemGift("user123", {
         giftId: "gift123",
-        shippingAddress: mockRedemption.shippingAddress
+        shippingAddress: mockRedemption.shippingAddress,
       });
       expect(response.success).toBe(true);
       expect(mockUser.hydaconCoins).toBe(300); // 500 - 200
@@ -212,13 +214,19 @@ describe("Gift Service & Rules Engine Tests", () => {
 
   describe("getUserRedemptionDetails ownership validation", () => {
     it("should return redemption details if user is the owner", async () => {
-      const response = await giftService.getUserRedemptionDetails("user123", "redemption123");
+      const response = await giftService.getUserRedemptionDetails(
+        "user123",
+        "redemption123",
+      );
       expect(response.success).toBe(true);
       expect(response.data._id).toBe("redemption123");
     });
 
     it("should deny access if user is not the owner", async () => {
-      const response = await giftService.getUserRedemptionDetails("differentUser", "redemption123");
+      const response = await giftService.getUserRedemptionDetails(
+        "differentUser",
+        "redemption123",
+      );
       expect(response.success).toBe(false);
       expect(response.message).toBe("Unauthorized access");
     });
@@ -226,7 +234,10 @@ describe("Gift Service & Rules Engine Tests", () => {
 
   describe("adminUpdateRedemption validation and terminal states", () => {
     it("should fail validation if status is not valid", async () => {
-      const response = await giftService.adminUpdateRedemption("redemption123", { status: "InvalidStatus" });
+      const response = await giftService.adminUpdateRedemption(
+        "redemption123",
+        { status: "InvalidStatus" },
+      );
       expect(response.success).toBe(false);
       expect(response.message).toBe("Invalid redemption status");
     });
@@ -239,23 +250,28 @@ describe("Gift Service & Rules Engine Tests", () => {
         endSession: jest.fn(),
         withTransaction: jest.fn().mockImplementation(async (callback) => {
           return await callback();
-        })
+        }),
       };
       mongoose.startSession = jest.fn().mockResolvedValue(mockSession);
 
       const mockCancelledRedemption = {
         ...mockRedemption,
         status: "Cancelled",
-        save: jest.fn().mockResolvedValue(true)
+        save: jest.fn().mockResolvedValue(true),
       };
 
       GiftRedemption.findById.mockReturnValue({
-        session: jest.fn().mockReturnValue(mockCancelledRedemption)
+        session: jest.fn().mockReturnValue(mockCancelledRedemption),
       });
 
-      const response = await giftService.adminUpdateRedemption("redemption123", { status: "Shipped" });
+      const response = await giftService.adminUpdateRedemption(
+        "redemption123",
+        { status: "Shipped" },
+      );
       expect(response.success).toBe(false);
-      expect(response.message).toContain("Cannot change status from Cancelled to Shipped");
+      expect(response.message).toContain(
+        "Cannot change status from Cancelled to Shipped",
+      );
     });
   });
 });

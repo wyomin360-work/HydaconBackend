@@ -38,7 +38,13 @@ const giftCreateRequestType = {
       },
     },
   },
-  required: ["name", "description", "categoryId", "priceInCoins", "stockQuantity"],
+  required: [
+    "name",
+    "description",
+    "categoryId",
+    "priceInCoins",
+    "stockQuantity",
+  ],
   additionalProperties: true,
 };
 

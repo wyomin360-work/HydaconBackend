@@ -9,7 +9,7 @@ const shippingAddressSchema = new mongoose.Schema(
     state: { type: String, required: true },
     pincode: { type: String, required: true },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const giftRedemptionSchema = new mongoose.Schema(
@@ -29,7 +29,7 @@ const giftRedemptionSchema = new mongoose.Schema(
       type: String,
       required: true,
       enum: Object.values(GIFT_REDEMPTION_STATUS),
-      default: GIFT_REDEMPTION_STATUS.PROCESSING
+      default: GIFT_REDEMPTION_STATUS.PROCESSING,
     },
     shippingAddress: {
       type: shippingAddressSchema,
@@ -39,7 +39,7 @@ const giftRedemptionSchema = new mongoose.Schema(
     courierDetails: { type: String },
     cancellationReason: { type: String },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 const GiftRedemption = mongoose.model("GiftRedemption", giftRedemptionSchema);
