@@ -230,6 +230,8 @@ function parseUserAgent(userAgent, headers = {}) {
   return info;
 }
 
+
+
 module.exports = {
   handleError,
   hashData,
@@ -245,4 +247,5 @@ module.exports = {
   calculateProfileCompletion,
   buildPhoneLookupVariants,
   parseUserAgent,
+  getS3KeyFromUrl
 };
