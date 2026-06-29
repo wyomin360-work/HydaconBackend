@@ -1,4 +1,5 @@
-const { S3Client, HeadObjectCommand, DeleteObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, HeadObjectCommand, DeleteObjectCommand, GetObjectCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const path = require('path');
 const fs = require('fs').promises;
 
@@ -131,9 +132,60 @@ const getS3FileStream = async (
     }
 };
 
+const verifyUrl = async (filePath) => {
+    // For hydacon we can use a simpler prefix or global prefix
+    const filePathUpload = `uploads/${filePath}`;
+    const params = {
+        Bucket: bucketName,
+        Key: filePathUpload,
+    };
+
+    try {
+        const metadata = await s3.send(new HeadObjectCommand(params));
+        const url = `https://${bucketName}.s3.${region}.amazonaws.com/${filePathUpload}`;
+        return { url, metadata, exists: true };
+    } catch (error) {
+        return { exists: false };
+    }
+};
+
+const getPresignedUrl = async (filePath, fileType) => {
+    try {
+        const filePathToCheck = `uploads/${filePath}`;
+        
+        let cacheControl = 'no-cache, no-store, must-revalidate';
+        if (['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml'].includes(fileType)) {
+            cacheControl = 'public, max-age=31536000, immutable';
+        }
+
+        const uploadParams = {
+            Bucket: bucketName,
+            Key: filePathToCheck,
+            ContentType: fileType,
+            CacheControl: cacheControl,
+        };
+
+        const uploadUrl = await getSignedUrl(
+            s3,
+            new PutObjectCommand(uploadParams),
+            { expiresIn: 300 }
+        );
+        
+        const downloadUrl = `https://${bucketName}.s3.${region}.amazonaws.com/${filePathToCheck}`;
+
+        return { uploadUrl, downloadUrl };
+    } catch (error) {
+        console.log('Error while getting presigned url:', error);
+        throw error;
+    }
+};
+
 module.exports = {
     checkS3FileExists,
     deleteS3File,
     clearDir,
     getS3FileStream,
+    uploadS3File,
+    verifyUrl,
+    getPresignedUrl,
 };

@@ -3,7 +3,8 @@ const productCreateRequestType = {
   properties: {
     name: { type: "string", minLength: 1 },
     description: { type: "string", minLength: 1 },
-    image: { type: "string", format: "uri" },
+    images: { type: "array", items: { type: "string", format: "uri" } },
+    featuredImage: { type: "string", format: "uri" },
     price: { type: "number", minimum: 0 },
     rewardPoints: { type: "integer", minimum: 0 },
     netWeight: { type: "string", minLength: 2 },
@@ -17,7 +18,8 @@ const productUpdateRequestType = {
   properties: {
     name: { type: "string", minLength: 1 },
     description: { type: "string", minLength: 1 },
-    image: { type: "string", format: "uri" },
+    images: { type: "array", items: { type: "string", format: "uri" } },
+    featuredImage: { type: "string", format: "uri" },
     price: { type: "number", minimum: 0 },
     rewardPoints: { type: "integer", minimum: 0 },
     netWeight: { type: "string", minLength: 2 },
