@@ -24,7 +24,7 @@ async function addDocument(userId, data) {
 
   if (duplicateDocIds.length > 0) {
     sendFailResponse(
-      `Duplicate document IDs found in the input data: ${duplicateDocIds.join(", ")}`
+      `Duplicate document IDs found in the input data: ${duplicateDocIds.join(", ")}`,
     );
   }
 
@@ -76,7 +76,7 @@ async function addDocument(userId, data) {
   }
 
   sendFailResponse(
-    `No documents were added due to the following reasons: ${errors.join("; ")}`
+    `No documents were added due to the following reasons: ${errors.join("; ")}`,
   );
 }
 
@@ -125,7 +125,7 @@ async function editDocument(docId, data) {
 
   if (isDocument.lock) {
     sendFailResponse(
-      "This document is locked and cannot be updated, as it is actively referenced in other areas"
+      "This document is locked and cannot be updated, as it is actively referenced in other areas",
     );
   }
 
@@ -168,7 +168,7 @@ async function deleteDocuments(docId) {
 
   if (documentDetails.lock) {
     sendFailResponse(
-      "This document is locked and cannot be deleted, as it is actively referenced in other areas"
+      "This document is locked and cannot be deleted, as it is actively referenced in other areas",
     );
   }
 

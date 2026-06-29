@@ -46,7 +46,12 @@ module.exports = {
         { name: "limit", in: "query", schema: { type: "integer" } },
         { name: "docName", in: "query", schema: { type: "string" } },
         { name: "docType", in: "query", schema: { type: "string" } },
-        { name: "ownerId", in: "query", schema: { type: "string" }, description: "Admin only" },
+        {
+          name: "ownerId",
+          in: "query",
+          schema: { type: "string" },
+          description: "Admin only",
+        },
       ],
       responses: {
         200: { description: "Documents retrieved successfully" },

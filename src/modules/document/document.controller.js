@@ -12,7 +12,11 @@ exports.documentsList = async (req, res) => {
   const userId = req.userId;
   const filters = req.query;
   const userRole = req.role; // Attached via verifyAdminOrUser
-  const response = await documentService.documentsList(userId, filters, userRole);
+  const response = await documentService.documentsList(
+    userId,
+    filters,
+    userRole,
+  );
   return sendResponse(res, response.data, 200);
 };
 

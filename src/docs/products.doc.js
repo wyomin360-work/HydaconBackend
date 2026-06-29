@@ -45,7 +45,10 @@ module.exports = {
                             name: { type: "string" },
                             description: { type: "string" },
                             featuredImage: { type: "string" },
-                            images: { type: "array", items: { type: "string" } },
+                            images: {
+                              type: "array",
+                              items: { type: "string" },
+                            },
                             price: { type: "number" },
                             rewardPoints: { type: "number" },
                           },

@@ -230,8 +230,6 @@ function parseUserAgent(userAgent, headers = {}) {
   return info;
 }
 
-
-
 module.exports = {
   handleError,
   hashData,
