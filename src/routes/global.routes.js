@@ -26,6 +26,8 @@ const campaignsRoutes = require("../modules/campaigns/campaigns.routes");
 const campaignsPaths = require("../modules/campaigns/campaigns.paths");
 const documentRoutes = require("../modules/document/document.routes");
 const documentPaths = require("../modules/document/document.paths");
+const filesPaths = require("../modules/files/files.paths");
+const filesRoutes = require("../modules/files/files.routes");
 
 const globalRoutes = express.Router();
 
@@ -42,5 +44,6 @@ globalRoutes.use(kycPaths.root, kycRoutes);
 globalRoutes.use(loyaltyPaths.root, loyaltyRoutes);
 globalRoutes.use(campaignsPaths.root, campaignsRoutes);
 globalRoutes.use(documentPaths.root, documentRoutes);
+globalRoutes.use(filesPaths.root, filesRoutes);
 
 module.exports = globalRoutes;

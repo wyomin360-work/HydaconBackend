@@ -20,6 +20,8 @@ const s3 = new S3Client({
         accessKeyId,
         secretAccessKey,
     },
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED',
 });
 
 const getS3KeyFromUrl = (fileUrl) => {
@@ -185,7 +187,6 @@ module.exports = {
     deleteS3File,
     clearDir,
     getS3FileStream,
-    uploadS3File,
     verifyUrl,
     getPresignedUrl,
 };

@@ -68,26 +68,28 @@ async function productList(data) {
 }
 
 async function createProduct(productData) {
-  const { name, description, image, price, rewardPoints, netWeight } =
+  const { name, description, images, featuredImage, price, rewardPoints, netWeight } =
     productData;
   await Product.create({
     name,
     description,
-    image,
+    images,
     price,
     rewardPoints,
     netWeight,
+    featuredImage
   });
   return { message: "Product created", data: { productCreated: true } };
 }
 
 async function updateProduct(productData, productId) {
-  const { name, description, image, price, rewardPoints, netWeight, active } =
+  const { name, description, images, featuredImage, price, rewardPoints, netWeight, active } =
     productData;
   await Product.findByIdAndUpdate(productId, {
     name,
     description,
-    image,
+    images,
+    featuredImage,
     price,
     rewardPoints,
     netWeight,
