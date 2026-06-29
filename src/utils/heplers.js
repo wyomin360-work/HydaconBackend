@@ -247,5 +247,4 @@ module.exports = {
   calculateProfileCompletion,
   buildPhoneLookupVariants,
   parseUserAgent,
-  getS3KeyFromUrl
 };
