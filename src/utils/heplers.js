@@ -239,6 +239,13 @@ const getPaginationParams = (data = {}, defaultLimit = 10) => {
   return { page: pageNum, limit: limitNum, skip };
 };
 
+function normalizeString(str) {
+  if (str) {
+    return str.toLowerCase().trim().replace(/\s+/g, "_");
+  }
+  return "";
+}
+
 module.exports = {
   handleError,
   hashData,
@@ -255,4 +262,5 @@ module.exports = {
   buildPhoneLookupVariants,
   parseUserAgent,
   getPaginationParams,
+  normalizeString,
 };
