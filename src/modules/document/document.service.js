@@ -1,7 +1,7 @@
 const Document = require("../../schemas/document.schema");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const { checkS3FileExists, deleteS3File } = require("../../utils/s3");
-const { attachId } = require("../../utils/heplers");
+const { attachId, normalizeString } = require("../../utils/heplers");
 const mongoose = require("mongoose");
 
 async function addDocument(userId, data) {
@@ -13,12 +13,15 @@ async function addDocument(userId, data) {
 
   const docIdSet = new Set();
   const duplicateDocIds = [];
+  const normalizedDocIds = [];
 
   documentsList.forEach((document) => {
-    if (docIdSet.has(document.docId)) {
-      duplicateDocIds.push(document.docId);
+    const normalizedDocId = normalizeString(document.docId);
+    if (docIdSet.has(normalizedDocId)) {
+      duplicateDocIds.push(normalizedDocId);
     } else {
-      docIdSet.add(document.docId);
+      docIdSet.add(normalizedDocId);
+      normalizedDocIds.push(normalizedDocId);
     }
   });
 
@@ -28,49 +31,74 @@ async function addDocument(userId, data) {
     );
   }
 
+  // Pre-fetch all existing documents to improve performance
+  const existingDocsFromDb = await Document.find({
+    ownerId: userId,
+    docId: { $in: normalizedDocIds },
+  });
+
+  const existingDocsMap = new Map();
+  existingDocsFromDb.forEach((doc) => {
+    existingDocsMap.set(doc.docId, doc);
+  });
+
   const errors = [];
   const documentsToInsert = [];
+  const existingDocuments = [];
 
-  for (const document of documentsList) {
-    const { docId, docName, docSize, docType, docUrl, number } = document;
+  // Process all documents concurrently
+  await Promise.all(
+    documentsList.map(async (document) => {
+      const { docName, docSize, docType, docUrl, number } = document;
+      const docId = normalizeString(document.docId);
 
-    try {
-      const isFileExist = await checkS3FileExists(docUrl);
-      if (!isFileExist) {
-        errors.push(`File not found on the server for document: ${docName}`);
-        continue;
+      try {
+        const isFileExist = await checkS3FileExists(docUrl);
+        if (!isFileExist) {
+          console.error(`File not found for docUrl: ${docUrl}`);
+          errors.push(`File not found on the server for document: ${docName}`);
+          return;
+        }
+
+        const isDocument = existingDocsMap.get(docId);
+        if (isDocument) {
+          existingDocuments.push(isDocument);
+          return;
+        }
+
+        documentsToInsert.push({
+          docId,
+          docName,
+          docSize,
+          docType,
+          docUrl,
+          ownerId: userId,
+          number,
+        });
+      } catch (error) {
+        errors.push(`Error processing document: ${docName} - ${error.message}`);
       }
+    }),
+  );
 
-      const isDocument = await Document.findOne({
-        ownerId: userId,
-        docId,
-      });
-      if (isDocument) {
-        errors.push(`Document with ID: ${docId} already exists.`);
-        continue;
-      }
-
-      documentsToInsert.push({
-        docId,
-        docName,
-        docSize,
-        docType,
-        docUrl,
-        ownerId: userId,
-        number,
-      });
-    } catch (error) {
-      errors.push(`Error processing document: ${docName} - ${error.message}`);
-    }
-  }
+  let finalDocuments = [
+    ...existingDocuments.map((doc) => attachId(doc.toObject())),
+  ];
 
   if (documentsToInsert.length > 0) {
     const newDocuments = await Document.insertMany(documentsToInsert);
+    finalDocuments = [
+      ...finalDocuments,
+      ...newDocuments.map((doc) => attachId(doc.toObject())),
+    ];
+  }
+
+  if (finalDocuments.length > 0) {
     return {
-      message: "Documents added successfully",
+      message: "Documents processed successfully",
       data: {
         documentAdded: true,
-        documents: newDocuments.map((doc) => attachId(doc.toObject())),
+        documents: finalDocuments,
       },
     };
   }

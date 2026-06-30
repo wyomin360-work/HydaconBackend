@@ -36,18 +36,33 @@ const getS3KeyFromUrl = (fileUrl) => {
 
 const checkS3FileExists = async (fileUrl) => {
   try {
-    const key = getS3KeyFromUrl(fileUrl);
+    const res = await fetch(fileUrl, { method: "HEAD" });
+    if (res.ok) return true;
+    if (res.status === 404) return false;
+  } catch (err) {
+    console.error("Fetch HEAD failed:", err);
+  }
 
+  try {
+    const key = getS3KeyFromUrl(fileUrl);
     const params = {
       Bucket: bucketName,
       Key: key,
     };
-
     await s3.send(new HeadObjectCommand(params));
     return true;
   } catch (error) {
-    if (error.name === "NotFound") {
+    console.error("Error in checkS3FileExists SDK call:", error);
+    if (
+      error.name === "NotFound" ||
+      (error.$metadata && error.$metadata.httpStatusCode === 404)
+    ) {
       return false;
+    }
+    // If we get 403 Access Denied, we might not have list/get permissions via IAM, but the file might exist.
+    // Assume it exists to prevent document creation failures, since fetch already handled the 404 case.
+    if (error.$metadata && error.$metadata.httpStatusCode === 403) {
+      return true;
     }
     return false;
   }
@@ -139,6 +154,20 @@ const getS3FileStream = async (docUrl, ownerId) => {
 const verifyUrl = async (filePath) => {
   // For hydacon we can use a simpler prefix or global prefix
   const filePathUpload = `uploads/${filePath}`;
+  const url = `https://${bucketName}.s3.${region}.amazonaws.com/${filePathUpload}`;
+
+  try {
+    const res = await fetch(url, { method: "HEAD" });
+    if (res.ok) {
+      return { url, exists: true };
+    }
+    if (res.status === 404) {
+      return { exists: false };
+    }
+  } catch (err) {
+    console.error("Fetch HEAD failed in verifyUrl:", err);
+  }
+
   const params = {
     Bucket: bucketName,
     Key: filePathUpload,
@@ -146,7 +175,6 @@ const verifyUrl = async (filePath) => {
 
   try {
     const metadata = await s3.send(new HeadObjectCommand(params));
-    const url = `https://${bucketName}.s3.${region}.amazonaws.com/${filePathUpload}`;
     return { url, metadata, exists: true };
   } catch (error) {
     return { exists: false };

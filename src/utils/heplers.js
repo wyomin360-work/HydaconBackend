@@ -230,6 +230,13 @@ function parseUserAgent(userAgent, headers = {}) {
   return info;
 }
 
+function normalizeString(str) {
+  if (str) {
+    return str.toLowerCase().trim().replace(/\s+/g, "_");
+  }
+  return "";
+}
+
 module.exports = {
   handleError,
   hashData,
@@ -245,4 +252,5 @@ module.exports = {
   calculateProfileCompletion,
   buildPhoneLookupVariants,
   parseUserAgent,
+  normalizeString,
 };
