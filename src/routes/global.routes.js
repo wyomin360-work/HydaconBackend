@@ -30,6 +30,8 @@ const documentRoutes = require("../modules/document/document.routes");
 const documentPaths = require("../modules/document/document.paths");
 const filesPaths = require("../modules/files/files.paths");
 const filesRoutes = require("../modules/files/files.routes");
+const ruleSetPaths = require("../modules/rule-set/rule-set.paths");
+const ruleSetRoutes = require("../modules/rule-set/rule-set.routes");
 
 const globalRoutes = express.Router();
 
@@ -48,5 +50,6 @@ globalRoutes.use(campaignsPaths.root, campaignsRoutes);
 globalRoutes.use(giftPaths.root, giftRoutes);
 globalRoutes.use(documentPaths.root, documentRoutes);
 globalRoutes.use(filesPaths.root, filesRoutes);
+globalRoutes.use(ruleSetPaths.root, ruleSetRoutes);
 
 module.exports = globalRoutes;
