@@ -231,6 +231,47 @@ describe("Gift Service & Rules Engine Tests", () => {
       expect(mockGift.save).toHaveBeenCalled();
       expect(GiftRedemption.prototype.save).toHaveBeenCalled();
     });
+
+    it("should fail redemption if rule set evaluator determines user is not eligible", async () => {
+      // Mock session start & commit
+      const mockSession = {
+        startTransaction: jest.fn(),
+        commitTransaction: jest.fn(),
+        abortTransaction: jest.fn(),
+        endSession: jest.fn(),
+        withTransaction: jest.fn().mockImplementation(async (callback) => {
+          try {
+            await callback();
+          } catch (error) {
+            throw error;
+          }
+        }),
+      };
+      mongoose.startSession = jest.fn().mockResolvedValue(mockSession);
+
+      User.findById.mockImplementation(() => mockQuery(mockUser));
+      Gift.findById.mockImplementation(() => mockQuery(mockGift));
+
+      // Mock evaluator to fail
+      ruleSetEvaluator.evaluateRuleSet.mockResolvedValueOnce({
+        eligible: false,
+        reasons: ["Failed custom rule set condition"],
+        evaluatedRules: [{ type: "SCAN_COUNT", satisfied: false }],
+      });
+
+      const response = await giftService.redeemGift("user123", {
+        giftId: "gift123",
+        shippingAddress: mockRedemption.shippingAddress,
+      });
+
+      expect(response.success).toBe(false);
+      expect(response.message).toContain("Failed custom rule set condition");
+      expect(ruleSetEvaluator.evaluateRuleSet).toHaveBeenCalled();
+      
+      // Ensure stock/coins weren't modified and nothing was saved
+      expect(mockUser.save).not.toHaveBeenCalled();
+      expect(mockGift.save).not.toHaveBeenCalled();
+    });
   });
 
   describe("getUserRedemptionDetails ownership validation", () => {
