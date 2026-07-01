@@ -1,18 +1,5 @@
 const { default: mongoose } = require("mongoose");
 
-const rewardRulesSchema = new mongoose.Schema(
-  {
-    minTierId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Tier",
-      required: false,
-    },
-    minScansThisMonth: { type: Number, default: 0 },
-    regionRestrictions: [{ type: String }],
-  },
-  { _id: false },
-);
-
 const giftSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
@@ -27,9 +14,10 @@ const giftSchema = new mongoose.Schema(
     reservedQuantity: { type: Number, required: true, default: 0 },
     image: { type: String },
     active: { type: Boolean, default: true },
-    rewardRules: {
-      type: rewardRulesSchema,
-      default: () => ({}),
+    ruleSetId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "RuleSet",
+      required: false,
     },
   },
   { timestamps: true },

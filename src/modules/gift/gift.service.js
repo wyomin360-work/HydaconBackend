@@ -5,6 +5,8 @@ const GiftRedemption = require("../../schemas/gift-redemption.schema");
 const User = require("../../schemas/user.schema");
 const { GIFT_REDEMPTION_STATUS } = require("../../constants/gift");
 const { getPaginationParams, attachId } = require("../../utils/heplers");
+const { RuleSet } = require("../../schemas/rule-set.schema");
+const ruleSetEvaluator = require("../rule-set/rule-set.evaluator");
 
 // --- Categories ---
 
@@ -142,7 +144,7 @@ exports.giftList = async (data, isAdmin) => {
 
     const records = await Gift.find(matchQuery)
       .populate("categoryId", "name active")
-      .populate("rewardRules.minTierId", "name")
+      .populate("ruleSetId", "name")
       .skip(skip)
       .limit(limitNum)
       .sort(sort)
@@ -169,7 +171,7 @@ exports.getGiftDetails = async (giftId) => {
   try {
     const gift = await Gift.findById(giftId)
       .populate("categoryId", "name")
-      .populate("rewardRules.minTierId", "name");
+      .populate("ruleSetId", "name active validFrom validUntil");
 
     if (!gift) return { success: false, message: "Gift not found" };
     return { success: true, data: gift };
@@ -216,14 +218,7 @@ const checkEligibility = async (user, gift, session = null) => {
       required: gift.priceInCoins,
       current: user.hydaconCoins || 0,
       satisfied: (user.hydaconCoins || 0) >= gift.priceInCoins,
-    },
-    tier: { required: "None", current: "None", satisfied: true },
-    scans: { required: 0, current: 0, satisfied: true },
-    region: {
-      required: [],
-      current: user.areaOfOperation || "None",
-      satisfied: true,
-    },
+    }
   };
 
   const reasons = [];
@@ -235,80 +230,23 @@ const checkEligibility = async (user, gift, session = null) => {
     );
   }
 
-  // Tier requirement
-  if (gift.rewardRules && gift.rewardRules.minTierId) {
-    const Tier = mongoose.model("Tier");
-    const requiredTier = await Tier.findById(
-      gift.rewardRules.minTierId,
-    ).session(session);
-    if (requiredTier) {
-      rules.tier.required = requiredTier.name;
-      let userTier = null;
-      if (user.currentTierId) {
-        userTier = await Tier.findById(user.currentTierId).session(session);
-      }
-      rules.tier.current = userTier ? userTier.name : "Beginner";
-      const userRank = userTier ? userTier.rank : 0;
-      rules.tier.satisfied = userRank >= requiredTier.rank;
-      if (!rules.tier.satisfied) {
-        reasons.push(
-          `Requires ${requiredTier.name} membership tier or above (Current: ${rules.tier.current})`,
-        );
+  let eligible = rules.coins.satisfied;
+  let dynamicRules = [];
+
+  // RuleSet Evaluation
+  if (gift.ruleSetId) {
+    const ruleSet = await RuleSet.findById(gift.ruleSetId).session(session);
+    if (ruleSet) {
+      const evaluation = await ruleSetEvaluator.evaluateRuleSet(ruleSet, user, session);
+      dynamicRules = evaluation.evaluatedRules;
+      if (!evaluation.eligible) {
+        eligible = false;
+        reasons.push(...evaluation.reasons);
       }
     }
   }
 
-  // Scan requirement
-  if (gift.rewardRules && gift.rewardRules.minScansThisMonth > 0) {
-    const requiredScans = gift.rewardRules.minScansThisMonth;
-    rules.scans.required = requiredScans;
-
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
-
-    const Redeem = mongoose.model("Redeem");
-    const scansCount = await Redeem.countDocuments({
-      userId: user._id,
-      createdAt: { $gte: startOfMonth },
-    }).session(session);
-
-    rules.scans.current = scansCount;
-    rules.scans.satisfied = scansCount >= requiredScans;
-    if (!rules.scans.satisfied) {
-      reasons.push(
-        `Requires at least ${requiredScans} bag scans this month (Current: ${scansCount})`,
-      );
-    }
-  }
-
-  // Region restriction
-  if (
-    gift.rewardRules &&
-    gift.rewardRules.regionRestrictions &&
-    gift.rewardRules.regionRestrictions.length > 0
-  ) {
-    const allowedRegions = gift.rewardRules.regionRestrictions;
-    rules.region.required = allowedRegions;
-
-    const userRegion = user.areaOfOperation || "";
-    rules.region.satisfied = allowedRegions.some(
-      (r) => r.trim().toLowerCase() === userRegion.trim().toLowerCase(),
-    );
-    if (!rules.region.satisfied) {
-      reasons.push(
-        `Gift is not available in your region (${userRegion || "No region set"})`,
-      );
-    }
-  }
-
-  const eligible =
-    rules.coins.satisfied &&
-    rules.tier.satisfied &&
-    rules.scans.satisfied &&
-    rules.region.satisfied;
-
-  return { eligible, reasons, rules };
+  return { eligible, reasons, rules: { ...rules, dynamic: dynamicRules } };
 };
 
 exports.getGiftEligibility = async (userId, giftId) => {

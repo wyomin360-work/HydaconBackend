@@ -16,6 +16,19 @@ jest.mock("../../src/schemas/user.schema");
 jest.mock("../../src/schemas/tier.schema");
 jest.mock("../../src/schemas/redeem.schema");
 
+// Mock the RuleSet schema and evaluator used by gift.service
+jest.mock("../../src/schemas/rule-set.schema", () => ({
+  RuleSet: {
+    findById: jest.fn(),
+  },
+}));
+jest.mock("../../src/modules/rule-set/rule-set.evaluator", () => ({
+  evaluateRuleSet: jest.fn(),
+}));
+
+const { RuleSet } = require("../../src/schemas/rule-set.schema");
+const ruleSetEvaluator = require("../../src/modules/rule-set/rule-set.evaluator");
+
 describe("Gift Service & Rules Engine Tests", () => {
   let mockUser, mockGift, mockTier, mockRedemption;
 
@@ -51,11 +64,7 @@ describe("Gift Service & Rules Engine Tests", () => {
       stockQuantity: 10,
       reservedQuantity: 2,
       active: true,
-      rewardRules: {
-        minTierId: "tierSilver",
-        minScansThisMonth: 5,
-        regionRestrictions: ["California", "Texas"],
-      },
+      ruleSetId: "ruleSet123",
       save: jest.fn().mockResolvedValue(true),
     };
 
@@ -97,26 +106,28 @@ describe("Gift Service & Rules Engine Tests", () => {
     GiftRedemption.findById.mockReturnValue({
       populate: jest.fn().mockResolvedValue(mockRedemption),
     });
+
+    // Default: RuleSet evaluator passes all rules
+    RuleSet.findById.mockImplementation(() => mockQuery({ _id: "ruleSet123", name: "Test RuleSet", logicOperator: "AND", rules: [] }));
+    ruleSetEvaluator.evaluateRuleSet.mockResolvedValue({
+      eligible: true,
+      reasons: [],
+      evaluatedRules: [],
+    });
   });
 
   describe("checkEligibility Rules Engine", () => {
     it("should pass eligibility when all rules are satisfied", async () => {
-      Redeem.countDocuments.mockImplementation(() => mockQuery(6)); // 6 scans >= required 5
-
       const result = await giftService.getGiftEligibility("user123", "gift123");
 
       expect(result.success).toBe(true);
       expect(result.data.eligible).toBe(true);
       expect(result.data.reasons.length).toBe(0);
       expect(result.data.rules.coins.satisfied).toBe(true);
-      expect(result.data.rules.tier.satisfied).toBe(true);
-      expect(result.data.rules.scans.satisfied).toBe(true);
-      expect(result.data.rules.region.satisfied).toBe(true);
     });
 
     it("should fail when coins are insufficient", async () => {
       mockUser.hydaconCoins = 100; // Required is 200
-      Redeem.countDocuments.mockImplementation(() => mockQuery(6));
 
       const result = await giftService.getGiftEligibility("user123", "gift123");
 
@@ -126,18 +137,11 @@ describe("Gift Service & Rules Engine Tests", () => {
       expect(result.data.reasons[0]).toContain("Requires at least 200 coins");
     });
 
-    it("should fail when tier rank is insufficient", async () => {
-      Redeem.countDocuments.mockImplementation(() => mockQuery(6));
-
-      // Mock required tier
-      const reqTier = { _id: "tierGold", name: "Gold", rank: 3 };
-      mockGift.rewardRules.minTierId = "tierGold";
-
-      // FindById implementation for Tier
-      Tier.findById.mockImplementation((id) => {
-        if (id === "tierSilver") return mockQuery(mockTier);
-        if (id === "tierGold") return mockQuery(reqTier);
-        return mockQuery(null);
+    it("should fail when RuleSet evaluator returns not eligible (e.g. tier insufficient)", async () => {
+      ruleSetEvaluator.evaluateRuleSet.mockResolvedValue({
+        eligible: false,
+        reasons: ["Requires Gold membership tier or above (Current: Silver)"],
+        evaluatedRules: [{ type: "TIER", satisfied: false }],
       });
 
       const result = await giftService.getGiftEligibility("user123", "gift123");
@@ -147,29 +151,46 @@ describe("Gift Service & Rules Engine Tests", () => {
       expect(result.data.reasons[0]).toContain("Requires Gold membership tier");
     });
 
-    it("should fail when scans this month are insufficient", async () => {
-      Redeem.countDocuments.mockImplementation(() => mockQuery(3)); // 3 < 5 required
+    it("should fail when RuleSet evaluator returns not eligible (e.g. scans insufficient)", async () => {
+      ruleSetEvaluator.evaluateRuleSet.mockResolvedValue({
+        eligible: false,
+        reasons: ["Requires at least 5 bag scans this month (Current: 3)"],
+        evaluatedRules: [{ type: "SCAN_COUNT", satisfied: false }],
+      });
 
       const result = await giftService.getGiftEligibility("user123", "gift123");
 
       expect(result.success).toBe(true);
       expect(result.data.eligible).toBe(false);
-      expect(result.data.rules.scans.satisfied).toBe(false);
       expect(result.data.reasons[0]).toContain("Requires at least 5 bag scans");
     });
 
-    it("should fail when region is not matched", async () => {
-      mockUser.areaOfOperation = "New York"; // Not in ["California", "Texas"]
-      Redeem.countDocuments.mockImplementation(() => mockQuery(6));
+    it("should fail when RuleSet evaluator returns region not matched", async () => {
+      ruleSetEvaluator.evaluateRuleSet.mockResolvedValue({
+        eligible: false,
+        reasons: ["Gift is not available in your region (New York)"],
+        evaluatedRules: [{ type: "REGION", satisfied: false }],
+      });
 
       const result = await giftService.getGiftEligibility("user123", "gift123");
 
       expect(result.success).toBe(true);
       expect(result.data.eligible).toBe(false);
-      expect(result.data.rules.region.satisfied).toBe(false);
       expect(result.data.reasons[0]).toContain(
         "Gift is not available in your region",
       );
+    });
+
+    it("should pass eligibility when gift has no ruleSetId", async () => {
+      mockGift.ruleSetId = null; // No ruleset attached
+
+      const result = await giftService.getGiftEligibility("user123", "gift123");
+
+      expect(result.success).toBe(true);
+      expect(result.data.eligible).toBe(true);
+      expect(result.data.reasons.length).toBe(0);
+      // evaluateRuleSet should NOT have been called
+      expect(ruleSetEvaluator.evaluateRuleSet).not.toHaveBeenCalled();
     });
   });
 

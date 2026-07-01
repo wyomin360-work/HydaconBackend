@@ -29,14 +29,7 @@ const giftCreateRequestType = {
     stockQuantity: { type: "number", minimum: 0 },
     image: { type: "string" },
     active: { type: "boolean" },
-    rewardRules: {
-      type: "object",
-      properties: {
-        minTierId: { type: "string" },
-        minScansThisMonth: { type: "number", minimum: 0 },
-        regionRestrictions: { type: "array", items: { type: "string" } },
-      },
-    },
+    ruleSetId: { type: "string" },
   },
   required: [
     "name",
@@ -58,14 +51,7 @@ const giftUpdateRequestType = {
     stockQuantity: { type: "number", minimum: 0 },
     image: { type: "string" },
     active: { type: "boolean" },
-    rewardRules: {
-      type: "object",
-      properties: {
-        minTierId: { type: "string" },
-        minScansThisMonth: { type: "number", minimum: 0 },
-        regionRestrictions: { type: "array", items: { type: "string" } },
-      },
-    },
+    ruleSetId: { type: "string" },
   },
   additionalProperties: false,
 };
