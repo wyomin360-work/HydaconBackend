@@ -71,6 +71,12 @@ router.delete(
 
 // Gifts (User)
 router.post(
+  giftPaths.userCategoryList,
+  verification.verifyUser,
+  validateRequest(paginationType),
+  handleError(giftController.listCategories),
+);
+router.post(
   giftPaths.userList,
   verification.verifyUser,
   validateRequest(paginationType),

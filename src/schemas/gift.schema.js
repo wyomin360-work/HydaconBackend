@@ -4,10 +4,18 @@ const giftSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
     description: { type: String, required: true },
+    giftType: {
+      type: String,
+      enum: ["physical", "voucher"],
+      required: true,
+      default: "physical",
+    },
     categoryId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "GiftCategory",
-      required: true,
+      required: function () {
+        return this.giftType === "physical";
+      },
     },
     priceInCoins: { type: Number, required: true },
     stockQuantity: { type: Number, required: true, default: 0 },

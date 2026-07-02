@@ -337,9 +337,18 @@ exports.redeemGift = async (userId, data) => {
 
 exports.userRedemptions = async (userId, data) => {
   try {
+    const { search = "" } = data;
     const { page: pageNum, limit: limitNum, skip } = getPaginationParams(data);
 
-    const records = await GiftRedemption.find({ userId })
+    let matchQuery = { userId };
+    
+    if (search) {
+      const matchingGifts = await Gift.find({ name: { $regex: search, $options: "i" } }).select("_id").lean();
+      const giftIds = matchingGifts.map(g => g._id);
+      matchQuery.giftId = { $in: giftIds };
+    }
+
+    const records = await GiftRedemption.find(matchQuery)
       .populate({
         path: "giftId",
         select: "name image categoryId",
@@ -349,7 +358,7 @@ exports.userRedemptions = async (userId, data) => {
       .limit(limitNum)
       .sort({ createdAt: -1 });
 
-    const total = await GiftRedemption.countDocuments({ userId });
+    const total = await GiftRedemption.countDocuments(matchQuery);
 
     return {
       success: true,
