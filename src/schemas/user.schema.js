@@ -101,6 +101,20 @@ const userSchema = new mongoose.Schema(
       type: kycDocumentsSchema,
       default: () => ({}),
     },
+    // Referral Tracking
+    referralCode: { type: String, unique: true, sparse: true },
+    referredBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    referralsCount: { type: Number, default: 0 },
+    successfulReferralsCount: { type: Number, default: 0 },
+
+    // Streak Tracking
+    currentStreak: { type: Number, default: 0 },
+    lastScanDate: { type: Date, default: null },
+
     failedScanAttempts: { type: Number, default: 0 },
     scanBanUntil: { type: Date, default: null },
   },
