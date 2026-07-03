@@ -24,6 +24,7 @@ const giftCreateRequestType = {
   properties: {
     name: { type: "string", minLength: 1 },
     description: { type: "string", minLength: 1 },
+    giftType: { type: "string", enum: ["physical", "voucher"] },
     categoryId: { type: "string", minLength: 24, maxLength: 24 },
     priceInCoins: { type: "number", minimum: 0 },
     stockQuantity: { type: "number", minimum: 0 },
@@ -34,7 +35,7 @@ const giftCreateRequestType = {
   required: [
     "name",
     "description",
-    "categoryId",
+    "giftType",
     "priceInCoins",
     "stockQuantity",
   ],
@@ -46,6 +47,7 @@ const giftUpdateRequestType = {
   properties: {
     name: { type: "string", minLength: 1 },
     description: { type: "string" },
+    giftType: { type: "string", enum: ["physical", "voucher"] },
     categoryId: { type: "string", minLength: 24, maxLength: 24 },
     priceInCoins: { type: "number", minimum: 0 },
     stockQuantity: { type: "number", minimum: 0 },

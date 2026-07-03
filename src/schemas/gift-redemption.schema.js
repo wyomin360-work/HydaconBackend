@@ -25,6 +25,12 @@ const giftRedemptionSchema = new mongoose.Schema(
       required: true,
     },
     coinsUsed: { type: Number, required: true },
+    giftType: {
+      type: String,
+      enum: ["physical", "voucher"],
+      required: true,
+      default: "physical",
+    },
     status: {
       type: String,
       required: true,
@@ -33,7 +39,9 @@ const giftRedemptionSchema = new mongoose.Schema(
     },
     shippingAddress: {
       type: shippingAddressSchema,
-      required: true,
+      required: function () {
+        return this.giftType === "physical";
+      },
     },
     trackingNumber: { type: String },
     courierDetails: { type: String },

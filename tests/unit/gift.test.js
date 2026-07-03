@@ -216,19 +216,33 @@ describe("Gift Service & Rules Engine Tests", () => {
       });
       Redeem.countDocuments.mockImplementation(() => mockQuery(6));
 
-      GiftRedemption.create = jest.fn().mockImplementation((arr, opts) => {
-        return Promise.resolve([mockRedemption]);
-      });
+      User.findOneAndUpdate = jest.fn().mockResolvedValue(mockUser);
+      Gift.findOneAndUpdate = jest.fn().mockResolvedValue(mockGift);
+
+      GiftRedemption.prototype.save = jest.fn().mockResolvedValue(mockRedemption);
 
       const response = await giftService.redeemGift("user123", {
         giftId: "gift123",
         shippingAddress: mockRedemption.shippingAddress,
       });
+      
       expect(response.success).toBe(true);
-      expect(mockUser.hydaconCoins).toBe(300); // 500 - 200
-      expect(mockGift.reservedQuantity).toBe(3); // 2 + 1
-      expect(mockUser.save).toHaveBeenCalled();
-      expect(mockGift.save).toHaveBeenCalled();
+      
+      expect(User.findOneAndUpdate).toHaveBeenCalledWith(
+        { _id: "user123", hydaconCoins: { $gte: 200 } },
+        { $inc: { hydaconCoins: -200 } },
+        { session: mockSession, new: true }
+      );
+      
+      expect(Gift.findOneAndUpdate).toHaveBeenCalledWith(
+        { 
+          _id: "gift123", 
+          $expr: { $gt: ["$stockQuantity", "$reservedQuantity"] } 
+        },
+        { $inc: { reservedQuantity: 1 } },
+        { session: mockSession, new: true }
+      );
+      
       expect(GiftRedemption.prototype.save).toHaveBeenCalled();
     });
 

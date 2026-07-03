@@ -109,10 +109,13 @@ const extractActualValue = async (rule, user, context, session) => {
       const activeSeason = await LoyaltySeason.findOne({ active: true }).session(session);
       if (!activeSeason) return -1;
 
-      const progress = await UserTierProgress.findOne({
-        userId: user._id,
-        seasonId: activeSeason._id
-      }).session(session);
+      if (!context.seasonProgress) {
+        context.seasonProgress = await UserTierProgress.findOne({
+          userId: user._id,
+          seasonId: activeSeason._id
+        }).session(session);
+      }
+      const progress = context.seasonProgress;
 
       if (!progress) return -1;
 
@@ -130,7 +133,7 @@ const extractActualValue = async (rule, user, context, session) => {
       return user.currentStreak || 0;
 
     default:
-      return null;
+      return false;
   }
 };
 
@@ -203,14 +206,9 @@ const applyOperator = (actualValue, operator, expectedValue) => {
   }
 };
 
-exports.evaluateRuleSet = async (ruleSet, user, context = {}, session = null) => {
+exports.evaluateRuleSet = async (ruleSet, user, context = {}, session = null, auditMode = true) => {
   if (!ruleSet.active) {
     return { eligible: false, reasons: ["Rule set is not active"], evaluatedRules: [] };
-  }
-
-  // Empty rule set – always eligible
-  if (!ruleSet.rules || ruleSet.rules.length === 0) {
-    return { eligible: true, reasons: [], evaluatedRules: [] };
   }
 
   const now = new Date();
@@ -221,38 +219,54 @@ exports.evaluateRuleSet = async (ruleSet, user, context = {}, session = null) =>
     return { eligible: false, reasons: ["Rule set has expired"], evaluatedRules: [] };
   }
 
+  // Empty rule set – always eligible
+  if (!ruleSet.rules || ruleSet.rules.length === 0) {
+    return { eligible: true, reasons: [], evaluatedRules: [] };
+  }
+
   const reasons = [];
   const isAnd = ruleSet.logicOperator === RuleLogicOperator.AND;
   // Initial eligibility based on logic operator
   let eligible = isAnd;
 
-  const evaluatedRules = await Promise.all(
-    ruleSet.rules.map(async (rule) => {
+  const evaluatedRules = [];
+
+  const evaluateSingleRule = async (rule) => {
+    try {
       const actualValue = await extractActualValue(rule, user, context, session);
       const expectedValue = rule.value; 
       const satisfied = applyOperator(actualValue, rule.operator, expectedValue);
+      return { type: rule.type, scope: rule.scope, operator: rule.operator, expectedValue, actualValue, satisfied };
+    } catch (error) {
+      return { type: rule.type, scope: rule.scope, operator: rule.operator, expectedValue: rule.value, actualValue: null, satisfied: false, error: error.message };
+    }
+  };
 
-      return {
-        type: rule.type,
-        scope: rule.scope,
-        operator: rule.operator,
-        expectedValue,
-        actualValue,
-        satisfied
-      };
-    })
-  );
+  if (auditMode) {
+    // Run all rules concurrently to avoid N+1 query latency
+    const results = await Promise.all(ruleSet.rules.map(evaluateSingleRule));
+    evaluatedRules.push(...results);
+  } else {
+    // Sequential evaluation for short-circuiting DB queries (Fast-Fail)
+    for (const rule of ruleSet.rules) {
+      const result = await evaluateSingleRule(rule);
+      evaluatedRules.push(result);
+      if (isAnd && !result.satisfied) break;
+      if (!isAnd && result.satisfied) break;
+    }
+  }
 
   // Evaluate each rule and collect reasons
   for (const evaluation of evaluatedRules) {
     if (!evaluation.satisfied) {
+      const errorMsg = evaluation.error ? ` (Error: ${evaluation.error})` : "";
       if (isAnd) {
         // Preserve original error message for AND logic
-        reasons.push(`Requirement not met for ${evaluation.type}`);
+        reasons.push(`Requirement not met for ${evaluation.type}${errorMsg}`);
         eligible = false;
       } else {
         // OR logic – collect generic unsatisfied rule message
-        reasons.push(`Rule not satisfied: ${evaluation.type}`);
+        reasons.push(`Rule not satisfied: ${evaluation.type}${errorMsg}`);
       }
     } else {
       if (!isAnd) {
