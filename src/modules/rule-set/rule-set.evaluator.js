@@ -38,10 +38,21 @@ const extractActualValue = async (rule, user, context, session) => {
 
   switch (type) {
     case RuleType.TIER: {
-      if (!user.currentTierId) return -1; // -1 rank if no tier
       const Tier = mongoose.model("Tier");
-      const tier = await Tier.findById(user.currentTierId).session(session);
-      return tier ? tier.rank : -1;
+      if (scope === RuleScope.SEASON) {
+        const LoyaltySeason = mongoose.model("LoyaltySeason");
+        const UserTierProgress = mongoose.model("UserTierProgress");
+        const activeSeason = await LoyaltySeason.findOne({ active: true }).session(session);
+        if (!activeSeason) return -1;
+        const progress = await UserTierProgress.findOne({ userId: user._id, seasonId: activeSeason._id }).session(session);
+        if (!progress || !progress.currentTierId) return -1;
+        const tier = await Tier.findById(progress.currentTierId).session(session);
+        return tier ? tier.rank : -1;
+      } else {
+        if (!user.currentTierId) return -1;
+        const tier = await Tier.findById(user.currentTierId).session(session);
+        return tier ? tier.rank : -1;
+      }
     }
     
     case RuleType.HYDACOINS:
@@ -56,22 +67,24 @@ const extractActualValue = async (rule, user, context, session) => {
     case RuleType.SCAN_COUNT: {
       const Redeem = mongoose.model("Redeem");
       const match = { userId: user._id };
-      // Apply temporal scope filtering (MONTH/WEEK/SEASON/TOTAL)
-      await applyScopeFilter(match, scope, session);
-      const count = await Redeem.countDocuments(match).session(session);
-      return count;
-    }
-
-    case RuleType.PRODUCT_SCAN: {
-      const Redeem = mongoose.model("Redeem");
-      const match = { userId: user._id };
-      // Attach product filter from metadata
-      if (metadata && metadata.targetProduct && metadata.targetProduct._id) {
-        match.productId = metadata.targetProduct._id;
-      } else if (metadata && metadata.targetId) {
-        match.productId = metadata.targetId;
+      
+      if (scope === RuleScope.PRODUCT) {
+        if (metadata && metadata.targetProduct && metadata.targetProduct._id) {
+          match.productId = metadata.targetProduct._id;
+        } else if (metadata && metadata.targetId) {
+          match.productId = metadata.targetId;
+        }
+      } else if (scope === RuleScope.CATEGORY) {
+        const Product = mongoose.model("Product");
+        if (metadata && (metadata.targetCategory || metadata.targetId)) {
+          const targetCatId = metadata.targetCategory ? metadata.targetCategory._id : metadata.targetId;
+          const productsInCat = await Product.find({ categoryId: targetCatId }).select('_id').session(session);
+          const productIds = productsInCat.map(p => p._id);
+          match.productId = { $in: productIds };
+        }
       }
-      // Apply temporal scope filter (MONTH/WEEK/SEASON/TOTAL)
+      
+      // Apply temporal scope filtering (MONTH/WEEK/SEASON/TOTAL)
       await applyScopeFilter(match, scope, session);
       const count = await Redeem.countDocuments(match).session(session);
       return count;
@@ -84,20 +97,17 @@ const extractActualValue = async (rule, user, context, session) => {
       return user.profileCompletionPercentage === 100;
 
     case RuleType.ADDRESS_COMPLETED:
-      return !!user.areaOfOperation; // Placeholder until address schema is finalized
+      return !!user.areaOfOperation;
 
     case RuleType.KYC_COMPLETED:
       return user.kycStatus === "APPROVED"; 
 
-    case RuleType.SEASON_POINTS:
-    case RuleType.SEASON_TIER:
-    case RuleType.SEASON_RANK: {
+    case RuleType.SEASON_POINTS: {
       const LoyaltySeason = mongoose.model("LoyaltySeason");
       const UserTierProgress = mongoose.model("UserTierProgress");
-      const Tier = mongoose.model("Tier");
 
       const activeSeason = await LoyaltySeason.findOne({ active: true }).session(session);
-      if (!activeSeason) return -1; // No active season
+      if (!activeSeason) return -1;
 
       const progress = await UserTierProgress.findOne({
         userId: user._id,
@@ -106,55 +116,9 @@ const extractActualValue = async (rule, user, context, session) => {
 
       if (!progress) return -1;
 
-      if (type === RuleType.SEASON_POINTS) return progress.currentPoint || 0;
-
-      if (!progress.currentTierId) return -1;
-
-      if (type === RuleType.SEASON_TIER) return progress.currentTierId.toString();
-
-      if (type === RuleType.SEASON_RANK) {
-        const tier = await Tier.findById(progress.currentTierId).session(session);
-        return tier ? tier.rank : -1;
-      }
-      
-      return -1;
+      return progress.currentPoint || 0;
     }
 
-    case RuleType.MAX_REDEMPTIONS_PER_USER: {
-      if (!context.targetId) return 0;
-      const GiftRedemption = mongoose.model("GiftRedemption");
-      const count = await GiftRedemption.countDocuments({
-        userId: user._id,
-        giftId: context.targetId,
-      }).session(session);
-      return count;
-    }
-
-    case RuleType.MAX_GLOBAL_REDEMPTIONS: {
-      if (!context.targetId) return 0;
-      const GiftRedemption = mongoose.model("GiftRedemption");
-      const count = await GiftRedemption.countDocuments({
-        giftId: context.targetId,
-      }).session(session);
-      return count;
-    }
-
-    case RuleType.CATEGORY_SCAN: {
-      const Redeem = mongoose.model("Redeem");
-      const Product = mongoose.model("Product");
-      const match = { userId: user._id };
-      // Filter by target category or ID
-      if (metadata && (metadata.targetCategory || metadata.targetId)) {
-        const targetCatId = metadata.targetCategory ? metadata.targetCategory._id : metadata.targetId;
-        const productsInCat = await Product.find({ categoryId: targetCatId }).select('_id').session(session);
-        const productIds = productsInCat.map(p => p._id);
-        match.productId = { $in: productIds };
-      }
-      // Apply temporal scope filter
-      await applyScopeFilter(match, scope, session);
-      const count = await Redeem.countDocuments(match).session(session);
-      return count;
-    }
 
     case RuleType.REFERRALS:
       return user.referralsCount || 0;

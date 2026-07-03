@@ -39,8 +39,6 @@ const RuleType = {
 
   // Scans
   SCAN_COUNT: "SCAN_COUNT",
-  PRODUCT_SCAN: "PRODUCT_SCAN",
-  CATEGORY_SCAN: "CATEGORY_SCAN",
 
   // Referrals
   REFERRALS: "REFERRALS",
@@ -48,8 +46,6 @@ const RuleType = {
 
   // Season
   SEASON_POINTS: "SEASON_POINTS",
-  SEASON_RANK: "SEASON_RANK",
-  SEASON_TIER: "SEASON_TIER",
 
   // Streak
   STREAK: "STREAK",
@@ -61,10 +57,6 @@ const RuleType = {
 
   // Region
   REGION: "REGION",
-
-  // Redemption Limits
-  MAX_REDEMPTIONS_PER_USER: "MAX_REDEMPTIONS_PER_USER",
-  MAX_GLOBAL_REDEMPTIONS: "MAX_GLOBAL_REDEMPTIONS",
 };
 
 /* =========================
