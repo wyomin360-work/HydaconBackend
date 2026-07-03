@@ -63,12 +63,15 @@ const extractActualValue = async (rule, user, context, session) => {
     }
 
     case RuleType.PRODUCT_SCAN: {
+      if (!metadata || (!metadata.targetProduct && !metadata.targetId)) {
+        return 0; // Missing metadata, fail gracefully
+      }
       const Redeem = mongoose.model("Redeem");
       const match = { userId: user._id };
       // Attach product filter from metadata
-      if (metadata && metadata.targetProduct && metadata.targetProduct._id) {
+      if (metadata.targetProduct && metadata.targetProduct._id) {
         match.productId = metadata.targetProduct._id;
-      } else if (metadata && metadata.targetId) {
+      } else {
         match.productId = metadata.targetId;
       }
       // Apply temporal scope filter (MONTH/WEEK/SEASON/TOTAL)
@@ -96,13 +99,19 @@ const extractActualValue = async (rule, user, context, session) => {
       const UserTierProgress = mongoose.model("UserTierProgress");
       const Tier = mongoose.model("Tier");
 
-      const activeSeason = await LoyaltySeason.findOne({ active: true }).session(session);
+      if (!context.activeSeason) {
+        context.activeSeason = await LoyaltySeason.findOne({ active: true }).session(session);
+      }
+      const activeSeason = context.activeSeason;
       if (!activeSeason) return -1; // No active season
 
-      const progress = await UserTierProgress.findOne({
-        userId: user._id,
-        seasonId: activeSeason._id
-      }).session(session);
+      if (!context.seasonProgress) {
+        context.seasonProgress = await UserTierProgress.findOne({
+          userId: user._id,
+          seasonId: activeSeason._id
+        }).session(session);
+      }
+      const progress = context.seasonProgress;
 
       if (!progress) return -1;
 
@@ -140,16 +149,17 @@ const extractActualValue = async (rule, user, context, session) => {
     }
 
     case RuleType.CATEGORY_SCAN: {
+      if (!metadata || (!metadata.targetCategory && !metadata.targetId)) {
+        return 0; // Missing metadata, fail gracefully
+      }
       const Redeem = mongoose.model("Redeem");
       const Product = mongoose.model("Product");
       const match = { userId: user._id };
       // Filter by target category or ID
-      if (metadata && (metadata.targetCategory || metadata.targetId)) {
-        const targetCatId = metadata.targetCategory ? metadata.targetCategory._id : metadata.targetId;
-        const productsInCat = await Product.find({ categoryId: targetCatId }).select('_id').session(session);
-        const productIds = productsInCat.map(p => p._id);
-        match.productId = { $in: productIds };
-      }
+      const targetCatId = metadata.targetCategory ? metadata.targetCategory._id : metadata.targetId;
+      const productsInCat = await Product.find({ categoryId: targetCatId }).select('_id').session(session);
+      const productIds = productsInCat.map(p => p._id);
+      match.productId = { $in: productIds };
       // Apply temporal scope filter
       await applyScopeFilter(match, scope, session);
       const count = await Redeem.countDocuments(match).session(session);
@@ -239,7 +249,7 @@ const applyOperator = (actualValue, operator, expectedValue) => {
   }
 };
 
-exports.evaluateRuleSet = async (ruleSet, user, context = {}, session = null) => {
+exports.evaluateRuleSet = async (ruleSet, user, context = {}, session = null, auditMode = true) => {
   if (!ruleSet.active) {
     return { eligible: false, reasons: ["Rule set is not active"], evaluatedRules: [] };
   }
@@ -262,33 +272,44 @@ exports.evaluateRuleSet = async (ruleSet, user, context = {}, session = null) =>
   // Initial eligibility based on logic operator
   let eligible = isAnd;
 
-  const evaluatedRules = await Promise.all(
-    ruleSet.rules.map(async (rule) => {
+  const evaluatedRules = [];
+
+  const evaluateSingleRule = async (rule) => {
+    try {
       const actualValue = await extractActualValue(rule, user, context, session);
       const expectedValue = rule.value; 
       const satisfied = applyOperator(actualValue, rule.operator, expectedValue);
+      return { type: rule.type, scope: rule.scope, operator: rule.operator, expectedValue, actualValue, satisfied };
+    } catch (error) {
+      return { type: rule.type, scope: rule.scope, operator: rule.operator, expectedValue: rule.value, actualValue: null, satisfied: false, error: error.message };
+    }
+  };
 
-      return {
-        type: rule.type,
-        scope: rule.scope,
-        operator: rule.operator,
-        expectedValue,
-        actualValue,
-        satisfied
-      };
-    })
-  );
+  if (auditMode) {
+    // Run all rules concurrently to avoid N+1 query latency
+    const results = await Promise.all(ruleSet.rules.map(evaluateSingleRule));
+    evaluatedRules.push(...results);
+  } else {
+    // Sequential evaluation for short-circuiting DB queries (Fast-Fail)
+    for (const rule of ruleSet.rules) {
+      const result = await evaluateSingleRule(rule);
+      evaluatedRules.push(result);
+      if (isAnd && !result.satisfied) break;
+      if (!isAnd && result.satisfied) break;
+    }
+  }
 
   // Evaluate each rule and collect reasons
   for (const evaluation of evaluatedRules) {
     if (!evaluation.satisfied) {
+      const errorMsg = evaluation.error ? ` (Error: ${evaluation.error})` : "";
       if (isAnd) {
         // Preserve original error message for AND logic
-        reasons.push(`Requirement not met for ${evaluation.type}`);
+        reasons.push(`Requirement not met for ${evaluation.type}${errorMsg}`);
         eligible = false;
       } else {
         // OR logic – collect generic unsatisfied rule message
-        reasons.push(`Rule not satisfied: ${evaluation.type}`);
+        reasons.push(`Rule not satisfied: ${evaluation.type}${errorMsg}`);
       }
     } else {
       if (!isAnd) {
