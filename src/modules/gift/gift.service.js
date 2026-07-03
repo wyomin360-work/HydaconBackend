@@ -282,10 +282,10 @@ exports.getUserRedemptionDetails = async (userId, redemptionId) => {
 
 exports.redeemGift = async (userId, data) => {
   const { giftId, shippingAddress } = data;
-  if (!giftId || !shippingAddress)
+  if (!giftId)
     return {
       success: false,
-      message: "Gift ID and shipping address are required",
+      message: "Gift ID is required",
     };
 
   const session = await mongoose.startSession();
@@ -297,6 +297,9 @@ exports.redeemGift = async (userId, data) => {
 
       if (!user) throw new Error("User not found");
       if (!gift || !gift.active) throw new Error("Gift not available");
+      if (gift.giftType === "physical" && !shippingAddress) {
+        throw new Error("Shipping address is required for physical gifts");
+      }
 
       const eligibility = await checkEligibility(user, gift, session);
       if (!eligibility.eligible) {
@@ -306,19 +309,39 @@ exports.redeemGift = async (userId, data) => {
       const availableStock = gift.stockQuantity - gift.reservedQuantity;
       if (availableStock <= 0) throw new Error("Gift is out of stock");
 
-      user.hydaconCoins -= gift.priceInCoins;
-      gift.reservedQuantity += 1;
+      // Atomically deduct coins ensuring balance doesn't dip below required amount concurrently
+      const updatedUser = await User.findOneAndUpdate(
+        { _id: userId, hydaconCoins: { $gte: gift.priceInCoins } },
+        { $inc: { hydaconCoins: -gift.priceInCoins } },
+        { session, new: true }
+      );
 
-      await user.save({ session });
-      await gift.save({ session });
+      if (!updatedUser) {
+        throw new Error("Insufficient coins for redemption");
+      }
+
+      // Atomically reserve stock ensuring it hasn't been taken by another concurrent request
+      const updatedGift = await Gift.findOneAndUpdate(
+        { 
+          _id: giftId, 
+          $expr: { $gt: ["$stockQuantity", "$reservedQuantity"] } 
+        },
+        { $inc: { reservedQuantity: 1 } },
+        { session, new: true }
+      );
+
+      if (!updatedGift) {
+        throw new Error("Gift is out of stock");
+      }
 
       const redemption = new GiftRedemption({
         userId,
         giftId,
         coinsUsed: gift.priceInCoins,
-        shippingAddress,
+        giftType: gift.giftType,
+        ...(gift.giftType === "physical" && { shippingAddress }),
       });
-
+      
       await redemption.save({ session });
       result = redemption;
     });
