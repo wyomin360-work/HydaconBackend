@@ -17,6 +17,7 @@ router.post(paths.adminFinalise, verification.verifyAdmin, handleError(controlle
 router.get(paths.userList, verification.verifyUser, handleError(controller.userListContests));
 router.get(paths.userDetails, verification.verifyUser, handleError(controller.userGetContestDetails));
 router.get(paths.userLeaderboard, verification.verifyUser, handleError(controller.userGetLeaderboard));
+router.post(paths.userClaimReward, verification.verifyUser, handleError(controller.userClaimReward));
 router.get(paths.generalLeaderboard, verification.verifyUser, handleError(controller.generalLeaderboard));
 
 module.exports = router;

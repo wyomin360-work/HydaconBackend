@@ -15,6 +15,27 @@ jest.mock("../../src/schemas/gift.schema");
 jest.mock("../../src/schemas/gift-redemption.schema");
 jest.mock("../../src/schemas/app-config.schema");
 jest.mock("../../src/schemas/tier-configuration.schema");
+jest.mock("../../src/schemas/scratch-card-rule.schema");
+jest.mock("../../src/schemas/contest-entry.schema", () => ({
+  ContestEntry: {
+    findOneAndUpdate: jest.fn().mockResolvedValue(true),
+  },
+}));
+jest.mock("../../src/schemas/contest.schema", () => ({
+  Contest: {
+    find: jest.fn().mockReturnValue({
+      lean: jest.fn().mockResolvedValue([]),
+    }),
+    updateMany: jest.fn().mockReturnValue({
+      exec: jest.fn().mockResolvedValue(true),
+    }),
+  },
+  CONTEST_STATUS: {
+    UPCOMING: "upcoming",
+    ACTIVE: "active",
+    COMPLETED: "completed",
+  },
+}));
 jest.mock("mongoose", () => {
   const actualMongoose = jest.requireActual("mongoose");
   return {
@@ -48,6 +69,11 @@ describe("Weighted Rewards Calculation", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+
+    const ScratchCardRule = require("../../src/schemas/scratch-card-rule.schema");
+    ScratchCardRule.find.mockReturnValue({
+      lean: jest.fn().mockResolvedValue([]),
+    });
 
     const TierConfiguration = require("../../src/schemas/tier-configuration.schema");
     TierConfiguration.findOne.mockReturnValue({

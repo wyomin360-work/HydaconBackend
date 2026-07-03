@@ -33,6 +33,7 @@ const contestSchema = new mongoose.Schema(
     name: { type: String, required: true },
     description: { type: String },
     bannerImage: { type: String },
+    rewardSummary: { type: String },
     startDate: { type: Date, required: true },
     endDate: { type: Date, required: true },
     region: { type: String }, // null = global
@@ -41,6 +42,28 @@ const contestSchema = new mongoose.Schema(
       enum: Object.values(CONTEST_STATUS),
       default: CONTEST_STATUS.UPCOMING,
     },
+    productScope: {
+      type: String,
+      enum: ["EVERY_PRODUCT", "SELECTED_PRODUCTS"],
+      default: "EVERY_PRODUCT",
+    },
+    products: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Product",
+      },
+    ],
+    tierScope: {
+      type: String,
+      enum: ["ALL_TIERS", "SELECTED_TIERS"],
+      default: "ALL_TIERS",
+    },
+    tiers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Tier",
+      },
+    ],
     prizes: [prizeSchema],
     active: { type: Boolean, default: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "Admin" },
@@ -52,12 +75,16 @@ const contestSchema = new mongoose.Schema(
 contestSchema.pre("find", function () {
   const now = new Date();
   this.model.updateMany(
-    { startDate: { $lte: now }, endDate: { $gte: now }, status: CONTEST_STATUS.UPCOMING },
-    { $set: { status: CONTEST_STATUS.ACTIVE } },
+    { startDate: { $gt: now }, status: { $ne: CONTEST_STATUS.UPCOMING } },
+    { $set: { status: CONTEST_STATUS.UPCOMING } }
+  ).exec();
+  this.model.updateMany(
+    { startDate: { $lte: now }, endDate: { $gte: now }, status: { $ne: CONTEST_STATUS.ACTIVE } },
+    { $set: { status: CONTEST_STATUS.ACTIVE } }
   ).exec();
   this.model.updateMany(
     { endDate: { $lt: now }, status: { $ne: CONTEST_STATUS.COMPLETED } },
-    { $set: { status: CONTEST_STATUS.COMPLETED } },
+    { $set: { status: CONTEST_STATUS.COMPLETED } }
   ).exec();
 });
 

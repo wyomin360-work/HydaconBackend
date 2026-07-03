@@ -50,6 +50,13 @@ const eventSchema = new mongoose.Schema(
 );
 
 eventSchema.index({ location: "2dsphere" });
+// Speeds up adminListEvents filter + sort
+eventSchema.index({ status: 1, date: 1 });
+// Speeds up syncEventStatuses updateMany queries
+eventSchema.index({ date: 1, endDate: 1, status: 1 });
+// Speeds up active + status filter used in userListEvents
+eventSchema.index({ active: 1, status: 1, date: 1 });
+
 
 const Event = mongoose.model("Event", eventSchema);
 module.exports = { Event, EVENT_STATUS, EVENT_TYPE };

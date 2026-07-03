@@ -6,25 +6,61 @@ const { sendFailResponse } = require("../../utils/responseHandlers");
 const { sendFcmNotifications } = require("../../functions/fcm");
 
 // ─── Status helper ────────────────────────────────────────────────────────────
+// Throttle: only run sync once per minute to avoid blocking every list call
+let lastSyncTime = 0;
+const SYNC_INTERVAL_MS = 60 * 1000; // 1 minute
+
 async function syncEventStatuses() {
-  const now = new Date();
+  const now = Date.now();
+  if (now - lastSyncTime < SYNC_INTERVAL_MS) return; // skip if ran recently
+  lastSyncTime = now;
+  const nowDate = new Date();
   await Event.updateMany(
-    { date: { $lte: now }, endDate: { $gte: now }, status: EVENT_STATUS.UPCOMING },
-    { $set: { status: EVENT_STATUS.ONGOING } },
+    { date: { $gt: nowDate }, status: { $ne: EVENT_STATUS.UPCOMING } },
+    { $set: { status: EVENT_STATUS.UPCOMING } }
   );
   await Event.updateMany(
-    { endDate: { $lt: now }, status: { $ne: EVENT_STATUS.COMPLETED } },
-    { $set: { status: EVENT_STATUS.COMPLETED } },
+    { date: { $lte: nowDate }, endDate: { $gte: nowDate }, status: { $ne: EVENT_STATUS.ONGOING } },
+    { $set: { status: EVENT_STATUS.ONGOING } }
+  );
+  await Event.updateMany(
+    { endDate: { $lt: nowDate }, status: { $ne: EVENT_STATUS.COMPLETED } },
+    { $set: { status: EVENT_STATUS.COMPLETED } }
   );
 }
 
 // ─── Admin ────────────────────────────────────────────────────────────────────
 async function adminCreateEvent(data, adminId) {
-  const event = await Event.create({ ...data, createdBy: adminId });
+  const now = new Date();
+  const date = data.date ? new Date(data.date) : now;
+  const endDate = data.endDate ? new Date(data.endDate) : now;
+  let status = EVENT_STATUS.UPCOMING;
+  if (now > endDate) {
+    status = EVENT_STATUS.COMPLETED;
+  } else if (now >= date && now <= endDate) {
+    status = EVENT_STATUS.ONGOING;
+  }
+
+  const event = await Event.create({ ...data, status, createdBy: adminId });
   return { message: "Event created", data: { eventId: event._id } };
 }
 
 async function adminUpdateEvent(eventId, data) {
+  if (data.date || data.endDate) {
+    const event = await Event.findById(eventId);
+    if (!event) sendFailResponse("Event not found", 404);
+    const date = data.date ? new Date(data.date) : event.date;
+    const endDate = data.endDate ? new Date(data.endDate) : event.endDate;
+    const now = new Date();
+    if (now < date) {
+      data.status = EVENT_STATUS.UPCOMING;
+    } else if (now > endDate) {
+      data.status = EVENT_STATUS.COMPLETED;
+    } else {
+      data.status = EVENT_STATUS.ONGOING;
+    }
+  }
+
   const event = await Event.findByIdAndUpdate(eventId, data, { new: true });
   if (!event) sendFailResponse("Event not found", 404);
   return { message: "Event updated", data: { updated: true } };
@@ -36,7 +72,9 @@ async function adminDeleteEvent(eventId) {
 }
 
 async function adminListEvents(query = {}) {
-  await syncEventStatuses();
+  // Fire sync in background — never block the response
+  syncEventStatuses().catch((err) => console.error("syncEventStatuses error:", err));
+
   const { page = 1, limit = 20, status } = query;
   const skip = (page - 1) * limit;
   const filter = {};
@@ -104,51 +142,112 @@ async function adminCheckIn(registrationId) {
 
 // ─── User ─────────────────────────────────────────────────────────────────────
 async function userListEvents(query = {}, userId = null) {
-  await syncEventStatuses();
-  const { page = 1, limit = 20, lat, lng } = query;
-  const skip = (page - 1) * limit;
-  const now = new Date();
+  // Fire sync in background — never block the response
+  syncEventStatuses().catch((err) => console.error("syncEventStatuses error:", err));
+  const { lat, lng, state, country } = query;
 
-  // Upcoming events
-  const [upcoming, upcomingTotal] = await Promise.all([
-    Event.find({ active: true, status: EVENT_STATUS.UPCOMING }).sort({ date: 1 }).limit(10).lean(),
-    Event.countDocuments({ active: true, status: EVENT_STATUS.UPCOMING }),
-  ]);
-
-  // Nearby events (requires lat/lng)
-  let nearby = [];
-  if (lat && lng) {
-    nearby = await Event.find({
-      active: true,
-      status: { $in: [EVENT_STATUS.UPCOMING, EVENT_STATUS.ONGOING] },
-      location: {
-        $near: {
-          $geometry: { type: "Point", coordinates: [parseFloat(lng), parseFloat(lat)] },
-          $maxDistance: 50000, // 50 km
-        },
-      },
-    }).limit(10).lean();
-  }
-
-  // My events
+  // My events & registered event IDs (Passes)
   let myEvents = [];
+  let registeredEventIds = [];
   if (userId) {
     const myRegs = await EventRegistration.find({ userId })
       .populate({ path: "event" })
       .sort({ createdAt: -1 })
-      .limit(10)
+      .limit(4)
       .lean();
-    myEvents = myRegs.map((r) => ({ ...r.event, registration: r }));
+    const validRegs = myRegs.filter((r) => r.event);
+    myEvents = validRegs.map((r) => ({ ...r.event, registration: r }));
+    registeredEventIds = validRegs.map((r) => r.eventId);
+  }
+
+  // Upcoming events - always all upcoming events globally (excluding registered)
+  const parsedLat = parseFloat(lat);
+  const parsedLng = parseFloat(lng);
+  const hasCoords = !isNaN(parsedLat) && !isNaN(parsedLng);
+
+  // ── Step 1: Nearby events ──
+  let nearby = [];
+  const nearbyIds = [];
+
+  if (hasCoords) {
+    // MongoDB $geoNear aggregation: powered entirely by the 2dsphere index on event.location
+    // Returns events within 100 km sorted by distance (closest first), with distanceMeters attached
+    try {
+      const geoNearPipeline = [
+        {
+          $geoNear: {
+            near: { type: "Point", coordinates: [parsedLng, parsedLat] },
+            distanceField: "distanceMeters",
+            maxDistance: 100000, // 100 km radius
+            spherical: true,
+            query: {
+              active: true,
+              status: { $in: [EVENT_STATUS.UPCOMING, EVENT_STATUS.ONGOING] },
+              ...(registeredEventIds.length > 0 ? { _id: { $nin: registeredEventIds } } : {}),
+            },
+          },
+        },
+        { $limit: 4 },
+      ];
+      const nearbyWithDistance = await Event.aggregate(geoNearPipeline);
+      nearby = nearbyWithDistance.map((ev) => ({
+        ...ev,
+        isNearby: true,
+        distanceMeters: Math.round(ev.distanceMeters),
+      }));
+      nearby.forEach((ev) => nearbyIds.push(ev._id));
+    } catch (geoErr) {
+      console.error("Geo query failed, falling back to location-filtered events:", geoErr.message);
+    }
+  }
+
+  // ── Step 2: Upcoming events ──
+  const upcomingFilter = {
+    active: true,
+    status: EVENT_STATUS.UPCOMING,
+  };
+  const excludeIdsForUpcoming = [...registeredEventIds];
+  if (excludeIdsForUpcoming.length > 0) {
+    upcomingFilter._id = { $nin: excludeIdsForUpcoming };
+  }
+
+  const upcoming = await Event.find(upcomingFilter)
+    .sort({ date: 1 })
+    .limit(4)
+    .lean();
+
+  // ── Step 3: Active (ongoing & completed) events ──
+  const activeFilter = {
+    active: true,
+    status: { $in: [EVENT_STATUS.ONGOING, EVENT_STATUS.COMPLETED] },
+  };
+  const excludeIdsForActive = [...registeredEventIds];
+  if (excludeIdsForActive.length > 0) {
+    activeFilter._id = { $nin: excludeIdsForActive };
+  }
+
+  const active = await Event.find(activeFilter)
+    .sort({ date: 1 })
+    .limit(4)
+    .lean();
+
+  // If no location coordinates provided, fallback nearby to upcoming
+  if (!hasCoords) {
+    nearby = upcoming;
   }
 
   return {
     data: {
+      active: attachId(active),
       upcoming: attachId(upcoming),
       nearby: attachId(nearby),
-      myEvents,
+      myEvents: attachId(myEvents), // maintain compatibility
+      passes: attachId(myEvents),
+      hasLocationData: hasCoords || !!(state || country), // tells the client whether nearby is real or a fallback
     },
   };
 }
+
 
 async function userGetEventDetails(eventId, userId) {
   const event = await Event.findById(eventId).lean();

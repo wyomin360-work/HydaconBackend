@@ -34,6 +34,8 @@ async function listRedeems(data) {
   const redeems = await Redeem.find(query)
     .populate("reward")
     .populate("product")
+    .populate("scratchCardGiftId")
+    .populate("scratchCardGiftRedemptionId")
     .populate({
       path: "user",
       select: "name email",
@@ -60,6 +62,8 @@ async function redeemDetails(redeemId) {
   const redeem = await Redeem.findById(redeemId)
     .populate("product")
     .populate("reward")
+    .populate("scratchCardGiftId")
+    .populate("scratchCardGiftRedemptionId")
     .populate("user")
     .lean();
   if (!redeem) sendFailResponse("The redeem details not found");
@@ -179,6 +183,7 @@ async function createRedeem(redeemData, reqUser = null) {
   let rewardType = "POINTS";
   let bonusPoints = 0;
   let chosenGift = null;
+  let matchedCampaign = null;
 
   try {
     // Check if testRewardType is specified in redeemData (e.g. from unit tests)
@@ -223,7 +228,7 @@ async function createRedeem(redeemData, reqUser = null) {
       }
 
       let campaignMatched = false;
-      let matchedCampaign = null;
+      matchedCampaign = null;
 
       // 1. Fetch active campaigns
       const campaigns = await ScratchCardRule.find({ active: true }).lean();
@@ -450,7 +455,8 @@ async function createRedeem(redeemData, reqUser = null) {
   const updatedProgress = await loyaltyService.processQrScanPoints(userId, weightedPoints, newRedeem._id);
   // Sync user's contest entries with new qualification points (non-blocking)
   const contestsService = require("../contests/contests.service");
-  contestsService.syncUserContestEntries(userId, updatedProgress?.qualificationPoints || 0).catch(() => {});
+  const userTierId = updatedProgress?.currentTierId?._id || updatedProgress?.currentTierId || user?.currentTierId;
+  contestsService.syncUserContestEntries(userId, weightedPoints, actualProductId, userTierId).catch(() => {});
   if (user?.fcmTokens?.length && user?.enableNotification) {
     await sendFcmNotifications(
       user.fcmTokens,

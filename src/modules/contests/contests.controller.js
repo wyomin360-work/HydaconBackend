@@ -29,7 +29,8 @@ exports.adminFinaliseContest = async (req, res) => {
 
 // User
 exports.userListContests = async (req, res) => {
-  const response = await contestsService.userListContests(req.query);
+  const userId = req.user?._id || req.user?.id;
+  const response = await contestsService.userListContests(req.query, userId);
   return sendResponse(res, response);
 };
 exports.userGetContestDetails = async (req, res) => {
@@ -44,5 +45,10 @@ exports.userGetLeaderboard = async (req, res) => {
 exports.generalLeaderboard = async (req, res) => {
   const userId = req.user?._id || req.user?.id;
   const response = await contestsService.generalLeaderboard(userId);
+  return sendResponse(res, response);
+};
+exports.userClaimReward = async (req, res) => {
+  const userId = req.user?._id || req.user?.id;
+  const response = await contestsService.userClaimReward(req.params.contestId, userId);
   return sendResponse(res, response);
 };

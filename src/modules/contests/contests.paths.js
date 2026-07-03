@@ -11,6 +11,7 @@ module.exports = {
   userList: "/user/list",
   userDetails: "/user/details/:contestId",
   userLeaderboard: "/user/leaderboard/:contestId",
+  userClaimReward: "/user/claim/:contestId",
   // General leaderboard (all-time, not contest-specific)
   generalLeaderboard: "/leaderboard",
 };
