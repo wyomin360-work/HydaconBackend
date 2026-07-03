@@ -380,5 +380,94 @@ describe("RuleSet Evaluator", () => {
       const result = await ruleSetEvaluator.evaluateRuleSet(ruleSet, mockUser, {}, session);
       expect(result.eligible).toBe(true);
     });
+    it("should return true for an empty rule set", async () => {
+      const ruleSet = { active: true, rules: [] };
+      const result = await ruleSetEvaluator.evaluateRuleSet(ruleSet, mockUser, {}, session);
+      expect(result.eligible).toBe(true);
+      expect(result.evaluatedRules.length).toBe(0);
+    });
+
+    it("should return false if rule set is not yet valid (validFrom)", async () => {
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + 1);
+      const ruleSet = { active: true, validFrom: futureDate, rules: [] };
+      const result = await ruleSetEvaluator.evaluateRuleSet(ruleSet, mockUser, {}, session);
+      expect(result.eligible).toBe(false);
+      expect(result.reasons).toContain("Rule set is not yet valid");
+    });
+
+    it("should return false if rule set has expired (validUntil)", async () => {
+      const pastDate = new Date();
+      pastDate.setDate(pastDate.getDate() - 1);
+      const ruleSet = { active: true, validUntil: pastDate, rules: [] };
+      const result = await ruleSetEvaluator.evaluateRuleSet(ruleSet, mockUser, {}, session);
+      expect(result.eligible).toBe(false);
+      expect(result.reasons).toContain("Rule set has expired");
+    });
+
+    it("should query MongoDB for PRODUCT_SCAN using targetProduct metadata", async () => {
+      const Redeem = mongoose.model("Redeem");
+      Redeem.session.mockResolvedValue(5);
+
+      const ruleSet = {
+        active: true,
+        logicOperator: RuleLogicOperator.AND,
+        rules: [
+          {
+            type: RuleType.PRODUCT_SCAN,
+            scope: RuleScope.TOTAL,
+            operator: RuleOperator.GTE,
+            value: 5,
+            metadata: { targetProduct: { _id: "product123" } },
+          },
+        ],
+      };
+      
+      const result = await ruleSetEvaluator.evaluateRuleSet(ruleSet, mockUser, {}, session);
+      expect(result.eligible).toBe(true);
+      expect(Redeem.countDocuments).toHaveBeenCalledWith({
+        userId: mockUser._id,
+        productId: "product123",
+      });
+    });
+
+    it("should fail gracefully and return false actual value for unknown RuleType", async () => {
+      const ruleSet = {
+        active: true,
+        logicOperator: RuleLogicOperator.AND,
+        rules: [
+          { type: "UNKNOWN_TYPE", operator: RuleOperator.EQ, value: true },
+        ],
+      };
+      const result = await ruleSetEvaluator.evaluateRuleSet(ruleSet, mockUser, {}, session);
+      expect(result.eligible).toBe(false);
+      expect(result.evaluatedRules[0].actualValue).toBe(false);
+    });
+
+    it("should evaluate REGION with NOT_IN operator correctly", async () => {
+      const ruleSet = {
+        active: true,
+        logicOperator: RuleLogicOperator.AND,
+        rules: [
+          { type: RuleType.REGION, operator: RuleOperator.NOT_IN, value: ["Mumbai", "Chennai"] }, // User is in Delhi
+        ],
+      };
+      const result = await ruleSetEvaluator.evaluateRuleSet(ruleSet, mockUser, {}, session);
+      expect(result.eligible).toBe(true);
+    });
+
+    it("should fail correctly and append correct reason when OR logic has no satisfied rules", async () => {
+      const ruleSet = {
+        active: true,
+        logicOperator: RuleLogicOperator.OR,
+        rules: [
+          { type: RuleType.HYDACOINS, operator: RuleOperator.GTE, value: 1000 }, // Fails
+          { type: RuleType.REDEEM_POINTS, operator: RuleOperator.GTE, value: 300 }, // Fails
+        ],
+      };
+      const result = await ruleSetEvaluator.evaluateRuleSet(ruleSet, mockUser, {}, session);
+      expect(result.eligible).toBe(false);
+      expect(result.reasons).toContain("None of the rules in the Rule Set were satisfied.");
+    });
   });
 });

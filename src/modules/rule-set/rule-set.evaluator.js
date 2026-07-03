@@ -166,7 +166,7 @@ const extractActualValue = async (rule, user, context, session) => {
       return user.currentStreak || 0;
 
     default:
-      return null;
+      return false;
   }
 };
 
@@ -244,17 +244,17 @@ exports.evaluateRuleSet = async (ruleSet, user, context = {}, session = null) =>
     return { eligible: false, reasons: ["Rule set is not active"], evaluatedRules: [] };
   }
 
-  // Empty rule set – always eligible
-  if (!ruleSet.rules || ruleSet.rules.length === 0) {
-    return { eligible: true, reasons: [], evaluatedRules: [] };
-  }
-
   const now = new Date();
   if (ruleSet.validFrom && now < ruleSet.validFrom) {
     return { eligible: false, reasons: ["Rule set is not yet valid"], evaluatedRules: [] };
   }
   if (ruleSet.validUntil && now > ruleSet.validUntil) {
     return { eligible: false, reasons: ["Rule set has expired"], evaluatedRules: [] };
+  }
+
+  // Empty rule set – always eligible
+  if (!ruleSet.rules || ruleSet.rules.length === 0) {
+    return { eligible: true, reasons: [], evaluatedRules: [] };
   }
 
   const reasons = [];
