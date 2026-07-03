@@ -192,6 +192,7 @@ async function listRewardsGroupedByDate(data) {
       $project: {
         actualCreatedAt: { $ifNull: ["$createdAt", { $toDate: "$_id" }] },
         active: 1,
+        productId: 1,
       },
     },
     {
@@ -204,11 +205,12 @@ async function listRewardsGroupedByDate(data) {
           },
         },
         active: 1,
+        productId: 1,
       },
     },
     {
       $group: {
-        _id: "$date",
+        _id: { date: "$date", productId: "$productId" },
         activeCount: {
           $sum: { $cond: [{ $eq: ["$active", true] }, 1, 0] },
         },
@@ -218,7 +220,32 @@ async function listRewardsGroupedByDate(data) {
         totalCount: { $sum: 1 },
       },
     },
-    { $sort: { _id: -1 } },
+    {
+      $lookup: {
+        from: "products",
+        localField: "_id.productId",
+        foreignField: "_id",
+        as: "product",
+      }
+    },
+    {
+      $unwind: {
+        path: "$product",
+        preserveNullAndEmptyArrays: true,
+      }
+    },
+    {
+      $project: {
+        _id: { $concat: ["$_id.date", "|", { $toString: "$_id.productId" }] },
+        date: "$_id.date",
+        productId: "$_id.productId",
+        product: 1,
+        activeCount: 1,
+        inactiveCount: 1,
+        totalCount: 1,
+      }
+    },
+    { $sort: { date: -1 } },
     {
       $facet: {
         metadata: [{ $count: "total" }],
