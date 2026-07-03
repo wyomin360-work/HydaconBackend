@@ -237,7 +237,7 @@ const checkEligibility = async (user, gift, session = null) => {
   if (gift.ruleSetId) {
     const ruleSet = await RuleSet.findById(gift.ruleSetId).session(session);
     if (ruleSet) {
-      const evaluation = await ruleSetEvaluator.evaluateRuleSet(ruleSet, user, session);
+      const evaluation = await ruleSetEvaluator.evaluateRuleSet(ruleSet, user, { targetId: gift._id }, session);
       dynamicRules = evaluation.evaluatedRules;
       if (!evaluation.eligible) {
         eligible = false;
