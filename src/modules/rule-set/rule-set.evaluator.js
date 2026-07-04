@@ -112,7 +112,9 @@ const extractActualValue = async (rule, user, context, session) => {
     case RuleType.KYC_COMPLETED:
       return user.kycStatus === "APPROVED";
 
-    case RuleType.SEASON_POINTS: {
+    case RuleType.SEASON_POINTS:
+    case RuleType.SEASON_TIER:
+    case RuleType.SEASON_RANK: {
       const LoyaltySeason = mongoose.model("LoyaltySeason");
       const UserTierProgress = mongoose.model("UserTierProgress");
 
@@ -139,6 +141,7 @@ const extractActualValue = async (rule, user, context, session) => {
         return progress.currentTierId.toString();
 
       if (type === RuleType.SEASON_RANK) {
+        const Tier = mongoose.model("Tier");
         const tier = await Tier.findById(progress.currentTierId).session(
           session,
         );
@@ -167,27 +170,7 @@ const extractActualValue = async (rule, user, context, session) => {
       return count;
     }
 
-    case RuleType.CATEGORY_SCAN: {
-      if (!metadata || (!metadata.targetCategory && !metadata.targetId)) {
-        return 0; // Missing metadata, fail gracefully
-      }
-      const Redeem = mongoose.model("Redeem");
-      const Product = mongoose.model("Product");
-      const match = { userId: user._id };
-      // Filter by target category or ID
-      const targetCatId = metadata.targetCategory
-        ? metadata.targetCategory._id
-        : metadata.targetId;
-      const productsInCat = await Product.find({ categoryId: targetCatId })
-        .select("_id")
-        .session(session);
-      const productIds = productsInCat.map((p) => p._id);
-      match.productId = { $in: productIds };
-      // Apply temporal scope filter
-      await applyScopeFilter(match, scope, session);
-      const count = await Redeem.countDocuments(match).session(session);
-      return count;
-    }
+
 
     case RuleType.REFERRALS:
       return user.referralsCount || 0;

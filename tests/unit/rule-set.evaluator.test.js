@@ -186,8 +186,8 @@ describe("RuleSet Evaluator", () => {
         logicOperator: RuleLogicOperator.AND,
         rules: [
           {
-            type: RuleType.PRODUCT_SCAN,
-            scope: RuleScope.TOTAL,
+            type: RuleType.SCAN_COUNT,
+            scope: RuleScope.PRODUCT,
             operator: RuleOperator.GTE,
             value: 5,
             metadata: { targetId: "product123" },
@@ -251,8 +251,8 @@ describe("RuleSet Evaluator", () => {
         logicOperator: RuleLogicOperator.AND,
         rules: [
           {
-            type: RuleType.CATEGORY_SCAN,
-            scope: RuleScope.TOTAL,
+            type: RuleType.SCAN_COUNT,
+            scope: RuleScope.CATEGORY,
             operator: RuleOperator.GTE,
             value: 10,
             metadata: { targetCategory: { _id: "cat123" } },
@@ -537,8 +537,8 @@ describe("RuleSet Evaluator", () => {
         logicOperator: RuleLogicOperator.AND,
         rules: [
           {
-            type: RuleType.PRODUCT_SCAN,
-            scope: RuleScope.TOTAL,
+            type: RuleType.SCAN_COUNT,
+            scope: RuleScope.PRODUCT,
             operator: RuleOperator.GTE,
             value: 5,
             metadata: { targetProduct: { _id: "product123" } },
