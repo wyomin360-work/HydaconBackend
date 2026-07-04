@@ -4,9 +4,12 @@ const mongoose = require("mongoose");
 const GiftRedemption = require("../../schemas/gift-redemption.schema");
 const User = require("../../schemas/user.schema");
 const { GIFT_REDEMPTION_STATUS } = require("../../constants/gift");
+const { APP_NOTIFICATIONS } = require("../../constants/notifications");
 const { getPaginationParams, attachId } = require("../../utils/heplers");
 const { RuleSet } = require("../../schemas/rule-set.schema");
 const ruleSetEvaluator = require("../rule-set/rule-set.evaluator");
+const { sendTemplateEmail } = require("../../functions/nodemailer");
+const { sendFcmNotifications } = require("../../functions/fcm");
 
 // --- Categories ---
 
@@ -218,7 +221,7 @@ const checkEligibility = async (user, gift, session = null) => {
       required: gift.priceInCoins,
       current: user.hydaconCoins || 0,
       satisfied: (user.hydaconCoins || 0) >= gift.priceInCoins,
-    }
+    },
   };
 
   const reasons = [];
@@ -237,7 +240,12 @@ const checkEligibility = async (user, gift, session = null) => {
   if (gift.ruleSetId) {
     const ruleSet = await RuleSet.findById(gift.ruleSetId).session(session);
     if (ruleSet) {
-      const evaluation = await ruleSetEvaluator.evaluateRuleSet(ruleSet, user, { targetId: gift._id }, session);
+      const evaluation = await ruleSetEvaluator.evaluateRuleSet(
+        ruleSet,
+        user,
+        { targetId: gift._id },
+        session,
+      );
       dynamicRules = evaluation.evaluatedRules;
       if (!evaluation.eligible) {
         eligible = false;
@@ -280,6 +288,57 @@ exports.getUserRedemptionDetails = async (userId, redemptionId) => {
   }
 };
 
+/**
+ * Sends voucher email + push notification after a successful voucher redemption.
+ * Runs outside the transaction (fire-and-forget, non-blocking).
+ */
+const sendVoucherNotifications = async (user, gift, redemption) => {
+  try {
+    const isCode = gift.voucherRedemptionType === "code";
+    const isFile = gift.voucherRedemptionType === "file";
+
+    // 1. Send celebratory email
+    if (user.email) {
+      await sendTemplateEmail(
+        user.email,
+        "users/voucher-redeemed",
+        `🎉 Your ${gift.name} Voucher is Here!`,
+        {
+          userName: user.name || "there",
+          giftName: gift.name,
+          coinsUsed: redemption.coinsUsed,
+          voucherCode: redemption.voucherCode || "",
+          voucherFileUrl: redemption.voucherFileUrl || "",
+          isCode,
+          isFile,
+          year: new Date().getFullYear(),
+        },
+      );
+    }
+
+    // 2. Send FCM push notification
+    const fcmTokens = (user.fcmTokens || []).filter(Boolean);
+    if (fcmTokens.length > 0) {
+      const notif = isFile
+        ? APP_NOTIFICATIONS.gifts.voucherFile
+        : APP_NOTIFICATIONS.gifts.voucherRedeemed;
+      const notifBody = notif.body.replace("{{giftName}}", gift.name);
+      await sendFcmNotifications(fcmTokens, notif.title, notifBody, {
+        type: "voucher_redeemed",
+        redemptionId: String(redemption._id),
+        giftId: String(gift._id),
+      });
+    }
+
+    // 3. Mark voucherSent on the redemption record
+    await GiftRedemption.findByIdAndUpdate(redemption._id, {
+      voucherSent: true,
+    });
+  } catch (err) {
+    console.error("[Gift] sendVoucherNotifications error:", err.message);
+  }
+};
+
 exports.redeemGift = async (userId, data) => {
   const { giftId, shippingAddress } = data;
   if (!giftId)
@@ -291,6 +350,9 @@ exports.redeemGift = async (userId, data) => {
   const session = await mongoose.startSession();
   try {
     let result;
+    let userForNotification;
+    let giftForNotification;
+
     await session.withTransaction(async () => {
       const user = await User.findById(userId).session(session);
       const gift = await Gift.findById(giftId).session(session);
@@ -299,6 +361,25 @@ exports.redeemGift = async (userId, data) => {
       if (!gift || !gift.active) throw new Error("Gift not available");
       if (gift.giftType === "physical" && !shippingAddress) {
         throw new Error("Shipping address is required for physical gifts");
+      }
+
+      // Validate voucher gift has required redemption data
+      if (gift.giftType === "voucher") {
+        if (!gift.voucherRedemptionType) {
+          throw new Error(
+            "This voucher gift is not properly configured. Please contact support.",
+          );
+        }
+        if (gift.voucherRedemptionType === "code" && !gift.voucherCode) {
+          throw new Error(
+            "This voucher code is not yet available. Please try again later.",
+          );
+        }
+        if (gift.voucherRedemptionType === "file" && !gift.voucherFileUrl) {
+          throw new Error(
+            "This voucher file is not yet available. Please try again later.",
+          );
+        }
       }
 
       const eligibility = await checkEligibility(user, gift, session);
@@ -313,7 +394,7 @@ exports.redeemGift = async (userId, data) => {
       const updatedUser = await User.findOneAndUpdate(
         { _id: userId, hydaconCoins: { $gte: gift.priceInCoins } },
         { $inc: { hydaconCoins: -gift.priceInCoins } },
-        { session, new: true }
+        { session, new: true },
       );
 
       if (!updatedUser) {
@@ -322,29 +403,60 @@ exports.redeemGift = async (userId, data) => {
 
       // Atomically reserve stock ensuring it hasn't been taken by another concurrent request
       const updatedGift = await Gift.findOneAndUpdate(
-        { 
-          _id: giftId, 
-          $expr: { $gt: ["$stockQuantity", "$reservedQuantity"] } 
+        {
+          _id: giftId,
+          $expr: { $gt: ["$stockQuantity", "$reservedQuantity"] },
         },
         { $inc: { reservedQuantity: 1 } },
-        { session, new: true }
+        { session, new: true },
       );
 
       if (!updatedGift) {
         throw new Error("Gift is out of stock");
       }
 
-      const redemption = new GiftRedemption({
+      // Build redemption payload
+      const isVoucher = gift.giftType === "voucher";
+      const redemptionData = {
         userId,
         giftId,
         coinsUsed: gift.priceInCoins,
         giftType: gift.giftType,
         ...(gift.giftType === "physical" && { shippingAddress }),
-      });
-      
+        // For vouchers: auto-deliver and snapshot voucher details
+        ...(isVoucher && {
+          status: GIFT_REDEMPTION_STATUS.DELIVERED,
+          voucherCode: gift.voucherCode || undefined,
+          voucherFileUrl: gift.voucherFileUrl || undefined,
+        }),
+      };
+
+      // For vouchers: also reduce actual stock immediately (digital delivery)
+      if (isVoucher) {
+        await Gift.findOneAndUpdate(
+          { _id: giftId },
+          { $inc: { stockQuantity: -1, reservedQuantity: -1 } },
+          { session },
+        );
+      }
+
+      const redemption = new GiftRedemption(redemptionData);
       await redemption.save({ session });
       result = redemption;
+      userForNotification = user;
+      giftForNotification = gift;
     });
+
+    // After transaction: fire email + push for vouchers (non-blocking)
+    if (giftForNotification?.giftType === "voucher" && userForNotification) {
+      setImmediate(() =>
+        sendVoucherNotifications(
+          userForNotification,
+          giftForNotification,
+          result,
+        ),
+      );
+    }
 
     return {
       success: true,
@@ -364,10 +476,14 @@ exports.userRedemptions = async (userId, data) => {
     const { page: pageNum, limit: limitNum, skip } = getPaginationParams(data);
 
     let matchQuery = { userId };
-    
+
     if (search) {
-      const matchingGifts = await Gift.find({ name: { $regex: search, $options: "i" } }).select("_id").lean();
-      const giftIds = matchingGifts.map(g => g._id);
+      const matchingGifts = await Gift.find({
+        name: { $regex: search, $options: "i" },
+      })
+        .select("_id")
+        .lean();
+      const giftIds = matchingGifts.map((g) => g._id);
       matchQuery.giftId = { $in: giftIds };
     }
 

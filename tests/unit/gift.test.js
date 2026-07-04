@@ -108,7 +108,14 @@ describe("Gift Service & Rules Engine Tests", () => {
     });
 
     // Default: RuleSet evaluator passes all rules
-    RuleSet.findById.mockImplementation(() => mockQuery({ _id: "ruleSet123", name: "Test RuleSet", logicOperator: "AND", rules: [] }));
+    RuleSet.findById.mockImplementation(() =>
+      mockQuery({
+        _id: "ruleSet123",
+        name: "Test RuleSet",
+        logicOperator: "AND",
+        rules: [],
+      }),
+    );
     ruleSetEvaluator.evaluateRuleSet.mockResolvedValue({
       eligible: true,
       reasons: [],
@@ -219,30 +226,32 @@ describe("Gift Service & Rules Engine Tests", () => {
       User.findOneAndUpdate = jest.fn().mockResolvedValue(mockUser);
       Gift.findOneAndUpdate = jest.fn().mockResolvedValue(mockGift);
 
-      GiftRedemption.prototype.save = jest.fn().mockResolvedValue(mockRedemption);
+      GiftRedemption.prototype.save = jest
+        .fn()
+        .mockResolvedValue(mockRedemption);
 
       const response = await giftService.redeemGift("user123", {
         giftId: "gift123",
         shippingAddress: mockRedemption.shippingAddress,
       });
-      
+
       expect(response.success).toBe(true);
-      
+
       expect(User.findOneAndUpdate).toHaveBeenCalledWith(
         { _id: "user123", hydaconCoins: { $gte: 200 } },
         { $inc: { hydaconCoins: -200 } },
-        { session: mockSession, new: true }
+        { session: mockSession, new: true },
       );
-      
+
       expect(Gift.findOneAndUpdate).toHaveBeenCalledWith(
-        { 
-          _id: "gift123", 
-          $expr: { $gt: ["$stockQuantity", "$reservedQuantity"] } 
+        {
+          _id: "gift123",
+          $expr: { $gt: ["$stockQuantity", "$reservedQuantity"] },
         },
         { $inc: { reservedQuantity: 1 } },
-        { session: mockSession, new: true }
+        { session: mockSession, new: true },
       );
-      
+
       expect(GiftRedemption.prototype.save).toHaveBeenCalled();
     });
 
@@ -281,7 +290,7 @@ describe("Gift Service & Rules Engine Tests", () => {
       expect(response.success).toBe(false);
       expect(response.message).toContain("Failed custom rule set condition");
       expect(ruleSetEvaluator.evaluateRuleSet).toHaveBeenCalled();
-      
+
       // Ensure stock/coins weren't modified and nothing was saved
       expect(mockUser.save).not.toHaveBeenCalled();
       expect(mockGift.save).not.toHaveBeenCalled();

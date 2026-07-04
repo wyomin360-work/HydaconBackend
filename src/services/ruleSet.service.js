@@ -1,4 +1,4 @@
-const { RuleSet } = require('../schemas/rule-set.schema');
+const { RuleSet } = require("../schemas/rule-set.schema");
 
 // Service functions for RuleSet CRUD operations
 
@@ -31,7 +31,7 @@ async function updateRuleSet(id, data, adminId) {
   return await RuleSet.findByIdAndUpdate(
     id,
     { ...data, updatedBy: adminId },
-    { new: true, runValidators: true }
+    { new: true, runValidators: true },
   ).exec();
 }
 

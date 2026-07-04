@@ -27,6 +27,30 @@ const giftSchema = new mongoose.Schema(
       ref: "RuleSet",
       required: false,
     },
+    // --- Voucher-specific fields ---
+    voucherRedemptionType: {
+      type: String,
+      enum: ["code", "file"],
+      required: function () {
+        return this.giftType === "voucher";
+      },
+    },
+    voucherCode: {
+      type: String,
+      required: function () {
+        return (
+          this.giftType === "voucher" && this.voucherRedemptionType === "code"
+        );
+      },
+    },
+    voucherFileUrl: {
+      type: String,
+      required: function () {
+        return (
+          this.giftType === "voucher" && this.voucherRedemptionType === "file"
+        );
+      },
+    },
   },
   { timestamps: true },
 );

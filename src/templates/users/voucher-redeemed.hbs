@@ -1,0 +1,279 @@
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Your Voucher is Here! 🎉</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,600;0,700;0,800;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: "Plus Jakarta Sans", Arial, sans-serif;
+        background-color: #0f0c29;
+        background-image: linear-gradient(
+          135deg,
+          #0f0c29 0%,
+          #302b63 50%,
+          #24243e 100%
+        );
+        color: #333;
+        margin: 0;
+        padding: 32px 16px;
+        min-height: 100vh;
+      }
+      .wrapper {
+        max-width: 620px;
+        margin: 0 auto;
+      }
+      .banner {
+        text-align: center;
+        padding: 32px 24px 24px;
+        background: linear-gradient(
+          135deg,
+          #ffd700 0%,
+          #ff8c00 50%,
+          #ff4500 100%
+        );
+        border-radius: 20px 20px 0 0;
+        position: relative;
+        overflow: hidden;
+      }
+      .banner::before {
+        content: "🎊 🎉 🎊 🎉 🎊 🎉 🎊";
+        display: block;
+        font-size: 22px;
+        letter-spacing: 4px;
+        margin-bottom: 16px;
+        opacity: 0.9;
+      }
+      .banner-title {
+        font-size: 32px;
+        font-weight: 800;
+        color: #fff;
+        text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        line-height: 1.2;
+      }
+      .banner-subtitle {
+        font-size: 16px;
+        color: rgba(255, 255, 255, 0.9);
+        margin-top: 8px;
+        font-weight: 400;
+      }
+      .card {
+        background: #ffffff;
+        padding: 40px 36px;
+        border-radius: 0 0 20px 20px;
+        box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
+      }
+      .greeting {
+        font-size: 18px;
+        color: #333;
+        margin-bottom: 12px;
+        line-height: 1.6;
+      }
+      .intro-text {
+        font-size: 15px;
+        color: #666;
+        line-height: 1.7;
+        margin-bottom: 32px;
+      }
+      .gift-info {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        background: #fafafa;
+        border: 1px solid #f0f0f0;
+        border-radius: 14px;
+        padding: 18px 20px;
+        margin-bottom: 32px;
+      }
+      .gift-icon {
+        font-size: 40px;
+        flex-shrink: 0;
+      }
+      .gift-name {
+        font-size: 18px;
+        font-weight: 700;
+        color: #1a1a1a;
+      }
+      .gift-coins {
+        font-size: 13px;
+        color: #ff8c00;
+        font-weight: 600;
+        margin-top: 4px;
+      }
+      .section-label {
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        color: #999;
+        margin-bottom: 12px;
+      }
+      .code-container {
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        border-radius: 16px;
+        padding: 28px 24px;
+        text-align: center;
+        margin-bottom: 32px;
+      }
+      .code-label {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        color: rgba(255, 215, 0, 0.7);
+        margin-bottom: 14px;
+      }
+      .voucher-code {
+        font-family: "Courier New", Courier, monospace;
+        font-size: 26px;
+        font-weight: 700;
+        color: #ffd700;
+        letter-spacing: 6px;
+        background: rgba(255, 215, 0, 0.08);
+        border: 2px dashed rgba(255, 215, 0, 0.4);
+        border-radius: 10px;
+        padding: 14px 24px;
+        display: inline-block;
+        word-break: break-all;
+      }
+      .code-hint {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.4);
+        margin-top: 12px;
+      }
+      .download-container {
+        text-align: center;
+        margin-bottom: 32px;
+      }
+      .download-description {
+        font-size: 15px;
+        color: #666;
+        line-height: 1.7;
+        margin-bottom: 20px;
+      }
+      .download-btn {
+        display: inline-block;
+        background: linear-gradient(135deg, #ffd700 0%, #ff8c00 100%);
+        color: #1a1a1a;
+        font-family: "Plus Jakarta Sans", Arial, sans-serif;
+        font-size: 16px;
+        font-weight: 800;
+        text-decoration: none;
+        padding: 16px 40px;
+        border-radius: 50px;
+        letter-spacing: 0.5px;
+        box-shadow: 0 8px 24px rgba(255, 140, 0, 0.4);
+      }
+      .divider {
+        border: none;
+        border-top: 1px solid #f0f0f0;
+        margin: 28px 0;
+      }
+      .summary-box {
+        background: linear-gradient(135deg, #fff8e1 0%, #fff3cd 100%);
+        border: 1px solid #ffe082;
+        border-radius: 14px;
+        padding: 18px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 28px;
+      }
+      .summary-label {
+        font-size: 14px;
+        color: #795548;
+        font-weight: 600;
+      }
+      .summary-value {
+        font-size: 18px;
+        font-weight: 800;
+        color: #e65100;
+      }
+      .info-text {
+        font-size: 14px;
+        color: #888;
+        line-height: 1.7;
+        text-align: center;
+      }
+      .footer {
+        text-align: center;
+        padding: 28px 24px;
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.4);
+        line-height: 1.8;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrapper">
+      <div class="banner">
+        <div class="banner-title">Your Voucher is Here! 🎟️</div>
+        <div class="banner-subtitle">Congratulations on your redemption!</div>
+      </div>
+      <div class="card">
+        <p class="greeting">Hey {{userName}}! 👋</p>
+        <p class="intro-text">
+          You've successfully redeemed your Hydacon coins for a voucher gift.
+          Here are all the details you need to enjoy your reward right away!
+        </p>
+        <div class="gift-info">
+          <div class="gift-icon">🎁</div>
+          <div>
+            <div class="gift-name">{{giftName}}</div>
+            <div class="gift-coins">{{coinsUsed}} Hydacon Coins Used</div>
+          </div>
+        </div>
+        {{#if isCode}}
+          <div class="section-label">Your Voucher Code</div>
+          <div class="code-container">
+            <div class="code-label">🔐 Copy &amp; use this code</div>
+            <div class="voucher-code">{{voucherCode}}</div>
+            <div class="code-hint">Use this code at checkout to redeem your
+              reward</div>
+          </div>
+        {{/if}}
+        {{#if isFile}}
+          <div class="section-label">Your Voucher File</div>
+          <div class="download-container">
+            <p class="download-description">
+              Your voucher file is ready. Click the button below to download it
+              and follow the instructions inside to redeem your reward.
+            </p>
+            <a
+              href="{{voucherFileUrl}}"
+              class="download-btn"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              ⬇️ Download Your Voucher
+            </a>
+          </div>
+        {{/if}}
+        <hr class="divider" />
+        <div class="summary-box">
+          <span class="summary-label">🪙 Coins Redeemed</span>
+          <span class="summary-value">{{coinsUsed}} Coins</span>
+        </div>
+        <p class="info-text">
+          If you have any issues with your voucher, please don't hesitate to
+          reach out to our support team. We're always here to help!
+        </p>
+      </div>
+      <div class="footer">
+        <p>Thank you for choosing <strong>Hydacon</strong>.</p>
+        <p>Keep scanning and earning more coins! 🚀</p>
+        <p style="margin-top: 12px;">&copy;
+          {{year}}
+          Hydacon. All rights reserved.</p>
+      </div>
+    </div>
+  </body>
+</html>
