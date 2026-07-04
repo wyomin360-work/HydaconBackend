@@ -36,6 +36,7 @@ const { validateIFSC } = require("../../functions/razorPay");
 const { sendFcmNotifications } = require("../../functions/fcm");
 const { sendSms } = require("../../functions/sms");
 const { sendMail } = require("../../functions/nodemailer");
+const AppConfig = require("../../schemas/app-config.schema");
 
 async function generateAndSaveToken(payload) {
   const accessToken = generateToken(payload);
@@ -1399,7 +1400,6 @@ async function convertPointsToCoins(userId, data) {
       if (!user) throw new Error("User not found");
       if (user.totalPoints < points) throw new Error("Insufficient points");
 
-      const AppConfig = require("../../schemas/app-config.schema");
       const config = await AppConfig.findOne().session(session);
       const ratio = config?.coinSettings?.pointToCoinRatio || 100;
 
@@ -1424,6 +1424,17 @@ async function convertPointsToCoins(userId, data) {
   } finally {
     await session.endSession();
   }
+}
+
+async function releaseBan(userId) {
+  const user = await User.findById(userId);
+  if (!user) sendFailResponse("User not found");
+
+  user.scanBanUntil = null;
+  user.failedScanAttempts = 0;
+  await user.save();
+
+  return { message: "Ban released successfully" };
 }
 
 module.exports = {
@@ -1453,4 +1464,5 @@ module.exports = {
   convertPointsToCoins,
   toggleUserStatus,
   deleteUser,
+  releaseBan,
 };

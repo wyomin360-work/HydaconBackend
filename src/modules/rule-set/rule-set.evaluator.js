@@ -52,11 +52,18 @@ const extractActualValue = async (rule, user, context, session) => {
       if (scope === RuleScope.SEASON) {
         const LoyaltySeason = mongoose.model("LoyaltySeason");
         const UserTierProgress = mongoose.model("UserTierProgress");
-        const activeSeason = await LoyaltySeason.findOne({ active: true }).session(session);
+        const activeSeason = await LoyaltySeason.findOne({
+          active: true,
+        }).session(session);
         if (!activeSeason) return -1;
-        const progress = await UserTierProgress.findOne({ userId: user._id, seasonId: activeSeason._id }).session(session);
+        const progress = await UserTierProgress.findOne({
+          userId: user._id,
+          seasonId: activeSeason._id,
+        }).session(session);
         if (!progress || !progress.currentTierId) return -1;
-        const tier = await Tier.findById(progress.currentTierId).session(session);
+        const tier = await Tier.findById(progress.currentTierId).session(
+          session,
+        );
         return tier ? tier.rank : -1;
       } else {
         if (!user.currentTierId) return -1;
@@ -77,7 +84,7 @@ const extractActualValue = async (rule, user, context, session) => {
     case RuleType.SCAN_COUNT: {
       const Redeem = mongoose.model("Redeem");
       const match = { userId: user._id };
-      
+
       if (scope === RuleScope.PRODUCT) {
         if (metadata && metadata.targetProduct && metadata.targetProduct._id) {
           match.productId = metadata.targetProduct._id;
@@ -87,13 +94,17 @@ const extractActualValue = async (rule, user, context, session) => {
       } else if (scope === RuleScope.CATEGORY) {
         const Product = mongoose.model("Product");
         if (metadata && (metadata.targetCategory || metadata.targetId)) {
-          const targetCatId = metadata.targetCategory ? metadata.targetCategory._id : metadata.targetId;
-          const productsInCat = await Product.find({ categoryId: targetCatId }).select('_id').session(session);
-          const productIds = productsInCat.map(p => p._id);
+          const targetCatId = metadata.targetCategory
+            ? metadata.targetCategory._id
+            : metadata.targetId;
+          const productsInCat = await Product.find({ categoryId: targetCatId })
+            .select("_id")
+            .session(session);
+          const productIds = productsInCat.map((p) => p._id);
           match.productId = { $in: productIds };
         }
       }
-      
+
       // Apply temporal scope filtering (MONTH/WEEK/SEASON/TOTAL)
       await applyScopeFilter(match, scope, session);
       const count = await Redeem.countDocuments(match).session(session);
@@ -119,8 +130,8 @@ const extractActualValue = async (rule, user, context, session) => {
       const UserTierProgress = mongoose.model("UserTierProgress");
 
       const activeSeason = await LoyaltySeason.findOne({
-          active: true,
-        }).session(session);
+        active: true,
+      }).session(session);
       if (!activeSeason) return -1;
 
       if (!context.seasonProgress) {
@@ -169,8 +180,6 @@ const extractActualValue = async (rule, user, context, session) => {
       }).session(session);
       return count;
     }
-
-
 
     case RuleType.REFERRALS:
       return user.referralsCount || 0;

@@ -21,6 +21,7 @@ const giftSchema = new mongoose.Schema(
     stockQuantity: { type: Number, required: true, default: 0 },
     reservedQuantity: { type: Number, required: true, default: 0 },
     image: { type: String },
+    themeColor: { type: String },
     active: { type: Boolean, default: true },
     ruleSetId: {
       type: mongoose.Schema.Types.ObjectId,

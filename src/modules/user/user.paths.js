@@ -10,6 +10,7 @@ module.exports = {
   flagUser: "/flag/:id",
   toggleStatus: "/status/:id",
   deleteUser: "/delete/:id",
+  releaseBan: "/release-ban/:id",
   updatePreferences: "/preference/update",
   fcmToken: "/fcm-token",
   phone: {

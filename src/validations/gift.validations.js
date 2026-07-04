@@ -34,6 +34,7 @@ const giftCreateRequestType = {
     voucherRedemptionType: { type: "string", enum: ["code", "file"] },
     voucherCode: { type: "string", minLength: 1 },
     voucherFileUrl: { type: "string", minLength: 1 },
+    themeColor: { type: "string" },
   },
   required: [
     "name",
@@ -60,6 +61,7 @@ const giftUpdateRequestType = {
     voucherRedemptionType: { type: "string", enum: ["code", "file"] },
     voucherCode: { type: "string", minLength: 1 },
     voucherFileUrl: { type: "string", minLength: 1 },
+    themeColor: { type: "string" },
   },
   additionalProperties: false,
 };

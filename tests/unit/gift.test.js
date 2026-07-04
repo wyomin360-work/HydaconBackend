@@ -12,6 +12,7 @@ const mongoose = require("mongoose");
 jest.mock("../../src/schemas/gift.schema");
 jest.mock("../../src/schemas/gift-category.schema");
 jest.mock("../../src/schemas/gift-redemption.schema");
+jest.mock("../../src/schemas/document.schema");
 jest.mock("../../src/schemas/user.schema");
 jest.mock("../../src/schemas/tier.schema");
 jest.mock("../../src/schemas/redeem.schema");
@@ -103,8 +104,11 @@ describe("Gift Service & Rules Engine Tests", () => {
       return mockQuery(null);
     });
     Redeem.countDocuments.mockImplementation(() => mockQuery(0));
+    const mockPopulate = jest.fn().mockReturnThis();
     GiftRedemption.findById.mockReturnValue({
-      populate: jest.fn().mockResolvedValue(mockRedemption),
+      populate: mockPopulate,
+      lean: jest.fn().mockResolvedValue(mockRedemption),
+      session: jest.fn().mockResolvedValue(mockRedemption),
     });
 
     // Default: RuleSet evaluator passes all rules

@@ -2,6 +2,7 @@ const GiftCategory = require("../../schemas/gift-category.schema");
 const Gift = require("../../schemas/gift.schema");
 const mongoose = require("mongoose");
 const GiftRedemption = require("../../schemas/gift-redemption.schema");
+const Document = require("../../schemas/document.schema");
 const User = require("../../schemas/user.schema");
 const { GIFT_REDEMPTION_STATUS } = require("../../constants/gift");
 const { APP_NOTIFICATIONS } = require("../../constants/notifications");
@@ -273,15 +274,25 @@ exports.getGiftEligibility = async (userId, giftId) => {
 
 exports.getUserRedemptionDetails = async (userId, redemptionId) => {
   try {
-    const redemption = await GiftRedemption.findById(redemptionId).populate({
-      path: "giftId",
-      select: "name image priceInCoins description categoryId",
-      populate: { path: "categoryId", select: "name" },
-    });
+    const redemption = await GiftRedemption.findById(redemptionId)
+      .populate({
+        path: "giftId",
+        select: "name image priceInCoins description categoryId",
+        populate: { path: "categoryId", select: "name" },
+      })
+      .lean();
     if (!redemption) return { success: false, message: "Redemption not found" };
     if (String(redemption.userId) !== String(userId)) {
       return { success: false, message: "Unauthorized access" };
     }
+
+    if (redemption.voucherFileUrl) {
+      const doc = await Document.findById(redemption.voucherFileUrl).lean();
+      if (doc && doc.docUrl) {
+        redemption.voucherFileUrl = doc.docUrl;
+      }
+    }
+
     return { success: true, data: redemption };
   } catch (error) {
     return { success: false, message: error.message };
@@ -297,6 +308,14 @@ const sendVoucherNotifications = async (user, gift, redemption) => {
     const isCode = gift.voucherRedemptionType === "code";
     const isFile = gift.voucherRedemptionType === "file";
 
+    let resolvedVoucherFileUrl = redemption.voucherFileUrl || "";
+    if (isFile && resolvedVoucherFileUrl) {
+      const doc = await Document.findById(resolvedVoucherFileUrl).lean();
+      if (doc && doc.docUrl) {
+        resolvedVoucherFileUrl = doc.docUrl;
+      }
+    }
+
     // 1. Send celebratory email
     if (user.email) {
       await sendTemplateEmail(
@@ -308,7 +327,7 @@ const sendVoucherNotifications = async (user, gift, redemption) => {
           giftName: gift.name,
           coinsUsed: redemption.coinsUsed,
           voucherCode: redemption.voucherCode || "",
-          voucherFileUrl: redemption.voucherFileUrl || "",
+          voucherFileUrl: resolvedVoucherFileUrl,
           isCode,
           isFile,
           year: new Date().getFullYear(),
@@ -493,9 +512,9 @@ exports.userRedemptions = async (userId, data) => {
         select: "name image categoryId",
         populate: { path: "categoryId", select: "name active" },
       })
+      .sort({ updatedAt: -1 })
       .skip(skip)
-      .limit(limitNum)
-      .sort({ createdAt: -1 });
+      .limit(limitNum);
 
     const total = await GiftRedemption.countDocuments(matchQuery);
 
@@ -551,9 +570,17 @@ exports.adminRedemptionDetails = async (redemptionId) => {
       .populate(
         "giftId",
         "name image priceInCoins description stockQuantity reservedQuantity",
-      );
+      )
+      .lean();
 
     if (!redemption) return { success: false, message: "Redemption not found" };
+
+    if (redemption.voucherFileUrl) {
+      const doc = await Document.findById(redemption.voucherFileUrl).lean();
+      if (doc && doc.docUrl) {
+        redemption.voucherFileUrl = doc.docUrl;
+      }
+    }
 
     return { success: true, data: redemption };
   } catch (error) {
