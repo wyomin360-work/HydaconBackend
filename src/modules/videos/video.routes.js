@@ -21,10 +21,10 @@ router.get(
 );
 
 // Metrics increment (usually by user/mobile)
-router.post(
+router.get(
   videoPaths.metrics,
   verifyAdminOrUser,
-  handleError(videoController.updateMetrics)
+  handleError(videoController.getMetrics)
 );
 
 // Get Video List (used by admin dashboard but could be used by users with different filters if needed, restricting to AdminOrUser for now)
@@ -40,6 +40,13 @@ router.get(
   videoPaths.counts,
   verifyAdminOrUser,
   handleError(videoController.getVideoCounts)
+);
+
+// Analytics time-series (admin only)
+router.get(
+  videoPaths.analytics,
+  verifyAdmin,
+  handleError(videoController.getAnalytics)
 );
 
 // Get Single Video Details

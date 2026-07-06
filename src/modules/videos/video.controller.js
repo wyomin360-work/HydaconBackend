@@ -39,10 +39,6 @@ const updateVideo = async (req, res, next) => {
     if (data.categoryId === "") data.categoryId = null;
     if (data.productId === "") data.productId = null;
 
-    if (data.title) {
-       // Optional: update slug when title changes. Decided not to, to preserve URLs, but can be done if needed.
-    }
-
     const video = await videoService.updateVideo(id, data);
     if (!video) {
       return sendResponse(res, null, 404, "Video not found");
@@ -60,14 +56,11 @@ const deleteVideo = async (req, res, next) => {
     if (!video) {
       return sendResponse(res, null, 404, "Video not found");
     }
-    // Successful hard delete – respond with 204 No Content
     return sendResponse(res, null, 204, "Video deleted successfully");
   } catch (error) {
     next(error);
   }
 };
-
-// Duplicate delete block removed
 
 const getVideo = async (req, res, next) => {
   try {
@@ -88,8 +81,6 @@ const listVideos = async (req, res, next) => {
     const { search, categoryId, productId, language, active, featured, sortBy, sortOrder } = req.body;
 
     const query = {};
-
-    // Always exclude soft-deleted documents
     query.deleted = { $ne: true };
 
     if (search) {
@@ -99,19 +90,15 @@ const listVideos = async (req, res, next) => {
     if (productId) query.productId = productId;
     if (language) query.language = language;
 
-    // active filter: true → active only, false → inactive (including docs where active isn't set)
     if (active !== undefined) {
       query.active = active === true ? true : { $ne: true };
     }
     if (featured !== undefined) query.featured = featured;
 
-    // Force active=true for non-admin users to prevent leaking inactive videos
     if (req.role !== "ADMIN") {
       query.active = true;
     }
 
-    // Handle performance sorting if sortBy is specific
-    // sortBy could be: views, saves, newest (createdAt)
     let actualSortBy = sortBy || "createdAt";
     if (actualSortBy === "newest") actualSortBy = "createdAt";
     let actualSortOrder = sortOrder || "desc";
@@ -119,7 +106,7 @@ const listVideos = async (req, res, next) => {
     const result = await videoService.listVideos(query, {
       ...paginationParams,
       sortBy: actualSortBy,
-      sortOrder: actualSortOrder
+      sortOrder: actualSortOrder,
     });
 
     return sendResponse(res, result, 200, "Videos fetched successfully");
@@ -138,7 +125,6 @@ const toggleStatus = async (req, res, next) => {
   }
 };
 
-// Soft‑delete handler (marks video as deleted)
 const softDeleteVideo = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -152,7 +138,6 @@ const softDeleteVideo = async (req, res, next) => {
   }
 };
 
-// Restore handler (undo soft‑delete)
 const restoreVideo = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -166,7 +151,6 @@ const restoreVideo = async (req, res, next) => {
   }
 };
 
-// Count endpoint for status tabs
 const getVideoCounts = async (req, res, next) => {
   try {
     const counts = await videoService.countVideos();
@@ -179,16 +163,33 @@ const getVideoCounts = async (req, res, next) => {
 const updateMetrics = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { metricType } = req.body; // views, saves, shares
+    const { metricType } = req.body;
     if (!["views", "saves", "shares"].includes(metricType)) {
       return sendResponse(res, null, 400, "Invalid metric type");
     }
-    
     const video = await videoService.updateMetrics(id, metricType);
     if (!video) {
       return sendResponse(res, null, 404, "Video not found");
     }
     return sendResponse(res, video, 200, "Video metrics updated successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET handler for metrics increment via query params (used by mobile)
+const getMetrics = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { metricType } = req.query;
+    if (!metricType || !["views", "saves", "shares"].includes(metricType)) {
+      return sendResponse(res, null, 400, "Invalid metric type");
+    }
+    const video = await videoService.updateMetrics(id, metricType);
+    if (!video) {
+      return sendResponse(res, null, 404, "Video not found");
+    }
+    return sendResponse(res, video, 200, "Video metrics incremented successfully");
   } catch (error) {
     next(error);
   }
@@ -203,6 +204,18 @@ const getFeaturedVideos = async (req, res, next) => {
   }
 };
 
+// GET /:id/analytics?days=30  — time-series analytics for admin dashboard
+const getAnalytics = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const days = parseInt(req.query.days, 10) || 30;
+    const data = await videoService.getAnalytics(id, days);
+    return sendResponse(res, data, 200, "Video analytics fetched successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createVideo,
   updateVideo,
@@ -211,9 +224,10 @@ module.exports = {
   listVideos,
   toggleStatus,
   updateMetrics,
+  getMetrics,
+  getAnalytics,
   getFeaturedVideos,
   softDeleteVideo,
   restoreVideo,
   getVideoCounts,
 };
-

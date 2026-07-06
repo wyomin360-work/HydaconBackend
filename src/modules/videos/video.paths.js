@@ -7,6 +7,7 @@ const videoPaths = {
   delete: "/:id",
   toggleStatus: "/:id/status",
   metrics: "/:id/metrics",
+  analytics: "/:id/analytics",
   featured: "/featured",
   counts: "/counts",
   softDelete: "/:id/soft-delete",

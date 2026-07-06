@@ -1,4 +1,8 @@
 const Video = require("../../schemas/video.schema");
+const VideoAnalytics = require("../../schemas/videoAnalytics.schema");
+
+// Helper: return today as 'YYYY-MM-DD'
+const todayStr = () => new Date().toISOString().slice(0, 10);
 
 const createVideo = async (data) => {
   const video = new Video(data);
@@ -62,7 +66,60 @@ const updateMetrics = async (id, metricType) => {
   else if (metricType === "shares") updateQuery.$inc = { shares: 1 };
   else throw new Error("Invalid metric type");
 
+  // Upsert daily analytics bucket
+  const incField = { [metricType]: 1 };
+  await VideoAnalytics.findOneAndUpdate(
+    { videoId: id, date: todayStr() },
+    { $inc: incField },
+    { upsert: true, new: true }
+  );
+
   return await Video.findByIdAndUpdate(id, updateQuery, { new: true });
+};
+
+/**
+ * Return daily time-series analytics for a video.
+ * @param {string} id - Video ObjectId
+ * @param {number} days - Number of past days to include (default 30)
+ */
+const getAnalytics = async (id, days = 30) => {
+  const from = new Date();
+  from.setDate(from.getDate() - (days - 1));
+  const fromStr = from.toISOString().slice(0, 10);
+
+  const rows = await VideoAnalytics.find({
+    videoId: id,
+    date: { $gte: fromStr },
+  }).sort({ date: 1 }).lean();
+
+  // Build a map so we can fill gaps with zeroes
+  const byDate = {};
+  rows.forEach((r) => { byDate[r.date] = r; });
+
+  const series = [];
+  for (let i = 0; i < days; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() - (days - 1 - i));
+    const key = d.toISOString().slice(0, 10);
+    series.push({
+      date: key,
+      views: byDate[key]?.views ?? 0,
+      saves: byDate[key]?.saves ?? 0,
+      shares: byDate[key]?.shares ?? 0,
+    });
+  }
+
+  // Totals for summary cards
+  const video = await Video.findById(id).select('views saves shares title').lean();
+
+  return {
+    series,
+    totals: {
+      views: video?.views ?? 0,
+      saves: video?.saves ?? 0,
+      shares: video?.shares ?? 0,
+    },
+  };
 };
 
 // Count videos for status tabs
@@ -91,6 +148,7 @@ module.exports = {
   listVideos,
   toggleStatus,
   updateMetrics,
+  getAnalytics,
   getFeaturedVideos,
   countVideos,
 };
