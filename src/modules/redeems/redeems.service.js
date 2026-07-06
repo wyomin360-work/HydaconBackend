@@ -198,6 +198,13 @@ async function createRedeem(redeemData, reqUser = null) {
   });
   user.totalScans = (user.totalScans || 0) + 1;
 
+  try {
+    const referralService = require("../referral/referral.service");
+    await referralService.markScanned(userId);
+  } catch (err) {
+    console.error("Error updating referral status to scanned:", err);
+  }
+
   // save reward
   await reward.save();
 

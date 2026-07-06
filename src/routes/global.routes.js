@@ -28,6 +28,8 @@ const documentRoutes = require("../modules/document/document.routes");
 const documentPaths = require("../modules/document/document.paths");
 const filesPaths = require("../modules/files/files.paths");
 const filesRoutes = require("../modules/files/files.routes");
+const referralRoutes = require("../modules/referral/referral.routes");
+const referralPaths = require("../modules/referral/referral.paths");
 
 const globalRoutes = express.Router();
 
@@ -45,5 +47,7 @@ globalRoutes.use(loyaltyPaths.root, loyaltyRoutes);
 globalRoutes.use(campaignsPaths.root, campaignsRoutes);
 globalRoutes.use(documentPaths.root, documentRoutes);
 globalRoutes.use(filesPaths.root, filesRoutes);
+globalRoutes.use(referralPaths.root, referralRoutes);
+globalRoutes.use("/referrals", referralRoutes);
 
 module.exports = globalRoutes;

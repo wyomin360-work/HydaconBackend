@@ -61,13 +61,35 @@ async function generateAndSaveToken(payload) {
 }
 
 // ----------------------
+// Resolve Referrer by Code
+// ----------------------
+async function resolveReferrer(referralCode) {
+  if (!referralCode) return { isReferred: 0, referredById: null, referredByDetails: null };
+
+  const referrer = await User.findOne({ referralCode: referralCode.trim().toUpperCase() }).lean();
+  if (!referrer) return { isReferred: 0, referredById: null, referredByDetails: null };
+
+  return {
+    isReferred: 1,
+    referredById: referrer._id,
+    referredByDetails: {
+      isHydaconUser: true,
+      userId: referrer._id,
+      name: referrer.name || null,
+    },
+  };
+}
+
+// ----------------------
 // Register User
 // ----------------------
 async function registerUser(userData) {
-  const { name, email, password, avatarId, phone, roleId } = userData;
+  const { name, email, password, avatarId, phone, roleId, referralCode } = userData;
 
   const userExist = await User.findOne({ email });
   if (userExist) sendFailResponse("The mail id exist");
+
+  const { isReferred, referredById, referredByDetails } = await resolveReferrer(referralCode);
 
   const user = await User.create({
     name,
@@ -77,7 +99,17 @@ async function registerUser(userData) {
     authType: AuthTypes.EMAIL,
     avatarId,
     roleId,
+    ...(referredById && { referredBy: referredById }),
   });
+
+  if (phone) {
+    try {
+      const referralService = require("../referral/referral.service");
+      await referralService.joinReferral(user._id, phone);
+    } catch (err) {
+      console.error("Error linking referral on registration:", err);
+    }
+  }
 
   const { refreshToken, accessToken } = await generateAndSaveToken({
     userId: user?._id,
@@ -89,7 +121,13 @@ async function registerUser(userData) {
 
   return {
     message: "Registration successful",
-    data: { ...rest, accessToken, refreshToken },
+    data: {
+      ...rest,
+      accessToken,
+      refreshToken,
+      isReferred,
+      ...(isReferred === 1 && { referredByDetails }),
+    },
   };
 }
 
@@ -159,6 +197,8 @@ async function providerAuth(data) {
   const userExist = await User.findOne({ email }).populate("roleId").lean();
 
   if (!userExist) {
+    const { isReferred, referredById, referredByDetails } = await resolveReferrer(data.referralCode);
+
     const newUser = await User.create({
       email,
       password: generateRandomPassword(48),
@@ -167,7 +207,17 @@ async function providerAuth(data) {
       name: userName,
       avatarId,
       roleId: data.roleId,
+      ...(referredById && { referredBy: referredById }),
     });
+
+    if (newUser.phone) {
+      try {
+        const referralService = require("../referral/referral.service");
+        await referralService.joinReferral(newUser._id, newUser.phone);
+      } catch (err) {
+        console.error("Error linking referral on provider registration:", err);
+      }
+    }
 
     const { refreshToken, accessToken } = await generateAndSaveToken({
       userId: newUser?._id,
@@ -186,7 +236,14 @@ async function providerAuth(data) {
 
     return {
       message: "Registered successfully",
-      data: { ...rest, accessToken, refreshToken, newUser: true },
+      data: {
+        ...rest,
+        accessToken,
+        refreshToken,
+        newUser: true,
+        isReferred,
+        ...(isReferred === 1 && { referredByDetails }),
+      },
     };
   } else {
     // if (userExist && userExist.authType !== AuthTypes.GOOGLE)
