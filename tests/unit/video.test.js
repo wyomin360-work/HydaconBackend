@@ -1,9 +1,12 @@
 const videoService = require("../../src/modules/videos/video.service");
 const videoController = require("../../src/modules/videos/video.controller");
 const Video = require("../../src/schemas/video.schema");
+const VideoAnalytics = require("../../src/schemas/videoAnalytics.schema");
 
 // Mock the Video schema
 jest.mock("../../src/schemas/video.schema");
+// Mock VideoAnalytics so updateMetrics doesn't hit real Mongoose ObjectId casting
+jest.mock("../../src/schemas/videoAnalytics.schema");
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -160,6 +163,7 @@ describe("Video Service", () => {
     it.each(["views", "saves", "shares"])("should increment %s by 1", async (metricType) => {
       const updated = makeVideoDoc({ [metricType]: 11 });
       Video.findByIdAndUpdate = jest.fn().mockResolvedValue(updated);
+      VideoAnalytics.findOneAndUpdate = jest.fn().mockResolvedValue({});
 
       const result = await videoService.updateMetrics("video123", metricType);
 

@@ -56,7 +56,7 @@ const deleteVideo = async (req, res, next) => {
     if (!video) {
       return sendResponse(res, null, 404, "Video not found");
     }
-    return sendResponse(res, null, 204, "Video deleted successfully");
+    return sendResponse(res, video, 200, "Video deleted successfully");
   } catch (error) {
     next(error);
   }
