@@ -34,6 +34,8 @@ const ruleSetPaths = require("../modules/rule-set/rule-set.paths");
 const ruleSetRoutes = require("../modules/rule-set/rule-set.routes");
 const videoPaths = require("../modules/videos/video.paths");
 const videoRoutes = require("../modules/videos/video.routes");
+const contentPaths = require("../modules/content/content.paths");
+const contentRoutes = require("../modules/content/content.routes");
 
 const globalRoutes = express.Router();
 
@@ -54,5 +56,6 @@ globalRoutes.use(documentPaths.root, documentRoutes);
 globalRoutes.use(filesPaths.root, filesRoutes);
 globalRoutes.use(ruleSetPaths.root, ruleSetRoutes);
 globalRoutes.use(videoPaths.root, videoRoutes);
+globalRoutes.use(contentPaths.root, contentRoutes);
 
 module.exports = globalRoutes;
