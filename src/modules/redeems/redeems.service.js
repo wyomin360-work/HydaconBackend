@@ -8,6 +8,7 @@ const Reward = require("../../schemas/reward.schema");
 const User = require("../../schemas/user.schema");
 const { attachId, formatNotification } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
+const AppConfig = require("../../schemas/app-config.schema");
 
 async function listRedeems(data) {
   const { page = 1, limit = 20 } = data;
@@ -90,9 +91,17 @@ async function createRedeem(redeemData, reqUser = null) {
 
   const incrementFraud = async (userDoc) => {
     userDoc.failedScanAttempts = (userDoc.failedScanAttempts || 0) + 1;
-    if (userDoc.failedScanAttempts >= 5) {
-      userDoc.scanBanUntil = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours ban
-      userDoc.failedScanAttempts = 0;
+
+    // Fetch AppConfig to get the dynamic limit
+    const config = await AppConfig.findOne().lean();
+
+    if (config?.securitySettings?.autoBanEnabled !== false) {
+      const scanLimit = config?.securitySettings?.scanCountForBan || 8;
+
+      if (userDoc.failedScanAttempts >= scanLimit) {
+        userDoc.scanBanUntil = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours ban
+        userDoc.failedScanAttempts = 0;
+      }
     }
     await userDoc.save();
   };
@@ -135,9 +144,7 @@ async function createRedeem(redeemData, reqUser = null) {
     sendFailResponse("reward already redeemed");
   }
 
-  // Reset failed attempts on success
-  user.failedScanAttempts = 0;
-  user.scanBanUntil = null;
+  // Removed local user object modification for failed attempts, it will be updated atomically below
 
   // 1. Get tier multiplier
   const loyaltyService = require("../loyalty/loyalty.service");
@@ -189,14 +196,18 @@ async function createRedeem(redeemData, reqUser = null) {
   reward.redeemedBy = userId;
   reward.active = false;
 
-  // update user atomically using $inc
+  // update user atomically
   await User.findByIdAndUpdate(userId, {
     $inc: {
       totalPoints: weightedPoints,
       lifetimePoints: weightedPoints,
+      totalScans: 1,
+    },
+    $set: {
+      failedScanAttempts: 0,
+      scanBanUntil: null,
     },
   });
-  user.totalScans = (user.totalScans || 0) + 1;
 
   // save reward
   await reward.save();

@@ -8,6 +8,7 @@ const transactionsDoc = require("../docs/transactions.doc");
 const appDoc = require("../docs/app.doc");
 const commonDoc = require("../docs/common.doc");
 const rolesDoc = require("../docs/roles.doc");
+const ruleSetDoc = require("../docs/rule-set.doc");
 
 const options = {
   definition: {
@@ -30,6 +31,7 @@ const options = {
       ...commonDoc,
       ...appDoc,
       ...rolesDoc,
+      ...ruleSetDoc,
     },
   },
   apis: [],
