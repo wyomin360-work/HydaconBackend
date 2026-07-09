@@ -57,6 +57,5 @@ eventSchema.index({ date: 1, endDate: 1, status: 1 });
 // Speeds up active + status filter used in userListEvents
 eventSchema.index({ active: 1, status: 1, date: 1 });
 
-
 const Event = mongoose.model("Event", eventSchema);
 module.exports = { Event, EVENT_STATUS, EVENT_TYPE };

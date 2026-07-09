@@ -74,18 +74,28 @@ const contestSchema = new mongoose.Schema(
 // Auto-update status based on dates
 contestSchema.pre("find", function () {
   const now = new Date();
-  this.model.updateMany(
-    { startDate: { $gt: now }, status: { $ne: CONTEST_STATUS.UPCOMING } },
-    { $set: { status: CONTEST_STATUS.UPCOMING } }
-  ).exec();
-  this.model.updateMany(
-    { startDate: { $lte: now }, endDate: { $gte: now }, status: { $ne: CONTEST_STATUS.ACTIVE } },
-    { $set: { status: CONTEST_STATUS.ACTIVE } }
-  ).exec();
-  this.model.updateMany(
-    { endDate: { $lt: now }, status: { $ne: CONTEST_STATUS.COMPLETED } },
-    { $set: { status: CONTEST_STATUS.COMPLETED } }
-  ).exec();
+  this.model
+    .updateMany(
+      { startDate: { $gt: now }, status: { $ne: CONTEST_STATUS.UPCOMING } },
+      { $set: { status: CONTEST_STATUS.UPCOMING } },
+    )
+    .exec();
+  this.model
+    .updateMany(
+      {
+        startDate: { $lte: now },
+        endDate: { $gte: now },
+        status: { $ne: CONTEST_STATUS.ACTIVE },
+      },
+      { $set: { status: CONTEST_STATUS.ACTIVE } },
+    )
+    .exec();
+  this.model
+    .updateMany(
+      { endDate: { $lt: now }, status: { $ne: CONTEST_STATUS.COMPLETED } },
+      { $set: { status: CONTEST_STATUS.COMPLETED } },
+    )
+    .exec();
 });
 
 const Contest = mongoose.model("Contest", contestSchema);

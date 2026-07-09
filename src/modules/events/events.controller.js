@@ -3,11 +3,17 @@ const { sendResponse } = require("../../utils/responseHandlers");
 
 // Admin
 exports.adminCreateEvent = async (req, res) => {
-  const response = await eventsService.adminCreateEvent(req.body, req.admin?._id);
+  const response = await eventsService.adminCreateEvent(
+    req.body,
+    req.admin?._id,
+  );
   return sendResponse(res, response);
 };
 exports.adminUpdateEvent = async (req, res) => {
-  const response = await eventsService.adminUpdateEvent(req.params.eventId, req.body);
+  const response = await eventsService.adminUpdateEvent(
+    req.params.eventId,
+    req.body,
+  );
   return sendResponse(res, response);
 };
 exports.adminDeleteEvent = async (req, res) => {
@@ -23,7 +29,10 @@ exports.adminGetEventDetails = async (req, res) => {
   return sendResponse(res, response);
 };
 exports.adminInviteUser = async (req, res) => {
-  const response = await eventsService.adminInviteUser(req.params.eventId, req.body.userId);
+  const response = await eventsService.adminInviteUser(
+    req.params.eventId,
+    req.body.userId,
+  );
   return sendResponse(res, response);
 };
 exports.adminCheckIn = async (req, res) => {
@@ -39,17 +48,26 @@ exports.userListEvents = async (req, res) => {
 };
 exports.userGetEventDetails = async (req, res) => {
   const userId = req.user?._id || req.user?.id;
-  const response = await eventsService.userGetEventDetails(req.params.eventId, userId);
+  const response = await eventsService.userGetEventDetails(
+    req.params.eventId,
+    userId,
+  );
   return sendResponse(res, response);
 };
 exports.userRegisterForEvent = async (req, res) => {
   const userId = req.user?._id || req.user?.id;
-  const response = await eventsService.userRegisterForEvent(req.params.eventId, userId);
+  const response = await eventsService.userRegisterForEvent(
+    req.params.eventId,
+    userId,
+  );
   return sendResponse(res, response);
 };
 exports.userGetEventPass = async (req, res) => {
   const userId = req.user?._id || req.user?.id;
-  const response = await eventsService.userGetEventPass(req.params.registrationId, userId);
+  const response = await eventsService.userGetEventPass(
+    req.params.registrationId,
+    userId,
+  );
   return sendResponse(res, response);
 };
 exports.userMyEvents = async (req, res) => {

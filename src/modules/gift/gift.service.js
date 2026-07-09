@@ -53,11 +53,18 @@ exports.createCategory = async (categoryData) => {
   try {
     const existing = await GiftCategory.findOne({ name: categoryData.name });
     if (existing) {
-      return { success: false, message: "Category with this name already exists" };
+      return {
+        success: false,
+        message: "Category with this name already exists",
+      };
     }
     const category = new GiftCategory(categoryData);
     await category.save();
-    return { success: true, message: "Category created successfully", data: category };
+    return {
+      success: true,
+      message: "Category created successfully",
+      data: category,
+    };
   } catch (error) {
     return { success: false, message: error.message };
   }
@@ -71,12 +78,23 @@ exports.updateCategory = async (categoryData, categoryId) => {
         _id: { $ne: categoryId },
       });
       if (existing) {
-        return { success: false, message: "Category with this name already exists" };
+        return {
+          success: false,
+          message: "Category with this name already exists",
+        };
       }
     }
-    const category = await GiftCategory.findByIdAndUpdate(categoryId, categoryData, { new: true });
+    const category = await GiftCategory.findByIdAndUpdate(
+      categoryId,
+      categoryData,
+      { new: true },
+    );
     if (!category) return { success: false, message: "Category not found" };
-    return { success: true, message: "Category updated successfully", data: category };
+    return {
+      success: true,
+      message: "Category updated successfully",
+      data: category,
+    };
   } catch (error) {
     return { success: false, message: error.message };
   }
@@ -86,7 +104,10 @@ exports.deleteCategory = async (categoryId) => {
   try {
     const giftsWithCategory = await Gift.findOne({ categoryId });
     if (giftsWithCategory) {
-      return { success: false, message: "Cannot delete category as gifts are associated with it" };
+      return {
+        success: false,
+        message: "Cannot delete category as gifts are associated with it",
+      };
     }
     const category = await GiftCategory.findByIdAndDelete(categoryId);
     if (!category) return { success: false, message: "Category not found" };
@@ -192,23 +213,35 @@ exports.deleteGift = async (giftId) => {
 
 const checkEligibility = async (user, gift, session = null) => {
   const rules = {
-    coins: { required: gift.priceInCoins, current: user.hydaconCoins || 0, satisfied: (user.hydaconCoins || 0) >= gift.priceInCoins },
+    coins: {
+      required: gift.priceInCoins,
+      current: user.hydaconCoins || 0,
+      satisfied: (user.hydaconCoins || 0) >= gift.priceInCoins,
+    },
     tier: { required: "None", current: "None", satisfied: true },
     scans: { required: 0, current: 0, satisfied: true },
-    region: { required: [], current: user.areaOfOperation || "None", satisfied: true }
+    region: {
+      required: [],
+      current: user.areaOfOperation || "None",
+      satisfied: true,
+    },
   };
 
   const reasons = [];
 
   // Coins requirement
   if (!rules.coins.satisfied) {
-    reasons.push(`Requires at least ${gift.priceInCoins.toLocaleString()} coins (Current: ${(user.hydaconCoins || 0).toLocaleString()})`);
+    reasons.push(
+      `Requires at least ${gift.priceInCoins.toLocaleString()} coins (Current: ${(user.hydaconCoins || 0).toLocaleString()})`,
+    );
   }
 
   // Tier requirement
   if (gift.rewardRules && gift.rewardRules.minTierId) {
     const Tier = mongoose.model("Tier");
-    const requiredTier = await Tier.findById(gift.rewardRules.minTierId).session(session);
+    const requiredTier = await Tier.findById(
+      gift.rewardRules.minTierId,
+    ).session(session);
     if (requiredTier) {
       rules.tier.required = requiredTier.name;
       let userTier = null;
@@ -219,7 +252,9 @@ const checkEligibility = async (user, gift, session = null) => {
       const userRank = userTier ? userTier.rank : 0;
       rules.tier.satisfied = userRank >= requiredTier.rank;
       if (!rules.tier.satisfied) {
-        reasons.push(`Requires ${requiredTier.name} membership tier or above (Current: ${rules.tier.current})`);
+        reasons.push(
+          `Requires ${requiredTier.name} membership tier or above (Current: ${rules.tier.current})`,
+        );
       }
     }
   }
@@ -236,31 +271,43 @@ const checkEligibility = async (user, gift, session = null) => {
     const Redeem = mongoose.model("Redeem");
     const scansCount = await Redeem.countDocuments({
       userId: user._id,
-      createdAt: { $gte: startOfMonth }
+      createdAt: { $gte: startOfMonth },
     }).session(session);
 
     rules.scans.current = scansCount;
     rules.scans.satisfied = scansCount >= requiredScans;
     if (!rules.scans.satisfied) {
-      reasons.push(`Requires at least ${requiredScans} bag scans this month (Current: ${scansCount})`);
+      reasons.push(
+        `Requires at least ${requiredScans} bag scans this month (Current: ${scansCount})`,
+      );
     }
   }
 
   // Region restriction
-  if (gift.rewardRules && gift.rewardRules.regionRestrictions && gift.rewardRules.regionRestrictions.length > 0) {
+  if (
+    gift.rewardRules &&
+    gift.rewardRules.regionRestrictions &&
+    gift.rewardRules.regionRestrictions.length > 0
+  ) {
     const allowedRegions = gift.rewardRules.regionRestrictions;
     rules.region.required = allowedRegions;
-    
+
     const userRegion = user.areaOfOperation || "";
     rules.region.satisfied = allowedRegions.some(
-      r => r.trim().toLowerCase() === userRegion.trim().toLowerCase()
+      (r) => r.trim().toLowerCase() === userRegion.trim().toLowerCase(),
     );
     if (!rules.region.satisfied) {
-      reasons.push(`Gift is not available in your region (${userRegion || "No region set"})`);
+      reasons.push(
+        `Gift is not available in your region (${userRegion || "No region set"})`,
+      );
     }
   }
 
-  const eligible = rules.coins.satisfied && rules.tier.satisfied && rules.scans.satisfied && rules.region.satisfied;
+  const eligible =
+    rules.coins.satisfied &&
+    rules.tier.satisfied &&
+    rules.scans.satisfied &&
+    rules.region.satisfied;
 
   return { eligible, reasons, rules };
 };
@@ -281,12 +328,11 @@ exports.getGiftEligibility = async (userId, giftId) => {
 
 exports.getUserRedemptionDetails = async (userId, redemptionId) => {
   try {
-    const redemption = await GiftRedemption.findById(redemptionId)
-      .populate({
-        path: "giftId",
-        select: "name image priceInCoins description categoryId",
-        populate: { path: "categoryId", select: "name" }
-      });
+    const redemption = await GiftRedemption.findById(redemptionId).populate({
+      path: "giftId",
+      select: "name image priceInCoins description categoryId",
+      populate: { path: "categoryId", select: "name" },
+    });
     if (!redemption) return { success: false, message: "Redemption not found" };
     if (String(redemption.userId) !== String(userId)) {
       return { success: false, message: "Unauthorized access" };
@@ -299,7 +345,11 @@ exports.getUserRedemptionDetails = async (userId, redemptionId) => {
 
 exports.redeemGift = async (userId, data) => {
   const { giftId, shippingAddress } = data;
-  if (!giftId || !shippingAddress) return { success: false, message: "Gift ID and shipping address are required" };
+  if (!giftId || !shippingAddress)
+    return {
+      success: false,
+      message: "Gift ID and shipping address are required",
+    };
 
   const session = await mongoose.startSession();
   try {
@@ -336,7 +386,11 @@ exports.redeemGift = async (userId, data) => {
       result = redemption;
     });
 
-    return { success: true, message: "Gift redeemed successfully", data: result };
+    return {
+      success: true,
+      message: "Gift redeemed successfully",
+      data: result,
+    };
   } catch (error) {
     return { success: false, message: error.message };
   } finally {
@@ -349,7 +403,11 @@ exports.userRedemptions = async (userId, data) => {
     const { page: pageNum, limit: limitNum, skip } = getPaginationParams(data);
 
     const records = await GiftRedemption.find({ userId })
-      .populate({ path: "giftId", select: "name image categoryId", populate: { path: "categoryId", select: "name active" } })
+      .populate({
+        path: "giftId",
+        select: "name image categoryId",
+        populate: { path: "categoryId", select: "name active" },
+      })
       .skip(skip)
       .limit(limitNum)
       .sort({ createdAt: -1 });
@@ -358,7 +416,13 @@ exports.userRedemptions = async (userId, data) => {
 
     return {
       success: true,
-      data: { records, total, totalPages: Math.ceil(total / limitNum), page: pageNum, limit: limitNum },
+      data: {
+        records,
+        total,
+        totalPages: Math.ceil(total / limitNum),
+        page: pageNum,
+        limit: limitNum,
+      },
     };
   } catch (error) {
     return { success: false, message: error.message };
@@ -382,7 +446,13 @@ exports.adminRedemptionList = async (data) => {
 
     return {
       success: true,
-      data: { records, total, totalPages: Math.ceil(total / limitNum), page: pageNum, limit: limitNum },
+      data: {
+        records,
+        total,
+        totalPages: Math.ceil(total / limitNum),
+        page: pageNum,
+        limit: limitNum,
+      },
     };
   } catch (error) {
     return { success: false, message: error.message };
@@ -393,10 +463,13 @@ exports.adminRedemptionDetails = async (redemptionId) => {
   try {
     const redemption = await GiftRedemption.findById(redemptionId)
       .populate("userId", "name email phone hydaconCoins")
-      .populate("giftId", "name image priceInCoins description stockQuantity reservedQuantity");
+      .populate(
+        "giftId",
+        "name image priceInCoins description stockQuantity reservedQuantity",
+      );
 
     if (!redemption) return { success: false, message: "Redemption not found" };
-    
+
     return { success: true, data: redemption };
   } catch (error) {
     return { success: false, message: error.message };
@@ -415,17 +488,26 @@ exports.adminUpdateRedemption = async (redemptionId, data) => {
   try {
     let result;
     await session.withTransaction(async () => {
-      const redemption = await GiftRedemption.findById(redemptionId).session(session);
+      const redemption =
+        await GiftRedemption.findById(redemptionId).session(session);
       if (!redemption) throw new Error("Redemption not found");
 
       if (status && status !== redemption.status) {
-        if (redemption.status === GIFT_REDEMPTION_STATUS.CANCELLED || redemption.status === GIFT_REDEMPTION_STATUS.DELIVERED) {
-          throw new Error(`Cannot change status from ${redemption.status} to ${status}`);
+        if (
+          redemption.status === GIFT_REDEMPTION_STATUS.CANCELLED ||
+          redemption.status === GIFT_REDEMPTION_STATUS.DELIVERED
+        ) {
+          throw new Error(
+            `Cannot change status from ${redemption.status} to ${status}`,
+          );
         }
       }
 
       // Handle cancellation logic (refund coins, reduce reserved/stock)
-      if (status === GIFT_REDEMPTION_STATUS.CANCELLED && redemption.status !== GIFT_REDEMPTION_STATUS.CANCELLED) {
+      if (
+        status === GIFT_REDEMPTION_STATUS.CANCELLED &&
+        redemption.status !== GIFT_REDEMPTION_STATUS.CANCELLED
+      ) {
         const user = await User.findById(redemption.userId).session(session);
         const gift = await Gift.findById(redemption.giftId).session(session);
 
@@ -440,7 +522,10 @@ exports.adminUpdateRedemption = async (redemptionId, data) => {
         }
       }
       // Handle delivered logic (reduce actual stock, reduce reserved)
-      else if (status === GIFT_REDEMPTION_STATUS.DELIVERED && redemption.status !== GIFT_REDEMPTION_STATUS.DELIVERED) {
+      else if (
+        status === GIFT_REDEMPTION_STATUS.DELIVERED &&
+        redemption.status !== GIFT_REDEMPTION_STATUS.DELIVERED
+      ) {
         const gift = await Gift.findById(redemption.giftId).session(session);
         if (gift) {
           gift.reservedQuantity = Math.max(0, gift.reservedQuantity - 1);
@@ -450,15 +535,22 @@ exports.adminUpdateRedemption = async (redemptionId, data) => {
       }
 
       if (status) redemption.status = status;
-      if (trackingNumber !== undefined) redemption.trackingNumber = trackingNumber;
-      if (courierDetails !== undefined) redemption.courierDetails = courierDetails;
-      if (cancellationReason !== undefined) redemption.cancellationReason = cancellationReason;
+      if (trackingNumber !== undefined)
+        redemption.trackingNumber = trackingNumber;
+      if (courierDetails !== undefined)
+        redemption.courierDetails = courierDetails;
+      if (cancellationReason !== undefined)
+        redemption.cancellationReason = cancellationReason;
 
       await redemption.save({ session });
       result = redemption;
     });
 
-    return { success: true, message: "Redemption updated successfully", data: result };
+    return {
+      success: true,
+      message: "Redemption updated successfully",
+      data: result,
+    };
   } catch (error) {
     return { success: false, message: error.message };
   } finally {
@@ -474,9 +566,23 @@ exports.getAnalytics = async () => {
       { $group: { _id: "$giftId", count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: 10 },
-      { $lookup: { from: "gifts", localField: "_id", foreignField: "_id", as: "gift" } },
+      {
+        $lookup: {
+          from: "gifts",
+          localField: "_id",
+          foreignField: "_id",
+          as: "gift",
+        },
+      },
       { $unwind: "$gift" },
-      { $project: { _id: 1, count: 1, name: "$gift.name", image: "$gift.image" } }
+      {
+        $project: {
+          _id: 1,
+          count: 1,
+          name: "$gift.name",
+          image: "$gift.image",
+        },
+      },
     ]);
 
     // 2. Coin consumption reports (by month)
@@ -486,14 +592,14 @@ exports.getAnalytics = async () => {
         $group: {
           _id: {
             year: { $year: "$createdAt" },
-            month: { $month: "$createdAt" }
+            month: { $month: "$createdAt" },
           },
           totalCoins: { $sum: "$coinsUsed" },
-          totalRedemptions: { $sum: 1 }
-        }
+          totalRedemptions: { $sum: 1 },
+        },
       },
       { $sort: { "_id.year": -1, "_id.month": -1 } },
-      { $limit: 12 }
+      { $limit: 12 },
     ]);
 
     // 3. Inventory movement reports (current stock vs reserved stock)
@@ -503,9 +609,9 @@ exports.getAnalytics = async () => {
           _id: null,
           totalStock: { $sum: "$stockQuantity" },
           totalReserved: { $sum: "$reservedQuantity" },
-          totalGifts: { $sum: 1 }
-        }
-      }
+          totalGifts: { $sum: 1 },
+        },
+      },
     ]);
 
     return {
@@ -513,8 +619,12 @@ exports.getAnalytics = async () => {
       data: {
         mostRedeemedGifts,
         coinConsumption,
-        inventoryMovement: inventoryMovement[0] || { totalStock: 0, totalReserved: 0, totalGifts: 0 }
-      }
+        inventoryMovement: inventoryMovement[0] || {
+          totalStock: 0,
+          totalReserved: 0,
+          totalGifts: 0,
+        },
+      },
     };
   } catch (error) {
     return { success: false, message: error.message };
@@ -534,12 +644,17 @@ exports.getScratchCardConfig = async () => {
     let giftPool = [];
     if (settings.selectedGiftIds && settings.selectedGiftIds.length > 0) {
       giftPool = await Gift.find({ _id: { $in: settings.selectedGiftIds } })
-        .select("_id name image priceInCoins active stockQuantity reservedQuantity")
+        .select(
+          "_id name image priceInCoins active stockQuantity reservedQuantity",
+        )
         .lean();
     }
 
     // Count all available gifts for context
-    const totalActiveGifts = await Gift.countDocuments({ active: true, stockQuantity: { $gt: 0 } });
+    const totalActiveGifts = await Gift.countDocuments({
+      active: true,
+      stockQuantity: { $gt: 0 },
+    });
 
     return {
       success: true,
@@ -547,7 +662,8 @@ exports.getScratchCardConfig = async () => {
         ...settings,
         giftPool,
         totalActiveGifts,
-        useAllGifts: !settings.selectedGiftIds || settings.selectedGiftIds.length === 0,
+        useAllGifts:
+          !settings.selectedGiftIds || settings.selectedGiftIds.length === 0,
       },
     };
   } catch (error) {
@@ -568,38 +684,65 @@ exports.updateScratchCardConfig = async (configData) => {
 
     // Validate probability values
     if (probability !== undefined && (probability < 0 || probability > 100)) {
-      return { success: false, message: "Probability must be between 0 and 100" };
+      return {
+        success: false,
+        message: "Probability must be between 0 and 100",
+      };
     }
-    if (giftProbability !== undefined && (giftProbability < 0 || giftProbability > 100)) {
-      return { success: false, message: "Gift probability must be between 0 and 100" };
+    if (
+      giftProbability !== undefined &&
+      (giftProbability < 0 || giftProbability > 100)
+    ) {
+      return {
+        success: false,
+        message: "Gift probability must be between 0 and 100",
+      };
     }
-    if (minBonusPoints !== undefined && maxBonusPoints !== undefined && minBonusPoints > maxBonusPoints) {
-      return { success: false, message: "Min bonus points cannot exceed max bonus points" };
+    if (
+      minBonusPoints !== undefined &&
+      maxBonusPoints !== undefined &&
+      minBonusPoints > maxBonusPoints
+    ) {
+      return {
+        success: false,
+        message: "Min bonus points cannot exceed max bonus points",
+      };
     }
 
     // If selectedGiftIds provided, verify each gift exists
     if (selectedGiftIds && selectedGiftIds.length > 0) {
-      const count = await Gift.countDocuments({ _id: { $in: selectedGiftIds } });
+      const count = await Gift.countDocuments({
+        _id: { $in: selectedGiftIds },
+      });
       if (count !== selectedGiftIds.length) {
-        return { success: false, message: "One or more selected gift IDs are invalid" };
+        return {
+          success: false,
+          message: "One or more selected gift IDs are invalid",
+        };
       }
     }
 
     const update = {};
     if (enabled !== undefined) update["scratchCardSettings.enabled"] = enabled;
-    if (probability !== undefined) update["scratchCardSettings.probability"] = probability;
-    if (minBonusPoints !== undefined) update["scratchCardSettings.minBonusPoints"] = minBonusPoints;
-    if (maxBonusPoints !== undefined) update["scratchCardSettings.maxBonusPoints"] = maxBonusPoints;
-    if (giftProbability !== undefined) update["scratchCardSettings.giftProbability"] = giftProbability;
-    if (selectedGiftIds !== undefined) update["scratchCardSettings.selectedGiftIds"] = selectedGiftIds;
+    if (probability !== undefined)
+      update["scratchCardSettings.probability"] = probability;
+    if (minBonusPoints !== undefined)
+      update["scratchCardSettings.minBonusPoints"] = minBonusPoints;
+    if (maxBonusPoints !== undefined)
+      update["scratchCardSettings.maxBonusPoints"] = maxBonusPoints;
+    if (giftProbability !== undefined)
+      update["scratchCardSettings.giftProbability"] = giftProbability;
+    if (selectedGiftIds !== undefined)
+      update["scratchCardSettings.selectedGiftIds"] = selectedGiftIds;
 
     const updatedConfig = await AppConfig.findOneAndUpdate(
       {},
       { $set: update },
-      { new: true, upsert: false }
+      { new: true, upsert: false },
     );
 
-    if (!updatedConfig) return { success: false, message: "App config not found" };
+    if (!updatedConfig)
+      return { success: false, message: "App config not found" };
 
     return {
       success: true,
@@ -637,17 +780,33 @@ exports.listScratchCardRules = async () => {
 
 exports.createScratchCardRule = async (data) => {
   try {
-    const { 
-      tierId, rewardType, minCoins, maxCoins, giftId, active, productScope, products, gifts,
-      name, description, startDate, endDate, tierScope, tiers, totalScratchLimit, perUserScratchLimit, rewards
+    const {
+      tierId,
+      rewardType,
+      minCoins,
+      maxCoins,
+      giftId,
+      active,
+      productScope,
+      products,
+      gifts,
+      name,
+      description,
+      startDate,
+      endDate,
+      tierScope,
+      tiers,
+      totalScratchLimit,
+      perUserScratchLimit,
+      rewards,
     } = data;
-    
+
     const newRule = await ScratchCardRule.create({
       tierId: tierId || null,
       rewardType: rewardType || "GIFT",
       minCoins: rewardType === "POINTS" ? Number(minCoins) : 0,
       maxCoins: rewardType === "POINTS" ? Number(maxCoins) : 0,
-      giftId: rewardType === "GIFT" ? (giftId || null) : null,
+      giftId: rewardType === "GIFT" ? giftId || null : null,
       productScope: productScope || "EVERY_PRODUCT",
       products: products || [],
       gifts: gifts || [],
@@ -658,8 +817,10 @@ exports.createScratchCardRule = async (data) => {
       endDate: endDate || null,
       tierScope: tierScope || "ALL_TIERS",
       tiers: tiers || [],
-      totalScratchLimit: totalScratchLimit !== undefined ? Number(totalScratchLimit) : 0,
-      perUserScratchLimit: perUserScratchLimit !== undefined ? Number(perUserScratchLimit) : 0,
+      totalScratchLimit:
+        totalScratchLimit !== undefined ? Number(totalScratchLimit) : 0,
+      perUserScratchLimit:
+        perUserScratchLimit !== undefined ? Number(perUserScratchLimit) : 0,
       rewards: rewards || [],
     });
 
@@ -678,7 +839,11 @@ exports.createScratchCardRule = async (data) => {
       .populate("tiers")
       .lean();
 
-    return { success: true, message: "Scratch card rule created successfully", data: populated };
+    return {
+      success: true,
+      message: "Scratch card rule created successfully",
+      data: populated,
+    };
   } catch (error) {
     return { success: false, message: error.message };
   }
@@ -686,20 +851,53 @@ exports.createScratchCardRule = async (data) => {
 
 exports.updateScratchCardRule = async (id, data) => {
   try {
-    const { 
-      tierId, rewardType, minCoins, maxCoins, giftId, active, productScope, products, gifts,
-      name, description, startDate, endDate, tierScope, tiers, totalScratchLimit, perUserScratchLimit, rewards
+    const {
+      tierId,
+      rewardType,
+      minCoins,
+      maxCoins,
+      giftId,
+      active,
+      productScope,
+      products,
+      gifts,
+      name,
+      description,
+      startDate,
+      endDate,
+      tierScope,
+      tiers,
+      totalScratchLimit,
+      perUserScratchLimit,
+      rewards,
     } = data;
     const rule = await ScratchCardRule.findById(id);
-    if (!rule) return { success: false, message: "Scratch card rule not found" };
+    if (!rule)
+      return { success: false, message: "Scratch card rule not found" };
 
-    const finalRewardType = rewardType !== undefined ? rewardType : rule.rewardType;
+    const finalRewardType =
+      rewardType !== undefined ? rewardType : rule.rewardType;
 
     if (tierId !== undefined) rule.tierId = tierId || null;
     if (rewardType !== undefined) rule.rewardType = rewardType;
-    rule.minCoins = finalRewardType === "POINTS" ? (minCoins !== undefined ? Number(minCoins) : rule.minCoins) : 0;
-    rule.maxCoins = finalRewardType === "POINTS" ? (maxCoins !== undefined ? Number(maxCoins) : rule.maxCoins) : 0;
-    rule.giftId = finalRewardType === "GIFT" ? (giftId !== undefined ? giftId : rule.giftId) : null;
+    rule.minCoins =
+      finalRewardType === "POINTS"
+        ? minCoins !== undefined
+          ? Number(minCoins)
+          : rule.minCoins
+        : 0;
+    rule.maxCoins =
+      finalRewardType === "POINTS"
+        ? maxCoins !== undefined
+          ? Number(maxCoins)
+          : rule.maxCoins
+        : 0;
+    rule.giftId =
+      finalRewardType === "GIFT"
+        ? giftId !== undefined
+          ? giftId
+          : rule.giftId
+        : null;
     if (active !== undefined) rule.active = active;
     if (productScope !== undefined) rule.productScope = productScope;
     if (products !== undefined) rule.products = products;
@@ -712,8 +910,10 @@ exports.updateScratchCardRule = async (id, data) => {
     if (endDate !== undefined) rule.endDate = endDate || null;
     if (tierScope !== undefined) rule.tierScope = tierScope;
     if (tiers !== undefined) rule.tiers = tiers;
-    if (totalScratchLimit !== undefined) rule.totalScratchLimit = Number(totalScratchLimit);
-    if (perUserScratchLimit !== undefined) rule.perUserScratchLimit = Number(perUserScratchLimit);
+    if (totalScratchLimit !== undefined)
+      rule.totalScratchLimit = Number(totalScratchLimit);
+    if (perUserScratchLimit !== undefined)
+      rule.perUserScratchLimit = Number(perUserScratchLimit);
     if (rewards !== undefined) rule.rewards = rewards;
 
     await rule.save();
@@ -733,7 +933,11 @@ exports.updateScratchCardRule = async (id, data) => {
       .populate("tiers")
       .lean();
 
-    return { success: true, message: "Scratch card rule updated successfully", data: populated };
+    return {
+      success: true,
+      message: "Scratch card rule updated successfully",
+      data: populated,
+    };
   } catch (error) {
     return { success: false, message: error.message };
   }
@@ -742,7 +946,8 @@ exports.updateScratchCardRule = async (id, data) => {
 exports.deleteScratchCardRule = async (id) => {
   try {
     const rule = await ScratchCardRule.findByIdAndDelete(id);
-    if (!rule) return { success: false, message: "Scratch card rule not found" };
+    if (!rule)
+      return { success: false, message: "Scratch card rule not found" };
     return { success: true, message: "Scratch card rule deleted successfully" };
   } catch (error) {
     return { success: false, message: error.message };

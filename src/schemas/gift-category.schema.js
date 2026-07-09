@@ -6,7 +6,7 @@ const giftCategorySchema = new mongoose.Schema(
     description: { type: String },
     active: { type: Boolean, default: true },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 const GiftCategory = mongoose.model("GiftCategory", giftCategorySchema);

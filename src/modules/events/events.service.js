@@ -1,5 +1,8 @@
 const { Event, EVENT_STATUS } = require("../../schemas/event.schema");
-const { EventRegistration, ATTENDANCE_STATUS } = require("../../schemas/event-registration.schema");
+const {
+  EventRegistration,
+  ATTENDANCE_STATUS,
+} = require("../../schemas/event-registration.schema");
 const User = require("../../schemas/user.schema");
 const { attachId } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
@@ -17,15 +20,19 @@ async function syncEventStatuses() {
   const nowDate = new Date();
   await Event.updateMany(
     { date: { $gt: nowDate }, status: { $ne: EVENT_STATUS.UPCOMING } },
-    { $set: { status: EVENT_STATUS.UPCOMING } }
+    { $set: { status: EVENT_STATUS.UPCOMING } },
   );
   await Event.updateMany(
-    { date: { $lte: nowDate }, endDate: { $gte: nowDate }, status: { $ne: EVENT_STATUS.ONGOING } },
-    { $set: { status: EVENT_STATUS.ONGOING } }
+    {
+      date: { $lte: nowDate },
+      endDate: { $gte: nowDate },
+      status: { $ne: EVENT_STATUS.ONGOING },
+    },
+    { $set: { status: EVENT_STATUS.ONGOING } },
   );
   await Event.updateMany(
     { endDate: { $lt: nowDate }, status: { $ne: EVENT_STATUS.COMPLETED } },
-    { $set: { status: EVENT_STATUS.COMPLETED } }
+    { $set: { status: EVENT_STATUS.COMPLETED } },
   );
 }
 
@@ -73,7 +80,9 @@ async function adminDeleteEvent(eventId) {
 
 async function adminListEvents(query = {}) {
   // Fire sync in background — never block the response
-  syncEventStatuses().catch((err) => console.error("syncEventStatuses error:", err));
+  syncEventStatuses().catch((err) =>
+    console.error("syncEventStatuses error:", err),
+  );
 
   const { page = 1, limit = 20, status } = query;
   const skip = (page - 1) * limit;
@@ -86,7 +95,9 @@ async function adminListEvents(query = {}) {
   return {
     data: {
       events: attachId(events),
-      page, limit, total,
+      page,
+      limit,
+      total,
       totalPages: Math.ceil(total / limit),
     },
   };
@@ -99,7 +110,13 @@ async function adminGetEventDetails(eventId) {
     .populate({ path: "userId", select: "name phoneNumber email profileImage" })
     .sort({ createdAt: -1 })
     .lean();
-  return { data: { ...event, registrationCount: registrations.length, registrations: attachId(registrations) } };
+  return {
+    data: {
+      ...event,
+      registrationCount: registrations.length,
+      registrations: attachId(registrations),
+    },
+  };
 }
 
 /**
@@ -125,7 +142,10 @@ async function adminInviteUser(eventId, userId) {
       { type: "EVENT_INVITATION", eventId: eventId.toString() },
     ).catch(() => {});
   }
-  return { message: "User invited", data: { registrationId: reg.registrationId } };
+  return {
+    message: "User invited",
+    data: { registrationId: reg.registrationId },
+  };
 }
 
 /**
@@ -137,13 +157,18 @@ async function adminCheckIn(registrationId) {
   reg.attendanceStatus = ATTENDANCE_STATUS.CHECKED_IN;
   reg.checkedInAt = new Date();
   await reg.save();
-  return { message: "Checked in", data: { attendanceStatus: reg.attendanceStatus } };
+  return {
+    message: "Checked in",
+    data: { attendanceStatus: reg.attendanceStatus },
+  };
 }
 
 // ─── User ─────────────────────────────────────────────────────────────────────
 async function userListEvents(query = {}, userId = null) {
   // Fire sync in background — never block the response
-  syncEventStatuses().catch((err) => console.error("syncEventStatuses error:", err));
+  syncEventStatuses().catch((err) =>
+    console.error("syncEventStatuses error:", err),
+  );
   const { lat, lng, state, country } = query;
 
   // My events & registered event IDs (Passes)
@@ -183,7 +208,9 @@ async function userListEvents(query = {}, userId = null) {
             query: {
               active: true,
               status: { $in: [EVENT_STATUS.UPCOMING, EVENT_STATUS.ONGOING] },
-              ...(registeredEventIds.length > 0 ? { _id: { $nin: registeredEventIds } } : {}),
+              ...(registeredEventIds.length > 0
+                ? { _id: { $nin: registeredEventIds } }
+                : {}),
             },
           },
         },
@@ -197,7 +224,10 @@ async function userListEvents(query = {}, userId = null) {
       }));
       nearby.forEach((ev) => nearbyIds.push(ev._id));
     } catch (geoErr) {
-      console.error("Geo query failed, falling back to location-filtered events:", geoErr.message);
+      console.error(
+        "Geo query failed, falling back to location-filtered events:",
+        geoErr.message,
+      );
     }
   }
 
@@ -248,7 +278,6 @@ async function userListEvents(query = {}, userId = null) {
   };
 }
 
-
 async function userGetEventDetails(eventId, userId) {
   const event = await Event.findById(eventId).lean();
   if (!event) sendFailResponse("Event not found", 404);
@@ -257,8 +286,14 @@ async function userGetEventDetails(eventId, userId) {
   let userRegistration = null;
   let isEligible = true;
   if (userId) {
-    userRegistration = await EventRegistration.findOne({ eventId, userId }).lean();
-    if (event.isInvitationOnly && (!userRegistration || !userRegistration.isInvited)) {
+    userRegistration = await EventRegistration.findOne({
+      eventId,
+      userId,
+    }).lean();
+    if (
+      event.isInvitationOnly &&
+      (!userRegistration || !userRegistration.isInvited)
+    ) {
       isEligible = false;
     }
   }
@@ -277,7 +312,10 @@ async function userRegisterForEvent(eventId, userId) {
   const event = await Event.findById(eventId);
   if (!event) sendFailResponse("Event not found", 404);
   if (!event.active) sendFailResponse("Event is not active", 400);
-  if (event.registrationDeadline && new Date(event.registrationDeadline) < new Date()) {
+  if (
+    event.registrationDeadline &&
+    new Date(event.registrationDeadline) < new Date()
+  ) {
     sendFailResponse("Registration deadline has passed", 400);
   }
 
@@ -291,7 +329,9 @@ async function userRegisterForEvent(eventId, userId) {
 
   // Capacity check
   if (event.capacity) {
-    const registrationCount = await EventRegistration.countDocuments({ eventId });
+    const registrationCount = await EventRegistration.countDocuments({
+      eventId,
+    });
     if (registrationCount >= event.capacity) {
       sendFailResponse("Event is at full capacity", 400);
     }

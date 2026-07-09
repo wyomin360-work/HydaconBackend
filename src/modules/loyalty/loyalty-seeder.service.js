@@ -2,7 +2,9 @@ const Tier = require("../../schemas/tier.schema");
 const LoyaltySeason = require("../../schemas/loyalty-season.schema");
 const TierConfiguration = require("../../schemas/tier-configuration.schema");
 const { resolveActiveSeason } = require("./loyalty-season.service");
-const { recalculateTierConfigurationThresholds } = require("./loyalty-tier.service");
+const {
+  recalculateTierConfigurationThresholds,
+} = require("./loyalty-tier.service");
 
 /**
  * Automatically seeds default tiers and active season if none exist.

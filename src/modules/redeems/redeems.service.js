@@ -192,7 +192,8 @@ async function createRedeem(redeemData, reqUser = null) {
       if (rewardType === "GIFT") {
         const configDoc = await AppConfig.findOne().lean();
         const settings = configDoc?.scratchCardSettings;
-        const hasGiftPool = settings?.selectedGiftIds && settings.selectedGiftIds.length > 0;
+        const hasGiftPool =
+          settings?.selectedGiftIds && settings.selectedGiftIds.length > 0;
         let giftQuery = { active: true, stockQuantity: { $gt: 0 } };
         if (hasGiftPool) {
           giftQuery._id = { $in: settings.selectedGiftIds };
@@ -218,9 +219,11 @@ async function createRedeem(redeemData, reqUser = null) {
     } else {
       let userTierId = null;
       if (activeSeason) {
-        const userProgress = await loyaltyService.getOrCreateUserProgress(userId);
+        const userProgress =
+          await loyaltyService.getOrCreateUserProgress(userId);
         if (userProgress) {
-          userTierId = userProgress.currentTierId?._id || userProgress.currentTierId;
+          userTierId =
+            userProgress.currentTierId?._id || userProgress.currentTierId;
         }
       }
       if (!userTierId && user.currentTierId) {
@@ -232,16 +235,17 @@ async function createRedeem(redeemData, reqUser = null) {
 
       // 1. Fetch active campaigns
       const campaigns = await ScratchCardRule.find({ active: true }).lean();
-      
+
       for (const campaign of campaigns) {
         // A. Check date scope
         const nowTime = new Date();
-        if (campaign.startDate && new Date(campaign.startDate) > nowTime) continue;
+        if (campaign.startDate && new Date(campaign.startDate) > nowTime)
+          continue;
         if (campaign.endDate && new Date(campaign.endDate) < nowTime) continue;
 
         // B. Check Tier eligibility
         if (campaign.tierScope === "SELECTED_TIERS") {
-          const tierStrList = (campaign.tiers || []).map(t => String(t));
+          const tierStrList = (campaign.tiers || []).map((t) => String(t));
           if (!userTierId || !tierStrList.includes(String(userTierId))) {
             continue;
           }
@@ -249,20 +253,28 @@ async function createRedeem(redeemData, reqUser = null) {
 
         // C. Check Product eligibility
         if (campaign.productScope === "SELECTED_PRODUCTS") {
-          const prodStrList = (campaign.products || []).map(p => String(p));
-          if (!actualProductId || !prodStrList.includes(String(actualProductId))) {
+          const prodStrList = (campaign.products || []).map((p) => String(p));
+          if (
+            !actualProductId ||
+            !prodStrList.includes(String(actualProductId))
+          ) {
             continue;
           }
         }
 
         // D. Check Scratch Limits
         if (campaign.totalScratchLimit > 0) {
-          const totalScans = await Redeem.countDocuments({ scratchCardCampaignId: campaign._id });
+          const totalScans = await Redeem.countDocuments({
+            scratchCardCampaignId: campaign._id,
+          });
           if (totalScans >= campaign.totalScratchLimit) continue;
         }
 
         if (campaign.perUserScratchLimit > 0) {
-          const userScans = await Redeem.countDocuments({ userId, scratchCardCampaignId: campaign._id });
+          const userScans = await Redeem.countDocuments({
+            userId,
+            scratchCardCampaignId: campaign._id,
+          });
           if (userScans >= campaign.perUserScratchLimit) continue;
         }
 
@@ -272,11 +284,19 @@ async function createRedeem(redeemData, reqUser = null) {
         break;
       }
 
-      if (campaignMatched && matchedCampaign && matchedCampaign.rewards && matchedCampaign.rewards.length > 0) {
+      if (
+        campaignMatched &&
+        matchedCampaign &&
+        matchedCampaign.rewards &&
+        matchedCampaign.rewards.length > 0
+      ) {
         // E. Weight probability reward selection
         const pool = matchedCampaign.rewards;
-        const totalProb = pool.reduce((sum, r) => sum + (r.probability || 0), 0);
-        
+        const totalProb = pool.reduce(
+          (sum, r) => sum + (r.probability || 0),
+          0,
+        );
+
         // Pick a random number between 0 and totalProb (or 100)
         const randVal = Math.random() * (totalProb || 100);
         let cumulative = 0;
@@ -316,7 +336,7 @@ async function createRedeem(redeemData, reqUser = null) {
             if (chosenReward.stockLimit > 0) {
               const giftAwardedCount = await Redeem.countDocuments({
                 scratchCardCampaignId: matchedCampaign._id,
-                scratchCardGiftId: chosenGift._id
+                scratchCardGiftId: chosenGift._id,
               });
               if (giftAwardedCount >= chosenReward.stockLimit) {
                 // Exhausted - fallback to POINTS 0
@@ -327,7 +347,8 @@ async function createRedeem(redeemData, reqUser = null) {
                 rewardType = "GIFT";
               }
             } else {
-              const availableStock = chosenGift.stockQuantity - chosenGift.reservedQuantity;
+              const availableStock =
+                chosenGift.stockQuantity - chosenGift.reservedQuantity;
               if (availableStock > 0) {
                 rewardType = "GIFT";
               } else {
@@ -344,13 +365,18 @@ async function createRedeem(redeemData, reqUser = null) {
         }
       } else if (userTierId && mongoose.Types.ObjectId.isValid(userTierId)) {
         // Fallback to legacy Scratch Card Rule (matching tierId directly)
-        const tierRules = await ScratchCardRule.find({ tierId: userTierId, active: true }).lean();
+        const tierRules = await ScratchCardRule.find({
+          tierId: userTierId,
+          active: true,
+        }).lean();
         if (tierRules && tierRules.length > 0) {
           const rule = tierRules[Math.floor(Math.random() * tierRules.length)];
-          
+
           if (rule.rewardType === "GIFT" && rule.giftId) {
             chosenGift = await Gift.findById(rule.giftId);
-            const availableStock = chosenGift ? chosenGift.stockQuantity - chosenGift.reservedQuantity : 0;
+            const availableStock = chosenGift
+              ? chosenGift.stockQuantity - chosenGift.reservedQuantity
+              : 0;
             if (chosenGift && chosenGift.active && availableStock > 0) {
               rewardType = "GIFT";
             } else {
@@ -373,7 +399,8 @@ async function createRedeem(redeemData, reqUser = null) {
         const configDoc = await AppConfig.findOne().lean();
         const settings = configDoc?.scratchCardSettings;
         const giftProbability = (settings?.giftProbability ?? 50) / 100;
-        const hasGiftPool = settings?.selectedGiftIds && settings.selectedGiftIds.length > 0;
+        const hasGiftPool =
+          settings?.selectedGiftIds && settings.selectedGiftIds.length > 0;
 
         let giftQuery = { active: true, stockQuantity: { $gt: 0 } };
         if (hasGiftPool) {
@@ -409,7 +436,6 @@ async function createRedeem(redeemData, reqUser = null) {
     console.error("Error determining scratch card reward:", error);
   }
   // ─────────────────────────────────────────────────────────────────────────
-
 
   const newRedeem = await Redeem.create({
     userId,
@@ -452,11 +478,20 @@ async function createRedeem(redeemData, reqUser = null) {
   await reward.save();
 
   // Process QP & Tier Upgrade in loyalty engine
-  const updatedProgress = await loyaltyService.processQrScanPoints(userId, weightedPoints, newRedeem._id);
+  const updatedProgress = await loyaltyService.processQrScanPoints(
+    userId,
+    weightedPoints,
+    newRedeem._id,
+  );
   // Sync user's contest entries with new qualification points (non-blocking)
   const contestsService = require("../contests/contests.service");
-  const userTierId = updatedProgress?.currentTierId?._id || updatedProgress?.currentTierId || user?.currentTierId;
-  contestsService.syncUserContestEntries(userId, weightedPoints, actualProductId, userTierId).catch(() => {});
+  const userTierId =
+    updatedProgress?.currentTierId?._id ||
+    updatedProgress?.currentTierId ||
+    user?.currentTierId;
+  contestsService
+    .syncUserContestEntries(userId, weightedPoints, actualProductId, userTierId)
+    .catch(() => {});
   if (user?.fcmTokens?.length && user?.enableNotification) {
     await sendFcmNotifications(
       user.fcmTokens,
@@ -480,13 +515,19 @@ async function createRedeem(redeemData, reqUser = null) {
         skipQpSync: true, // Scratch card bonus points must NOT contribute to tier upgrades
         skipLifetimePoints: true,
         source: LOYALTY_TRANSACTION_SOURCES.SCRATCH_CARD_BONUS,
-      }
+      },
     );
   }
 
   // Update in-memory user properties for tracking/testing compatibility
-  user.totalPoints = (user.totalPoints || 0) + weightedPoints + (rewardType === "POINTS" ? bonusPoints : 0);
-  user.lifetimePoints = (user.lifetimePoints || 0) + weightedPoints + (rewardType === "POINTS" ? bonusPoints : 0);
+  user.totalPoints =
+    (user.totalPoints || 0) +
+    weightedPoints +
+    (rewardType === "POINTS" ? bonusPoints : 0);
+  user.lifetimePoints =
+    (user.lifetimePoints || 0) +
+    weightedPoints +
+    (rewardType === "POINTS" ? bonusPoints : 0);
   user.totalScans = (user.totalScans || 0) + 1;
   user.failedScanAttempts = 0;
   user.scanBanUntil = null;
@@ -499,14 +540,17 @@ async function createRedeem(redeemData, reqUser = null) {
       redeemSuccessful: true,
       showScratchCard,
       rewardType,
-      gift: chosenGift ? {
-        id: chosenGift._id,
-        name: chosenGift.name,
-        image: chosenGift.image,
-      } : null,
+      gift: chosenGift
+        ? {
+            id: chosenGift._id,
+            name: chosenGift.name,
+            image: chosenGift.image,
+          }
+        : null,
       pointsRewarded: weightedPoints,
       bonusPoints: rewardType === "POINTS" ? bonusPoints : 0,
-      totalPointsAwarded: weightedPoints + (rewardType === "POINTS" ? bonusPoints : 0),
+      totalPointsAwarded:
+        weightedPoints + (rewardType === "POINTS" ? bonusPoints : 0),
       updatedPointsBalance,
       redeemId: newRedeem._id,
       cardBg: bgColor,
