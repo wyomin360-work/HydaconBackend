@@ -136,7 +136,14 @@ async function listRewards(data) {
 }
 
 async function listRewardsGroupedByDate(data) {
-  const { page = 1, limit = 20, productId, startDate, endDate, filters = {} } = data;
+  const {
+    page = 1,
+    limit = 20,
+    productId,
+    startDate,
+    endDate,
+    filters = {},
+  } = data;
   const skip = (page - 1) * limit;
 
   const matchQuery = {};
@@ -226,13 +233,13 @@ async function listRewardsGroupedByDate(data) {
         localField: "_id.productId",
         foreignField: "_id",
         as: "product",
-      }
+      },
     },
     {
       $unwind: {
         path: "$product",
         preserveNullAndEmptyArrays: true,
-      }
+      },
     },
     {
       $project: {
@@ -243,7 +250,7 @@ async function listRewardsGroupedByDate(data) {
         activeCount: 1,
         inactiveCount: 1,
         totalCount: 1,
-      }
+      },
     },
     { $sort: { date: -1 } },
     {

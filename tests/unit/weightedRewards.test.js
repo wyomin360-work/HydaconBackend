@@ -1,4 +1,7 @@
-const { createRedeem, claimGift } = require("../../src/modules/redeems/redeems.service");
+const {
+  createRedeem,
+  claimGift,
+} = require("../../src/modules/redeems/redeems.service");
 const User = require("../../src/schemas/user.schema");
 const Role = require("../../src/schemas/role.schema");
 const Product = require("../../src/schemas/product.schema");
@@ -61,7 +64,10 @@ jest.mock("../../src/modules/loyalty/loyalty.service", () => ({
   }),
   processQrScanPoints: jest.fn().mockResolvedValue(true),
   resolveActiveSeason: jest.fn().mockResolvedValue({ _id: "season123" }),
-  addBonusPoints: jest.fn().mockResolvedValue({ message: "Bonus points successfully added", points: 50 }),
+  addBonusPoints: jest.fn().mockResolvedValue({
+    message: "Bonus points successfully added",
+    points: 50,
+  }),
 }));
 
 describe("Weighted Rewards Calculation", () => {
@@ -164,8 +170,8 @@ describe("Weighted Rewards Calculation", () => {
       expect.objectContaining({
         skipQpSync: true,
         skipLifetimePoints: true,
-        source: "SCRATCH_CARD_BONUS"
-      })
+        source: "SCRATCH_CARD_BONUS",
+      }),
     );
   });
 
@@ -330,7 +336,9 @@ describe("Weighted Rewards Calculation", () => {
       },
     };
 
-    const response = await claimGift("redeem123", claimData, { _id: "user123" });
+    const response = await claimGift("redeem123", claimData, {
+      _id: "user123",
+    });
 
     expect(response.message).toBe("Gift claimed successfully");
     expect(mockRedeem.scratchCardGiftClaimed).toBe(true);

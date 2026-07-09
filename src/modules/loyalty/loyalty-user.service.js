@@ -106,7 +106,13 @@ async function processQrScanPoints(userId, points, referenceId) {
 /**
  * Awards campaign points affecting ONLY redeemable balance (no tier impact).
  */
-async function addBonusPoints(userId, points, description, referenceId = null, options = {}) {
+async function addBonusPoints(
+  userId,
+  points,
+  description,
+  referenceId = null,
+  options = {},
+) {
   const user = await User.findById(userId);
   if (!user) sendFailResponse("User not found");
 

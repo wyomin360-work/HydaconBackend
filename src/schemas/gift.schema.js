@@ -10,7 +10,7 @@ const rewardRulesSchema = new mongoose.Schema(
     minScansThisMonth: { type: Number, default: 0 },
     regionRestrictions: [{ type: String }],
   },
-  { _id: false }
+  { _id: false },
 );
 
 const giftSchema = new mongoose.Schema(
@@ -32,7 +32,7 @@ const giftSchema = new mongoose.Schema(
       default: () => ({}),
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 const Gift = mongoose.model("Gift", giftSchema);

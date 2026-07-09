@@ -54,5 +54,8 @@ eventRegistrationSchema.virtual("user", {
 eventRegistrationSchema.set("toJSON", { virtuals: true });
 eventRegistrationSchema.set("toObject", { virtuals: true });
 
-const EventRegistration = mongoose.model("EventRegistration", eventRegistrationSchema);
+const EventRegistration = mongoose.model(
+  "EventRegistration",
+  eventRegistrationSchema,
+);
 module.exports = { EventRegistration, ATTENDANCE_STATUS };

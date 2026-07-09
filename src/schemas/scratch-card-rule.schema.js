@@ -123,8 +123,11 @@ const scratchCardRuleSchema = new mongoose.Schema(
         return ret;
       },
     },
-  }
+  },
 );
 
-const ScratchCardRule = mongoose.model("ScratchCardRule", scratchCardRuleSchema);
+const ScratchCardRule = mongoose.model(
+  "ScratchCardRule",
+  scratchCardRuleSchema,
+);
 module.exports = ScratchCardRule;

@@ -3,15 +3,23 @@ const { sendResponse } = require("../../utils/responseHandlers");
 
 // Admin
 exports.adminCreateContest = async (req, res) => {
-  const response = await contestsService.adminCreateContest(req.body, req.admin?._id);
+  const response = await contestsService.adminCreateContest(
+    req.body,
+    req.admin?._id,
+  );
   return sendResponse(res, response);
 };
 exports.adminUpdateContest = async (req, res) => {
-  const response = await contestsService.adminUpdateContest(req.params.contestId, req.body);
+  const response = await contestsService.adminUpdateContest(
+    req.params.contestId,
+    req.body,
+  );
   return sendResponse(res, response);
 };
 exports.adminDeleteContest = async (req, res) => {
-  const response = await contestsService.adminDeleteContest(req.params.contestId);
+  const response = await contestsService.adminDeleteContest(
+    req.params.contestId,
+  );
   return sendResponse(res, response);
 };
 exports.adminListContests = async (req, res) => {
@@ -19,11 +27,15 @@ exports.adminListContests = async (req, res) => {
   return sendResponse(res, response);
 };
 exports.adminGetContestDetails = async (req, res) => {
-  const response = await contestsService.adminGetContestDetails(req.params.contestId);
+  const response = await contestsService.adminGetContestDetails(
+    req.params.contestId,
+  );
   return sendResponse(res, response);
 };
 exports.adminFinaliseContest = async (req, res) => {
-  const response = await contestsService.adminFinaliseContest(req.params.contestId);
+  const response = await contestsService.adminFinaliseContest(
+    req.params.contestId,
+  );
   return sendResponse(res, response);
 };
 
@@ -35,11 +47,16 @@ exports.userListContests = async (req, res) => {
 };
 exports.userGetContestDetails = async (req, res) => {
   const userId = req.user?._id || req.user?.id;
-  const response = await contestsService.userGetContestDetails(req.params.contestId, userId);
+  const response = await contestsService.userGetContestDetails(
+    req.params.contestId,
+    userId,
+  );
   return sendResponse(res, response);
 };
 exports.userGetLeaderboard = async (req, res) => {
-  const response = await contestsService.userGetLeaderboard(req.params.contestId);
+  const response = await contestsService.userGetLeaderboard(
+    req.params.contestId,
+  );
   return sendResponse(res, response);
 };
 exports.generalLeaderboard = async (req, res) => {
@@ -49,6 +66,9 @@ exports.generalLeaderboard = async (req, res) => {
 };
 exports.userClaimReward = async (req, res) => {
   const userId = req.user?._id || req.user?.id;
-  const response = await contestsService.userClaimReward(req.params.contestId, userId);
+  const response = await contestsService.userClaimReward(
+    req.params.contestId,
+    userId,
+  );
   return sendResponse(res, response);
 };

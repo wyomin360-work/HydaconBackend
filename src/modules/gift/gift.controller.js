@@ -115,7 +115,10 @@ exports.getGiftEligibility = async (req, res) => {
 exports.getUserRedemptionDetails = async (req, res) => {
   const redemptionId = req.params?.redemptionId;
   const userId = req.userId;
-  const response = await giftService.getUserRedemptionDetails(userId, redemptionId);
+  const response = await giftService.getUserRedemptionDetails(
+    userId,
+    redemptionId,
+  );
   return sendResponse(res, response);
 };
 
