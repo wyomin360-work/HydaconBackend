@@ -31,6 +31,8 @@ exports.getMyReferrals = async (req, res) => {
  * Reminder is delivered client-side; this is an acknowledgement endpoint.
  */
 exports.sendMobileReferralReminder = async (req, res) => {
-  const response = await referralService.sendReminderByUserId(req.body.referredUserId);
+  const response = await referralService.sendReminderByUserId(
+    req.body.referredUserId,
+  );
   return sendResponse(res, response);
 };

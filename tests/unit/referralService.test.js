@@ -104,9 +104,9 @@ describe("getMobileReferralStats", () => {
     });
     User.find.mockReturnValue({
       select: jest.fn().mockReturnValue({
-        lean: jest.fn().mockResolvedValue([
-          { totalScans: 0, kycStatus: "NOT_STARTED" },
-        ]),
+        lean: jest
+          .fn()
+          .mockResolvedValue([{ totalScans: 0, kycStatus: "NOT_STARTED" }]),
       }),
     });
 
@@ -156,9 +156,11 @@ describe("getMobileReferralList", () => {
     User.find.mockReturnValue({
       select: jest.fn().mockReturnThis(),
       sort: jest.fn().mockReturnThis(),
-      lean: jest.fn().mockResolvedValue([
-        makeUser({ id: userId, totalScans: 5, kycStatus: "VERIFIED" }),
-      ]),
+      lean: jest
+        .fn()
+        .mockResolvedValue([
+          makeUser({ id: userId, totalScans: 5, kycStatus: "VERIFIED" }),
+        ]),
     });
 
     const [entry] = await referralService.getMobileReferralList("inviter1");
@@ -172,9 +174,11 @@ describe("getMobileReferralList", () => {
     User.find.mockReturnValue({
       select: jest.fn().mockReturnThis(),
       sort: jest.fn().mockReturnThis(),
-      lean: jest.fn().mockResolvedValue([
-        makeUser({ totalScans: 0, kycStatus: "VERIFIED" }),
-      ]),
+      lean: jest
+        .fn()
+        .mockResolvedValue([
+          makeUser({ totalScans: 0, kycStatus: "VERIFIED" }),
+        ]),
     });
 
     const [entry] = await referralService.getMobileReferralList("inviter1");
@@ -187,9 +191,11 @@ describe("getMobileReferralList", () => {
     User.find.mockReturnValue({
       select: jest.fn().mockReturnThis(),
       sort: jest.fn().mockReturnThis(),
-      lean: jest.fn().mockResolvedValue([
-        makeUser({ totalScans: 0, kycStatus: "NOT_STARTED" }),
-      ]),
+      lean: jest
+        .fn()
+        .mockResolvedValue([
+          makeUser({ totalScans: 0, kycStatus: "NOT_STARTED" }),
+        ]),
     });
 
     const [entry] = await referralService.getMobileReferralList("inviter1");
@@ -202,9 +208,11 @@ describe("getMobileReferralList", () => {
     User.find.mockReturnValue({
       select: jest.fn().mockReturnThis(),
       sort: jest.fn().mockReturnThis(),
-      lean: jest.fn().mockResolvedValue([
-        makeUser({ name: undefined, phone: "9999988888" }),
-      ]),
+      lean: jest
+        .fn()
+        .mockResolvedValue([
+          makeUser({ name: undefined, phone: "9999988888" }),
+        ]),
     });
 
     const [entry] = await referralService.getMobileReferralList("inviter1");
@@ -216,9 +224,9 @@ describe("getMobileReferralList", () => {
     User.find.mockReturnValue({
       select: jest.fn().mockReturnThis(),
       sort: jest.fn().mockReturnThis(),
-      lean: jest.fn().mockResolvedValue([
-        makeUser({ name: undefined, phone: undefined }),
-      ]),
+      lean: jest
+        .fn()
+        .mockResolvedValue([makeUser({ name: undefined, phone: undefined })]),
     });
 
     const [entry] = await referralService.getMobileReferralList("inviter1");
@@ -230,9 +238,11 @@ describe("getMobileReferralList", () => {
     User.find.mockReturnValue({
       select: jest.fn().mockReturnThis(),
       sort: jest.fn().mockReturnThis(),
-      lean: jest.fn().mockResolvedValue([
-        makeUser({ createdAt: new Date("2024-03-05T00:00:00Z") }),
-      ]),
+      lean: jest
+        .fn()
+        .mockResolvedValue([
+          makeUser({ createdAt: new Date("2024-03-05T00:00:00Z") }),
+        ]),
     });
 
     const [entry] = await referralService.getMobileReferralList("inviter1");
@@ -244,9 +254,7 @@ describe("getMobileReferralList", () => {
     User.find.mockReturnValue({
       select: jest.fn().mockReturnThis(),
       sort: jest.fn().mockReturnThis(),
-      lean: jest.fn().mockResolvedValue([
-        makeUser({ createdAt: null }),
-      ]),
+      lean: jest.fn().mockResolvedValue([makeUser({ createdAt: null })]),
     });
 
     const [entry] = await referralService.getMobileReferralList("inviter1");
@@ -307,9 +315,9 @@ describe("sendReminderByUserId", () => {
       }),
     });
 
-    await expect(referralService.sendReminderByUserId("missing")).rejects.toThrow(
-      "User not found."
-    );
+    await expect(
+      referralService.sendReminderByUserId("missing"),
+    ).rejects.toThrow("User not found.");
   });
 });
 
@@ -325,7 +333,9 @@ describe("evaluateReferralReward", () => {
   };
 
   it("does nothing when no AppConfig exists", async () => {
-    AppConfig.findOne.mockReturnValue({ sort: jest.fn().mockResolvedValue(null) });
+    AppConfig.findOne.mockReturnValue({
+      sort: jest.fn().mockResolvedValue(null),
+    });
 
     await referralService.evaluateReferralReward("u1", 1);
 
@@ -343,7 +353,9 @@ describe("evaluateReferralReward", () => {
   });
 
   it("does nothing when scan count does not match any milestone", async () => {
-    mockConfig([{ requiredScans: 5, referrerRewardPoints: 50, refereeRewardPoints: 50 }]);
+    mockConfig([
+      { requiredScans: 5, referrerRewardPoints: 50, refereeRewardPoints: 50 },
+    ]);
 
     await referralService.evaluateReferralReward("u1", 3);
 
@@ -351,10 +363,15 @@ describe("evaluateReferralReward", () => {
   });
 
   it("credits both referee and referrer when milestone is first hit", async () => {
-    mockConfig([{ requiredScans: 10, referrerRewardPoints: 100, refereeRewardPoints: 75 }]);
+    mockConfig([
+      { requiredScans: 10, referrerRewardPoints: 100, refereeRewardPoints: 75 },
+    ]);
 
     const referrerId = "referrer1";
-    User.findOneAndUpdate.mockResolvedValue({ _id: "u1", referredBy: referrerId });
+    User.findOneAndUpdate.mockResolvedValue({
+      _id: "u1",
+      referredBy: referrerId,
+    });
     User.findByIdAndUpdate.mockResolvedValue({});
 
     await referralService.evaluateReferralReward("u1", 10);
@@ -366,24 +383,24 @@ describe("evaluateReferralReward", () => {
         referralRewardedMilestones: { $ne: 10 },
       }),
       { $addToSet: { referralRewardedMilestones: 10 } },
-      expect.any(Object)
+      expect.any(Object),
     );
 
     // Referee credited
-    expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
-      "u1",
-      { $inc: { totalPoints: 75, lifetimePoints: 75 } }
-    );
+    expect(User.findByIdAndUpdate).toHaveBeenCalledWith("u1", {
+      $inc: { totalPoints: 75, lifetimePoints: 75 },
+    });
 
     // Referrer credited
-    expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
-      referrerId,
-      { $inc: { totalPoints: 100, lifetimePoints: 100 } }
-    );
+    expect(User.findByIdAndUpdate).toHaveBeenCalledWith(referrerId, {
+      $inc: { totalPoints: 100, lifetimePoints: 100 },
+    });
   });
 
   it("does NOT credit again when milestone was already claimed (findOneAndUpdate returns null)", async () => {
-    mockConfig([{ requiredScans: 10, referrerRewardPoints: 100, refereeRewardPoints: 75 }]);
+    mockConfig([
+      { requiredScans: 10, referrerRewardPoints: 100, refereeRewardPoints: 75 },
+    ]);
 
     // Simulates the $ne guard blocking — returns null meaning already claimed
     User.findOneAndUpdate.mockResolvedValue(null);
@@ -394,7 +411,9 @@ describe("evaluateReferralReward", () => {
   });
 
   it("does NOT credit when user has no referredBy (not referred)", async () => {
-    mockConfig([{ requiredScans: 1, referrerRewardPoints: 50, refereeRewardPoints: 50 }]);
+    mockConfig([
+      { requiredScans: 1, referrerRewardPoints: 50, refereeRewardPoints: 50 },
+    ]);
 
     // findOneAndUpdate returns null because referredBy condition ($ne null) failed
     User.findOneAndUpdate.mockResolvedValue(null);
@@ -405,7 +424,9 @@ describe("evaluateReferralReward", () => {
   });
 
   it("skips referee credit when refereeRewardPoints is 0", async () => {
-    mockConfig([{ requiredScans: 5, referrerRewardPoints: 50, refereeRewardPoints: 0 }]);
+    mockConfig([
+      { requiredScans: 5, referrerRewardPoints: 50, refereeRewardPoints: 0 },
+    ]);
 
     User.findOneAndUpdate.mockResolvedValue({ referredBy: "ref1" });
     User.findByIdAndUpdate.mockResolvedValue({});
@@ -414,14 +435,15 @@ describe("evaluateReferralReward", () => {
 
     // Referrer still credited, referee skipped
     expect(User.findByIdAndUpdate).toHaveBeenCalledTimes(1);
-    expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
-      "ref1",
-      { $inc: { totalPoints: 50, lifetimePoints: 50 } }
-    );
+    expect(User.findByIdAndUpdate).toHaveBeenCalledWith("ref1", {
+      $inc: { totalPoints: 50, lifetimePoints: 50 },
+    });
   });
 
   it("skips referrer credit when referrerRewardPoints is 0", async () => {
-    mockConfig([{ requiredScans: 5, referrerRewardPoints: 0, refereeRewardPoints: 75 }]);
+    mockConfig([
+      { requiredScans: 5, referrerRewardPoints: 0, refereeRewardPoints: 75 },
+    ]);
 
     User.findOneAndUpdate.mockResolvedValue({ referredBy: "ref1" });
     User.findByIdAndUpdate.mockResolvedValue({});
@@ -430,17 +452,20 @@ describe("evaluateReferralReward", () => {
 
     // Referee credited, referrer skipped
     expect(User.findByIdAndUpdate).toHaveBeenCalledTimes(1);
-    expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
-      "u1",
-      { $inc: { totalPoints: 75, lifetimePoints: 75 } }
-    );
+    expect(User.findByIdAndUpdate).toHaveBeenCalledWith("u1", {
+      $inc: { totalPoints: 75, lifetimePoints: 75 },
+    });
   });
 
   it("matches the correct milestone when multiple are configured", async () => {
     mockConfig([
       { requiredScans: 1, referrerRewardPoints: 30, refereeRewardPoints: 20 },
       { requiredScans: 10, referrerRewardPoints: 100, refereeRewardPoints: 75 },
-      { requiredScans: 15, referrerRewardPoints: 200, refereeRewardPoints: 150 },
+      {
+        requiredScans: 15,
+        referrerRewardPoints: 200,
+        refereeRewardPoints: 150,
+      },
     ]);
 
     User.findOneAndUpdate.mockResolvedValue({ referredBy: "ref1" });
@@ -449,14 +474,12 @@ describe("evaluateReferralReward", () => {
     await referralService.evaluateReferralReward("u1", 10);
 
     // Only the 10-scan milestone values should be used
-    expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
-      "u1",
-      { $inc: { totalPoints: 75, lifetimePoints: 75 } }
-    );
-    expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
-      "ref1",
-      { $inc: { totalPoints: 100, lifetimePoints: 100 } }
-    );
+    expect(User.findByIdAndUpdate).toHaveBeenCalledWith("u1", {
+      $inc: { totalPoints: 75, lifetimePoints: 75 },
+    });
+    expect(User.findByIdAndUpdate).toHaveBeenCalledWith("ref1", {
+      $inc: { totalPoints: 100, lifetimePoints: 100 },
+    });
   });
 
   it("swallows errors and does not rethrow", async () => {
@@ -464,6 +487,8 @@ describe("evaluateReferralReward", () => {
       sort: jest.fn().mockRejectedValue(new Error("DB connection lost")),
     });
 
-    await expect(referralService.evaluateReferralReward("u1", 1)).resolves.toBeUndefined();
+    await expect(
+      referralService.evaluateReferralReward("u1", 1),
+    ).resolves.toBeUndefined();
   });
 });

@@ -1,4 +1,6 @@
-require("dotenv").config({ path: require("path").resolve(__dirname, "../../.env") });
+require("dotenv").config({
+  path: require("path").resolve(__dirname, "../../.env"),
+});
 
 const mongoose = require("mongoose");
 const Role = require("../schemas/role.schema");
@@ -13,7 +15,8 @@ const ROLES_TO_SEED = [
   },
   {
     name: "Contractor",
-    description: "Construction contractor who oversees and purchases Hydacon products",
+    description:
+      "Construction contractor who oversees and purchases Hydacon products",
     isActive: true,
     pointMultiplier: 5,
     permissions: [],
@@ -21,7 +24,8 @@ const ROLES_TO_SEED = [
 ];
 
 async function seedRoles() {
-  const MONGODB_URL = "mongodb+srv://josejobiin_db_user:ce0HFaSM7mecATMz@hydacon.tlgu5hs.mongodb.net/";
+  const MONGODB_URL =
+    "mongodb+srv://josejobiin_db_user:ce0HFaSM7mecATMz@hydacon.tlgu5hs.mongodb.net/";
   await mongoose.connect(MONGODB_URL);
   console.log("✅ Connected to MongoDB");
 

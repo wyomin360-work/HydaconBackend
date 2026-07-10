@@ -17,7 +17,9 @@ app.disable("etag"); // Always return 200 with body instead of 304 Not Modified
 
 // Log every incoming request in the console
 app.use((req, res, next) => {
-  console.log(`\x1b[36m[${new Date().toISOString()}]\x1b[0m \x1b[32m${req.method}\x1b[0m ${req.url}`);
+  console.log(
+    `\x1b[36m[${new Date().toISOString()}]\x1b[0m \x1b[32m${req.method}\x1b[0m ${req.url}`,
+  );
   next();
 });
 

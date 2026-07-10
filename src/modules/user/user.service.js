@@ -64,10 +64,14 @@ async function generateAndSaveToken(payload) {
 // Resolve Referrer by Code
 // ----------------------
 async function resolveReferrer(referralCode) {
-  if (!referralCode) return { isReferred: 0, referredById: null, referredByDetails: null };
+  if (!referralCode)
+    return { isReferred: 0, referredById: null, referredByDetails: null };
 
-  const referrer = await User.findOne({ referralCode: referralCode.trim().toUpperCase() }).lean();
-  if (!referrer) return { isReferred: 0, referredById: null, referredByDetails: null };
+  const referrer = await User.findOne({
+    referralCode: referralCode.trim().toUpperCase(),
+  }).lean();
+  if (!referrer)
+    return { isReferred: 0, referredById: null, referredByDetails: null };
 
   return {
     isReferred: 1,
@@ -84,12 +88,14 @@ async function resolveReferrer(referralCode) {
 // Register User
 // ----------------------
 async function registerUser(userData) {
-  const { name, email, password, avatarId, phone, roleId, referralCode } = userData;
+  const { name, email, password, avatarId, phone, roleId, referralCode } =
+    userData;
 
   const userExist = await User.findOne({ email });
   if (userExist) sendFailResponse("The mail id exist");
 
-  const { isReferred, referredById, referredByDetails } = await resolveReferrer(referralCode);
+  const { isReferred, referredById, referredByDetails } =
+    await resolveReferrer(referralCode);
 
   const user = await User.create({
     name,
@@ -101,7 +107,6 @@ async function registerUser(userData) {
     roleId,
     ...(referredById && { referredBy: referredById }),
   });
-
 
   const { refreshToken, accessToken } = await generateAndSaveToken({
     userId: user?._id,
@@ -189,7 +194,8 @@ async function providerAuth(data) {
   const userExist = await User.findOne({ email }).populate("roleId").lean();
 
   if (!userExist) {
-    const { isReferred, referredById, referredByDetails } = await resolveReferrer(data.referralCode);
+    const { isReferred, referredById, referredByDetails } =
+      await resolveReferrer(data.referralCode);
 
     const newUser = await User.create({
       email,
@@ -201,7 +207,6 @@ async function providerAuth(data) {
       roleId: data.roleId,
       ...(referredById && { referredBy: referredById }),
     });
-
 
     const { refreshToken, accessToken } = await generateAndSaveToken({
       userId: newUser?._id,

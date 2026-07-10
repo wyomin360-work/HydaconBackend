@@ -52,7 +52,12 @@ async function getMobileReferralList(inviterId) {
 
   return referredUsers.map((u) => {
     const scans = u.totalScans || 0;
-    const status = scans > 0 ? "scanned" : u.kycStatus === "VERIFIED" ? "kyc_done" : "joined";
+    const status =
+      scans > 0
+        ? "scanned"
+        : u.kycStatus === "VERIFIED"
+          ? "kyc_done"
+          : "joined";
     const points = scans > 0 ? 150 : status === "kyc_done" ? 50 : 0;
 
     return {
@@ -60,7 +65,9 @@ async function getMobileReferralList(inviterId) {
       referredUserId: u._id.toString(),
       name: u.name || u.phone || "Unknown User",
       phone: u.phone || "",
-      joinedDate: u.createdAt ? moment(u.createdAt).format("D MMM YYYY") : "Pending",
+      joinedDate: u.createdAt
+        ? moment(u.createdAt).format("D MMM YYYY")
+        : "Pending",
       status,
       pointsEarned: points,
       scans,
@@ -98,7 +105,9 @@ async function getMyReferrals(inviterId) {
  * @param {string} referredUserId
  */
 async function sendReminderByUserId(referredUserId) {
-  const referredUser = await User.findById(referredUserId).select("name").lean();
+  const referredUser = await User.findById(referredUserId)
+    .select("name")
+    .lean();
   if (!referredUser) sendFailResponse("User not found.", 404);
   // Actual reminder delivery is handled client-side via WhatsApp/SMS.
   return { message: "Reminder acknowledged.", data: { referredUserId } };
@@ -122,11 +131,12 @@ async function evaluateReferralReward(userId, userTotalScans) {
 
     // Find if the current scan count matches any configured milestone
     const matchedReward = activeConfig.referralRewards.find(
-      (r) => r.requiredScans === userTotalScans
+      (r) => r.requiredScans === userTotalScans,
     );
     if (!matchedReward) return;
 
-    const { referrerRewardPoints = 50, refereeRewardPoints = 50 } = matchedReward;
+    const { referrerRewardPoints = 50, refereeRewardPoints = 50 } =
+      matchedReward;
 
     // Atomically claim the milestone — only succeeds if it hasn't been claimed yet.
     // The $ne guard + $addToSet makes this safe against retries and race conditions.
@@ -137,7 +147,7 @@ async function evaluateReferralReward(userId, userTotalScans) {
         referralRewardedMilestones: { $ne: userTotalScans },
       },
       { $addToSet: { referralRewardedMilestones: userTotalScans } },
-      { new: true, select: "referredBy" }
+      { new: true, select: "referredBy" },
     );
 
     // If no document was returned, either:
@@ -150,14 +160,20 @@ async function evaluateReferralReward(userId, userTotalScans) {
     // Reward the referee (the user who was referred)
     if (refereeRewardPoints > 0) {
       await User.findByIdAndUpdate(userId, {
-        $inc: { totalPoints: refereeRewardPoints, lifetimePoints: refereeRewardPoints },
+        $inc: {
+          totalPoints: refereeRewardPoints,
+          lifetimePoints: refereeRewardPoints,
+        },
       });
     }
 
     // Reward the referrer (the user who shared the code)
     if (referrerRewardPoints > 0) {
       await User.findByIdAndUpdate(referrerId, {
-        $inc: { totalPoints: referrerRewardPoints, lifetimePoints: referrerRewardPoints },
+        $inc: {
+          totalPoints: referrerRewardPoints,
+          lifetimePoints: referrerRewardPoints,
+        },
       });
     }
   } catch (error) {

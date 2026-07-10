@@ -165,7 +165,9 @@ userSchema.pre("save", async function (next) {
     let attempts = 0;
     while (!isUnique && attempts < 10) {
       code = generateReferralCode();
-      const existing = await mongoose.model("User").findOne({ referralCode: code });
+      const existing = await mongoose
+        .model("User")
+        .findOne({ referralCode: code });
       if (!existing) isUnique = true;
       attempts++;
     }

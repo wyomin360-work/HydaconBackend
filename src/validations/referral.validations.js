@@ -17,7 +17,8 @@ const sendReferralRequestType = {
       phoneNumber: "Phone number is required.",
     },
     properties: {
-      phoneNumber: "Phone number must be 10–15 digits, with an optional leading '+'.",
+      phoneNumber:
+        "Phone number must be 10–15 digits, with an optional leading '+'.",
     },
   },
 };

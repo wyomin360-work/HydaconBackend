@@ -63,8 +63,8 @@ function applyInc(id, inc) {
 // ─── AppConfig with milestone rewards ────────────────────────────────────────
 
 const MILESTONE_CONFIG = [
-  { requiredScans: 1,  referrerRewardPoints: 30,  refereeRewardPoints: 20  },
-  { requiredScans: 10, referrerRewardPoints: 100, refereeRewardPoints: 75  },
+  { requiredScans: 1, referrerRewardPoints: 30, refereeRewardPoints: 20 },
+  { requiredScans: 10, referrerRewardPoints: 100, refereeRewardPoints: 75 },
   { requiredScans: 50, referrerRewardPoints: 200, refereeRewardPoints: 150 },
 ];
 
@@ -89,12 +89,18 @@ function wireMocks() {
   User.find.mockImplementation((query) => {
     let results = Object.values(db);
     if (query?.referredBy !== undefined) {
-      results = results.filter((u) => String(u.referredBy) === String(query.referredBy));
+      results = results.filter(
+        (u) => String(u.referredBy) === String(query.referredBy),
+      );
     }
     return {
       select: jest.fn().mockReturnThis(),
       sort: jest.fn().mockReturnThis(),
-      lean: jest.fn().mockResolvedValue(results.map((u) => ({ ...u, _id: { toString: () => u._id } }))),
+      lean: jest
+        .fn()
+        .mockResolvedValue(
+          results.map((u) => ({ ...u, _id: { toString: () => u._id } })),
+        ),
     };
   });
 
@@ -111,9 +117,13 @@ function wireMocks() {
     if (!user) return Promise.resolve(null);
 
     // Check all filter conditions
-    if (filter.referredBy?.$ne === null && !user.referredBy) return Promise.resolve(null);
+    if (filter.referredBy?.$ne === null && !user.referredBy)
+      return Promise.resolve(null);
     const milestone = filter.referralRewardedMilestones?.$ne;
-    if (milestone !== undefined && user.referralRewardedMilestones.includes(milestone)) {
+    if (
+      milestone !== undefined &&
+      user.referralRewardedMilestones.includes(milestone)
+    ) {
       return Promise.resolve(null); // already claimed
     }
 
@@ -133,7 +143,7 @@ function wireMocks() {
 
 describe("Referral Full Lifecycle", () => {
   const REFERRER_ID = "referrerA";
-  const REFEREE_ID  = "refereeB";
+  const REFEREE_ID = "refereeB";
 
   beforeAll(() => {
     // User A — the referrer
@@ -160,7 +170,8 @@ describe("Referral Full Lifecycle", () => {
     });
 
     it("referrer dashboard shows 1 referral in 'joined' status with 0 earnings", async () => {
-      const { stats, referrals } = await referralService.getMyReferrals(REFERRER_ID);
+      const { stats, referrals } =
+        await referralService.getMyReferrals(REFERRER_ID);
 
       expect(stats.totalReferrals).toBe(1);
       expect(stats.totalEarnings).toBe(0);
@@ -244,8 +255,8 @@ describe("Referral Full Lifecycle", () => {
     });
 
     it("no additional points are credited between milestones", () => {
-      expect(getUser(REFEREE_ID).totalPoints).toBe(20);   // unchanged from scan 1
-      expect(getUser(REFERRER_ID).totalPoints).toBe(30);  // unchanged from scan 1
+      expect(getUser(REFEREE_ID).totalPoints).toBe(20); // unchanged from scan 1
+      expect(getUser(REFERRER_ID).totalPoints).toBe(30); // unchanged from scan 1
     });
 
     it("only milestone 1 remains in the claimed list", () => {
@@ -262,7 +273,7 @@ describe("Referral Full Lifecycle", () => {
     });
 
     it("referee receives 75 more points (total 95)", () => {
-      expect(getUser(REFEREE_ID).totalPoints).toBe(95);  // 20 + 75
+      expect(getUser(REFEREE_ID).totalPoints).toBe(95); // 20 + 75
     });
 
     it("referrer receives 100 more points (total 130)", () => {
@@ -274,7 +285,7 @@ describe("Referral Full Lifecycle", () => {
     });
 
     it("re-running scan 10 does NOT credit again", async () => {
-      const refereePts  = getUser(REFEREE_ID).totalPoints;
+      const refereePts = getUser(REFEREE_ID).totalPoints;
       const referrerPts = getUser(REFERRER_ID).totalPoints;
       await referralService.evaluateReferralReward(REFEREE_ID, 10);
       expect(getUser(REFEREE_ID).totalPoints).toBe(refereePts);
@@ -315,11 +326,13 @@ describe("Referral Full Lifecycle", () => {
     });
 
     it("all three milestones are now in the claimed list", () => {
-      expect(getUser(REFEREE_ID).referralRewardedMilestones.sort()).toEqual([1, 10, 50]);
+      expect(getUser(REFEREE_ID).referralRewardedMilestones.sort()).toEqual([
+        1, 10, 50,
+      ]);
     });
 
     it("re-running scan 50 does NOT credit again", async () => {
-      const refereePts  = getUser(REFEREE_ID).totalPoints;
+      const refereePts = getUser(REFEREE_ID).totalPoints;
       const referrerPts = getUser(REFERRER_ID).totalPoints;
       await referralService.evaluateReferralReward(REFEREE_ID, 50);
       expect(getUser(REFEREE_ID).totalPoints).toBe(refereePts);
@@ -331,7 +344,8 @@ describe("Referral Full Lifecycle", () => {
 
   describe("Phase 8 — Final Dashboard State", () => {
     it("getMyReferrals returns correct final aggregate for the referrer", async () => {
-      const { stats, referrals } = await referralService.getMyReferrals(REFERRER_ID);
+      const { stats, referrals } =
+        await referralService.getMyReferrals(REFERRER_ID);
 
       expect(stats.totalReferrals).toBe(1);
       // totalEarnings in stats reflects display points (150 flat for scanned user)

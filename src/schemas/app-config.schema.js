@@ -61,7 +61,7 @@ const appConfigSchema = new mongoose.Schema({
   referralRewards: {
     type: [referralRewardsSchema],
     required: true,
-    default: () => ([]),
+    default: () => [],
   },
   lastUpdatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "Admin" },
 });
