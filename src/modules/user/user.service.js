@@ -102,14 +102,6 @@ async function registerUser(userData) {
     ...(referredById && { referredBy: referredById }),
   });
 
-  if (phone) {
-    try {
-      const referralService = require("../referral/referral.service");
-      await referralService.joinReferral(user._id, phone);
-    } catch (err) {
-      console.error("Error linking referral on registration:", err);
-    }
-  }
 
   const { refreshToken, accessToken } = await generateAndSaveToken({
     userId: user?._id,
@@ -210,14 +202,6 @@ async function providerAuth(data) {
       ...(referredById && { referredBy: referredById }),
     });
 
-    if (newUser.phone) {
-      try {
-        const referralService = require("../referral/referral.service");
-        await referralService.joinReferral(newUser._id, newUser.phone);
-      } catch (err) {
-        console.error("Error linking referral on provider registration:", err);
-      }
-    }
 
     const { refreshToken, accessToken } = await generateAndSaveToken({
       userId: newUser?._id,

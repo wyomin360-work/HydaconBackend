@@ -200,9 +200,9 @@ async function createRedeem(redeemData, reqUser = null) {
 
   try {
     const referralService = require("../referral/referral.service");
-    await referralService.markScanned(userId);
+    await referralService.evaluateReferralReward(userId, user.totalScans);
   } catch (err) {
-    console.error("Error updating referral status to scanned:", err);
+    console.error("Error evaluating referral rewards:", err);
   }
 
   // save reward

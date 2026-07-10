@@ -26,6 +26,15 @@ const coinSettingsSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const referralRewardsSchema = new mongoose.Schema(
+  {
+    requiredScans: { type: Number, default: 1 },
+    referrerRewardPoints: { type: Number, default: 50 },
+    refereeRewardPoints: { type: Number, default: 50 },
+  },
+  { _id: false },
+);
+
 const appConfigSchema = new mongoose.Schema({
   name: { type: String, required: true },
   currentVersion: { type: String, required: true, default: "1.0.0" },
@@ -48,6 +57,11 @@ const appConfigSchema = new mongoose.Schema({
     type: coinSettingsSchema,
     required: true,
     default: () => ({}),
+  },
+  referralRewards: {
+    type: [referralRewardsSchema],
+    required: true,
+    default: () => ([]),
   },
   lastUpdatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "Admin" },
 });

@@ -360,15 +360,6 @@ async function reviewKycDocument(
 
   await user.save();
 
-  if (user.kycStatus === KYC_STATUS.APPROVED) {
-    try {
-      const referralService = require("../referral/referral.service");
-      await referralService.markKycDone(user._id);
-    } catch (err) {
-      console.error("Error updating referral status to kyc_done:", err);
-    }
-  }
-
   // Trigger FCM notification
   if (user.fcmTokens?.length && user.enableNotification) {
     try {
