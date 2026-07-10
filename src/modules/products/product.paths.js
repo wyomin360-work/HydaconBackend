@@ -6,4 +6,5 @@ module.exports = {
   details: "/details/:productId",
   list: "/list",
   delete: "/delete/:productId",
+  calculateCoverage: "/calculate-coverage",
 };

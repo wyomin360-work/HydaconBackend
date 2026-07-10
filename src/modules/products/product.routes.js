@@ -3,6 +3,7 @@ const productPaths = require("./product.paths");
 const productController = require("./product.controller");
 const { handleError } = require("../../utils/heplers");
 const validateRequest = require("../../middlewares/validator");
+const { verifyAdmin } = require("../../middlewares/jwtVerification");
 const {
   productCreateRequestType,
   productUpdateRequestType,
@@ -21,18 +22,21 @@ router.get(productPaths.details, handleError(productController.getProduct));
 
 router.post(
   productPaths.create,
+  verifyAdmin,
   validateRequest(productCreateRequestType),
   handleError(productController.createProduct),
 );
 
 router.patch(
   productPaths.update,
+  verifyAdmin,
   validateRequest(productUpdateRequestType),
   handleError(productController.updateProduct),
 );
 
 router.delete(
   productPaths.delete,
+  verifyAdmin,
   handleError(productController.deleteProduct),
 );
 

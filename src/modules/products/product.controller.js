@@ -30,3 +30,9 @@ exports.deleteProduct = async (req, res) => {
   const response = await productService.deleteProduct(productId);
   return sendResponse(res, response);
 };
+
+exports.calculateCoverage = async (req, res) => {
+  const calculationData = req?.body;
+  const response = await productService.calculateProductCoverage(calculationData);
+  return sendResponse(res, response);
+};

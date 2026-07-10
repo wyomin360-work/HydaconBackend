@@ -4,6 +4,7 @@ const commonRoutes = require("../modules/common/common.routes");
 const userRoutes = require("../modules/user/user.routes");
 const adminRoutes = require("../modules/admin/admin.routes");
 const productRoutes = require("../modules/products/product.routes");
+const productController = require("../modules/products/product.controller");
 const rewardRoutes = require("../modules/rewards/rewards.routes");
 const redeemRoutes = require("../modules/redeems/redeems.routes");
 const transactionRoutes = require("../modules/transactions/transactions.routes");
@@ -32,6 +33,7 @@ const filesPaths = require("../modules/files/files.paths");
 const filesRoutes = require("../modules/files/files.routes");
 const ruleSetPaths = require("../modules/rule-set/rule-set.paths");
 const ruleSetRoutes = require("../modules/rule-set/rule-set.routes");
+const { handleError } = require("../utils/heplers");
 
 const globalRoutes = express.Router();
 
@@ -39,7 +41,14 @@ globalRoutes.use(appPaths.root, appRoutes);
 globalRoutes.use(commonPaths.root, commonRoutes);
 globalRoutes.use(userPaths.root, userRoutes);
 globalRoutes.use(adminPaths.root, adminRoutes);
-globalRoutes.use(productPaths.root, verification.verifyAdmin, productRoutes);
+
+// Public route for calculator
+globalRoutes.post(
+  `${productPaths.root}${productPaths.calculateCoverage}`,
+  handleError(productController.calculateCoverage),
+);
+
+globalRoutes.use(productPaths.root, productRoutes);
 globalRoutes.use(rewardsPath.root, verification.verifyAdmin, rewardRoutes);
 globalRoutes.use(redeemsPath.root, redeemRoutes);
 globalRoutes.use(transactionsPath.root, transactionRoutes);
