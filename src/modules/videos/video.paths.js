@@ -12,6 +12,9 @@ const videoPaths = {
   counts: "/counts",
   softDelete: "/:id/soft-delete",
   restore: "/:id/restore",
+  publicList: "/public/list",
+  publicDetails: "/public/:id",
+  publicMetrics: "/public/:id/metrics",
 };
 
 module.exports = videoPaths;

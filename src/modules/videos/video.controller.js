@@ -84,7 +84,10 @@ const listVideos = async (req, res, next) => {
     query.deleted = { $ne: true };
 
     if (search) {
-      query.title = { $regex: search, $options: "i" };
+      query.$or = [
+        { title: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
+      ];
     }
     if (categoryId) query.categoryId = categoryId;
     if (productId) query.productId = productId;
@@ -215,6 +218,8 @@ const getAnalytics = async (req, res, next) => {
     next(error);
   }
 };
+
+
 
 module.exports = {
   createVideo,
