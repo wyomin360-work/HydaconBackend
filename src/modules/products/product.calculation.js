@@ -54,17 +54,7 @@ class StandardAreaStrategy {
 
 class JointFillerStrategy {
   validate(request, config) {
-    const calcConfig = config.calculatorConfig || {};
-
     const { tileWidth, tileLength, tileThickness, jointWidth } = request;
-
-    // Use product boundaries or standard default fallbacks
-    const minTileSize = calcConfig.minTileSize !== undefined ? calcConfig.minTileSize : 50;
-    const maxTileSize = calcConfig.maxTileSize !== undefined ? calcConfig.maxTileSize : 1500;
-    const minJointWidth = calcConfig.minJointWidth !== undefined ? calcConfig.minJointWidth : 1;
-    const maxJointWidth = calcConfig.maxJointWidth !== undefined ? calcConfig.maxJointWidth : 20;
-    const minTileThickness = calcConfig.minTileThickness !== undefined ? calcConfig.minTileThickness : 2;
-    const maxTileThickness = calcConfig.maxTileThickness !== undefined ? calcConfig.maxTileThickness : 30;
 
     // Required fields check
     if (tileWidth === undefined || tileWidth === null || isNaN(tileWidth)) {
@@ -73,24 +63,12 @@ class JointFillerStrategy {
     if (tileWidth <= 0) {
       throw new AppError("Tile Width must be greater than zero.", 400);
     }
-    if (tileWidth < minTileSize) {
-      throw new AppError(`Tile Width is below the minimum allowed size of ${minTileSize}mm.`, 400);
-    }
-    if (tileWidth > maxTileSize) {
-      throw new AppError(`No tile with the width of ${tileWidth}mm is supported. Maximum allowed is ${maxTileSize}mm.`, 400);
-    }
 
     if (tileLength === undefined || tileLength === null || isNaN(tileLength)) {
       throw new AppError("Tile Length/Height is required.", 400);
     }
     if (tileLength <= 0) {
       throw new AppError("Tile Length/Height must be greater than zero.", 400);
-    }
-    if (tileLength < minTileSize) {
-      throw new AppError(`Tile Length is below the minimum allowed size of ${minTileSize}mm.`, 400);
-    }
-    if (tileLength > maxTileSize) {
-      throw new AppError(`No tile with the length of ${tileLength}mm is supported. Maximum allowed is ${maxTileSize}mm.`, 400);
     }
 
     if (tileThickness === undefined || tileThickness === null || isNaN(tileThickness)) {
@@ -99,24 +77,12 @@ class JointFillerStrategy {
     if (tileThickness <= 0) {
       throw new AppError("Tile Thickness must be greater than zero.", 400);
     }
-    if (tileThickness < minTileThickness) {
-      throw new AppError(`Tile Thickness is below the minimum allowed thickness of ${minTileThickness}mm.`, 400);
-    }
-    if (tileThickness > maxTileThickness) {
-      throw new AppError(`No tile with the thickness of ${tileThickness}mm is supported. Maximum allowed is ${maxTileThickness}mm.`, 400);
-    }
 
     if (jointWidth === undefined || jointWidth === null || isNaN(jointWidth)) {
       throw new AppError("Joint Width is required.", 400);
     }
     if (jointWidth <= 0) {
       throw new AppError("Joint Width must be greater than zero.", 400);
-    }
-    if (jointWidth < minJointWidth) {
-      throw new AppError(`Joint Width is below the minimum allowed width of ${minJointWidth}mm.`, 400);
-    }
-    if (jointWidth > maxJointWidth) {
-      throw new AppError(`No tile joint width of ${jointWidth}mm is supported. Maximum allowed is ${maxJointWidth}mm.`, 400);
     }
   }
 
