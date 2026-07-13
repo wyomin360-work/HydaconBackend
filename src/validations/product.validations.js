@@ -40,6 +40,13 @@ const productCreateRequestType = {
     weightUnit: { type: "string", enum: ["kg", "g", "l", "ml"] },
     tdsDocument: { type: "string", pattern: "^([0-9a-fA-F]{24}|)$" },
     coverage: coverageSchema,
+    roomTypes: { type: "array", items: { type: "string" } },
+    areaTypes: { type: "array", items: { type: "string" } },
+    applicationAreas: { type: "array", items: { type: "string" } },
+    substrateTypes: { type: "array", items: { type: "string" } },
+    applicationTypes: { type: "array", items: { type: "string" } },
+    tileTypes: { type: "array", items: { type: "string" } },
+    additionalTags: { type: "array", items: { type: "string" } },
   },
   required: [
     "name",
@@ -66,11 +73,40 @@ const productUpdateRequestType = {
     tdsDocument: { type: "string", pattern: "^([0-9a-fA-F]{24}|)$" },
     active: { type: "boolean" },
     coverage: coverageSchema,
+    roomTypes: { type: "array", items: { type: "string" } },
+    areaTypes: { type: "array", items: { type: "string" } },
+    applicationAreas: { type: "array", items: { type: "string" } },
+    substrateTypes: { type: "array", items: { type: "string" } },
+    applicationTypes: { type: "array", items: { type: "string" } },
+    tileTypes: { type: "array", items: { type: "string" } },
+    additionalTags: { type: "array", items: { type: "string" } },
   },
+  additionalProperties: false,
+};
+
+const productRecommendRequestType = {
+  type: "object",
+  properties: {
+    roomType: { type: "string", minLength: 1 },
+    areaType: { type: "string", minLength: 1 },
+    applicationArea: { type: "string", minLength: 1 },
+    substrateType: { type: "string", minLength: 1 },
+    applicationType: { type: "string", minLength: 1 },
+    tileType: { type: "string" },
+    tags: { type: "array", items: { type: "string" } },
+  },
+  required: [
+    "roomType",
+    "areaType",
+    "applicationArea",
+    "substrateType",
+    "applicationType",
+  ],
   additionalProperties: false,
 };
 
 module.exports = {
   productCreateRequestType,
   productUpdateRequestType,
+  productRecommendRequestType,
 };

@@ -92,6 +92,13 @@ async function createProduct(productData) {
     weightUnit,
     tdsDocument,
     coverage,
+    roomTypes,
+    areaTypes,
+    applicationAreas,
+    substrateTypes,
+    applicationTypes,
+    tileTypes,
+    additionalTags,
   } = productData;
 
   if (tdsDocument === "") {
@@ -109,6 +116,13 @@ async function createProduct(productData) {
     tdsDocument,
     featuredImage,
     coverage,
+    roomTypes,
+    areaTypes,
+    applicationAreas,
+    substrateTypes,
+    applicationTypes,
+    tileTypes,
+    additionalTags,
   });
   const populatedProduct = await Product.findById(product._id).populate(
     "tdsDocument",
@@ -132,6 +146,13 @@ async function updateProduct(productData, productId) {
     tdsDocument,
     active,
     coverage,
+    roomTypes,
+    areaTypes,
+    applicationAreas,
+    substrateTypes,
+    applicationTypes,
+    tileTypes,
+    additionalTags,
   } = productData;
 
   if (tdsDocument === "") {
@@ -150,6 +171,13 @@ async function updateProduct(productData, productId) {
       tdsDocument,
       active,
       coverage,
+      roomTypes,
+      areaTypes,
+      applicationAreas,
+      substrateTypes,
+      applicationTypes,
+      tileTypes,
+      additionalTags,
     },
   });
   const updatedProduct =
@@ -166,7 +194,15 @@ async function deleteProduct(productId) {
 }
 
 async function calculateProductCoverage(calculationData) {
-  const { productId, area, areaUnit, tileWidth, tileLength, tileThickness, jointWidth } = calculationData;
+  const {
+    productId,
+    area,
+    areaUnit,
+    tileWidth,
+    tileLength,
+    tileThickness,
+    jointWidth,
+  } = calculationData;
   if (!productId) {
     throw new AppError("Product ID is required.", 400);
   }
@@ -181,7 +217,8 @@ async function calculateProductCoverage(calculationData) {
     areaUnit,
     tileWidth: tileWidth !== undefined ? Number(tileWidth) : undefined,
     tileLength: tileLength !== undefined ? Number(tileLength) : undefined,
-    tileThickness: tileThickness !== undefined ? Number(tileThickness) : undefined,
+    tileThickness:
+      tileThickness !== undefined ? Number(tileThickness) : undefined,
     jointWidth: jointWidth !== undefined ? Number(jointWidth) : undefined,
   });
 
@@ -195,12 +232,20 @@ async function seedMockProducts() {
     {
       _id: "tilebond-ultra",
       name: "Hydacon TileBond Ultra",
-      description: "A premium-grade, highly flexible polymer-modified cementitious tile adhesive.",
+      description:
+        "A premium-grade, highly flexible polymer-modified cementitious tile adhesive.",
       weightValue: 25,
       weightUnit: "kg",
       price: 450,
       rewardPoints: 10,
       active: true,
+      roomTypes: ["bathroom", "kitchen", "living-room", "balcony"],
+      areaTypes: ["wet-area", "dry-area", "indoor", "outdoor"],
+      applicationAreas: ["floor", "wall"],
+      substrateTypes: ["concrete", "cement-screed", "existing-tiles"],
+      applicationTypes: ["tile-installation"],
+      tileTypes: ["ceramic", "porcelain", "natural-stone"],
+      additionalTags: ["high-flexibility", "premium-grade"],
       coverage: {
         enabled: true,
         calculationType: "AREA",
@@ -210,19 +255,27 @@ async function seedMockProducts() {
         packageUnit: "kg",
         calculatorConfig: {
           wastagePercentage: 0,
-          rounding: "UP"
-        }
-      }
+          rounding: "UP",
+        },
+      },
     },
     {
       _id: "tilegrout-hs",
       name: "Hydacon TileGrout HS",
-      description: "A high-performance, water-repellent, polymer-modified cementitious tile grout.",
+      description:
+        "A high-performance, water-repellent, polymer-modified cementitious tile grout.",
       weightValue: 5,
       weightUnit: "kg",
       price: 250,
       rewardPoints: 5,
       active: true,
+      roomTypes: ["bathroom", "kitchen", "balcony", "swimming-pool"],
+      areaTypes: ["wet-area", "outdoor", "indoor"],
+      applicationAreas: ["floor", "wall"],
+      substrateTypes: ["concrete", "cement-screed", "existing-tiles"],
+      applicationTypes: ["joint-filling"],
+      tileTypes: ["ceramic", "porcelain", "glass-mosaic"],
+      additionalTags: ["water-repellent", "high-performance"],
       coverage: {
         enabled: true,
         calculationType: "JOINT_FILLER",
@@ -237,19 +290,27 @@ async function seedMockProducts() {
           minJointWidth: 1,
           maxJointWidth: 20,
           minTileThickness: 2,
-          maxTileThickness: 30
-        }
-      }
+          maxTileThickness: 30,
+        },
+      },
     },
     {
       _id: "jointfiller-gf100",
       name: "Hydacon Joint Filler GF-100",
-      description: "A premium-grade joint filler for tile and stone applications, offering stain-resistance and high flexibility.",
+      description:
+        "A premium-grade joint filler for tile and stone applications, offering stain-resistance and high flexibility.",
       weightValue: 1,
       weightUnit: "kg",
       price: 90,
       rewardPoints: 2,
       active: true,
+      roomTypes: ["living-room", "kitchen", "bathroom"],
+      areaTypes: ["dry-area", "wet-area", "indoor"],
+      applicationAreas: ["floor", "wall"],
+      substrateTypes: ["concrete", "cement-screed"],
+      applicationTypes: ["joint-filling"],
+      tileTypes: ["ceramic", "porcelain", "natural-stone"],
+      additionalTags: ["stain-resistant", "flexible"],
       coverage: {
         enabled: true,
         calculationType: "JOINT_FILLER",
@@ -264,19 +325,27 @@ async function seedMockProducts() {
           minJointWidth: 1,
           maxJointWidth: 15,
           minTileThickness: 2,
-          maxTileThickness: 25
-        }
-      }
+          maxTileThickness: 25,
+        },
+      },
     },
     {
       _id: "hydroshield-2k",
       name: "Hydacon HydroShield 2K",
-      description: "A state-of-the-art, flexible, two-component polymer-modified waterproofing membrane.",
+      description:
+        "A state-of-the-art, flexible, two-component polymer-modified waterproofing membrane.",
       weightValue: 30,
       weightUnit: "kg",
       price: 1800,
       rewardPoints: 40,
       active: true,
+      roomTypes: ["bathroom", "swimming-pool", "terrace", "balcony"],
+      areaTypes: ["wet-area", "outdoor"],
+      applicationAreas: ["floor", "wall"],
+      substrateTypes: ["concrete", "cement-screed"],
+      applicationTypes: ["waterproofing"],
+      tileTypes: [],
+      additionalTags: ["two-component", "flexible"],
       coverage: {
         enabled: true,
         calculationType: "AREA",
@@ -286,19 +355,27 @@ async function seedMockProducts() {
         packageUnit: "kg",
         calculatorConfig: {
           wastagePercentage: 5,
-          rounding: "UP"
-        }
-      }
+          rounding: "UP",
+        },
+      },
     },
     {
       _id: "levelmax-self",
       name: "Hydacon LevelMax Self-Leveling",
-      description: "A calcium-aluminate based, rapid-hardening self-leveling underlayment.",
+      description:
+        "A calcium-aluminate based, rapid-hardening self-leveling underlayment.",
       weightValue: 25,
       weightUnit: "kg",
       price: 650,
       rewardPoints: 15,
       active: true,
+      roomTypes: ["living-room", "bedroom", "kitchen"],
+      areaTypes: ["dry-area", "indoor"],
+      applicationAreas: ["floor"],
+      substrateTypes: ["concrete", "cement-screed"],
+      applicationTypes: ["self-leveling"],
+      tileTypes: [],
+      additionalTags: ["rapid-hardening", "self-leveling"],
       coverage: {
         enabled: true,
         calculationType: "AREA",
@@ -308,9 +385,9 @@ async function seedMockProducts() {
         packageUnit: "kg",
         calculatorConfig: {
           wastagePercentage: 0,
-          rounding: "UP"
-        }
-      }
+          rounding: "UP",
+        },
+      },
     },
     {
       _id: "tilebond-eco",
@@ -321,6 +398,13 @@ async function seedMockProducts() {
       price: 320,
       rewardPoints: 8,
       active: true,
+      roomTypes: ["living-room", "bedroom"],
+      areaTypes: ["dry-area", "indoor"],
+      applicationAreas: ["floor"],
+      substrateTypes: ["concrete", "cement-screed"],
+      applicationTypes: ["tile-installation"],
+      tileTypes: ["ceramic"],
+      additionalTags: ["eco-friendly", "standard-cementitious"],
       coverage: {
         enabled: true,
         calculationType: "AREA",
@@ -330,16 +414,69 @@ async function seedMockProducts() {
         packageUnit: "kg",
         calculatorConfig: {
           wastagePercentage: 0,
-          rounding: "UP"
-        }
-      }
-    }
+          rounding: "UP",
+        },
+      },
+    },
   ];
 
   for (const prod of mockProducts) {
-    await Product.findByIdAndUpdate(prod._id, { $set: prod }, { upsert: true, new: true });
+    await Product.findByIdAndUpdate(
+      prod._id,
+      { $set: prod },
+      { upsert: true, new: true },
+    );
     console.log(`Updated mock product: ${prod.name}`);
   }
+}
+
+async function recommendProducts(criteria) {
+  const {
+    roomType,
+    areaType,
+    applicationArea,
+    substrateType,
+    applicationType,
+    tileType,
+    tags,
+  } = criteria;
+
+  const query = {
+    active: true,
+    roomTypes: roomType,
+    areaTypes: areaType,
+    applicationAreas: applicationArea,
+    substrateTypes: substrateType,
+    applicationTypes: applicationType,
+  };
+
+  if (tileType) {
+    query.tileTypes = tileType;
+  }
+
+  if (tags && tags.length > 0) {
+    query.additionalTags = { $all: tags };
+  }
+
+  let products = await Product.find(query).populate("tdsDocument").lean();
+  let isFallback = false;
+
+  if (products.length === 0) {
+    isFallback = true;
+    const fallbackQuery = {
+      active: true,
+      roomTypes: roomType,
+      applicationTypes: applicationType,
+    };
+    products = await Product.find(fallbackQuery).populate("tdsDocument").lean();
+  }
+
+  return {
+    data: {
+      products,
+      isFallback,
+    },
+  };
 }
 
 module.exports = {
@@ -350,4 +487,5 @@ module.exports = {
   deleteProduct,
   calculateProductCoverage,
   seedMockProducts,
+  recommendProducts,
 };

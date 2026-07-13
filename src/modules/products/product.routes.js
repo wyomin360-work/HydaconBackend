@@ -7,6 +7,7 @@ const { verifyAdmin } = require("../../middlewares/jwtVerification");
 const {
   productCreateRequestType,
   productUpdateRequestType,
+  productRecommendRequestType,
 } = require("../../validations/product.validations");
 const { paginationType } = require("../../validations/global.validations");
 
@@ -38,6 +39,12 @@ router.delete(
   productPaths.delete,
   verifyAdmin,
   handleError(productController.deleteProduct),
+);
+
+router.post(
+  productPaths.recommend,
+  validateRequest(productRecommendRequestType),
+  handleError(productController.recommendProducts),
 );
 
 module.exports = router;

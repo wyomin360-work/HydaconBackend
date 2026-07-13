@@ -2,7 +2,10 @@ const { default: mongoose } = require("mongoose");
 
 const productSchema = new mongoose.Schema(
   {
-    _id: { type: String, default: () => new mongoose.Types.ObjectId().toString() },
+    _id: {
+      type: String,
+      default: () => new mongoose.Types.ObjectId().toString(),
+    },
     name: { type: String, required: true },
     description: { type: String, required: true },
     weightValue: { type: Number, required: true },
@@ -22,6 +25,13 @@ const productSchema = new mongoose.Schema(
     featuredImage: { type: String, required: false },
     rewardPoints: { type: Number, required: true, default: 0 },
     active: { type: Boolean, default: true },
+    roomTypes: { type: [String], default: [] },
+    areaTypes: { type: [String], default: [] },
+    applicationAreas: { type: [String], default: [] },
+    substrateTypes: { type: [String], default: [] },
+    applicationTypes: { type: [String], default: [] },
+    tileTypes: { type: [String], default: [] },
+    additionalTags: { type: [String], default: [] },
     coverage: {
       enabled: { type: Boolean, default: false },
       calculationType: { type: String, enum: ["AREA", "JOINT_FILLER"] },
@@ -38,12 +48,19 @@ const productSchema = new mongoose.Schema(
         minJointWidth: { type: Number },
         maxJointWidth: { type: Number },
         minTileThickness: { type: Number },
-        maxTileThickness: { type: Number }
-      }
-    }
+        maxTileThickness: { type: Number },
+      },
+    },
   },
   { timestamps: true },
 );
+
+productSchema.index({
+  roomTypes: 1,
+  areaTypes: 1,
+  substrateTypes: 1,
+  applicationTypes: 1,
+});
 
 const Product = mongoose.model("Product", productSchema);
 module.exports = Product;

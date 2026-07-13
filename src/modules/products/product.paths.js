@@ -7,4 +7,5 @@ module.exports = {
   list: "/list",
   delete: "/delete/:productId",
   calculateCoverage: "/calculate-coverage",
+  recommend: "/recommend",
 };

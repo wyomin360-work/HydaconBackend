@@ -21,7 +21,11 @@ class StandardAreaStrategy {
     const rounding = config.calculatorConfig?.rounding || "UP";
 
     // 1. Convert area to the configured coverage unit
-    const areaConverted = convertArea(request.area, request.areaUnit, coverageUnit);
+    const areaConverted = convertArea(
+      request.area,
+      request.areaUnit,
+      coverageUnit,
+    );
 
     // 2. Add wastage
     const totalAreaWithWastage = areaConverted * (1 + wastage / 100);
@@ -30,7 +34,10 @@ class StandardAreaStrategy {
     const unitsRequired = totalAreaWithWastage / coveragePerUnit;
 
     // 4. Apply rounding
-    let bagsRequired = rounding === "NEAREST" ? Math.round(unitsRequired) : Math.ceil(unitsRequired);
+    let bagsRequired =
+      rounding === "NEAREST"
+        ? Math.round(unitsRequired)
+        : Math.ceil(unitsRequired);
     if (request.area > 0 && bagsRequired < 1) {
       bagsRequired = 1;
     }
@@ -38,8 +45,12 @@ class StandardAreaStrategy {
     // 5. Total weight
     const calculatedWeightKg = bagsRequired * packageWeight;
 
-    const roundingNote = rounding === "NEAREST" ? "rounded to nearest pack" : "rounded up to next pack";
-    const wastageNote = wastage > 0 ? `including ${wastage}% wastage` : "no wastage added";
+    const roundingNote =
+      rounding === "NEAREST"
+        ? "rounded to nearest pack"
+        : "rounded up to next pack";
+    const wastageNote =
+      wastage > 0 ? `including ${wastage}% wastage` : "no wastage added";
 
     return {
       recommendedProduct: product.name,
@@ -71,7 +82,11 @@ class JointFillerStrategy {
       throw new AppError("Tile Length/Height must be greater than zero.", 400);
     }
 
-    if (tileThickness === undefined || tileThickness === null || isNaN(tileThickness)) {
+    if (
+      tileThickness === undefined ||
+      tileThickness === null ||
+      isNaN(tileThickness)
+    ) {
       throw new AppError("Tile Thickness is required.", 400);
     }
     if (tileThickness <= 0) {
@@ -103,7 +118,11 @@ class JointFillerStrategy {
 
     // 2. Joint filler coverage rate formula:
     // Rate (kg/m²) = ((L + W) / (L * W)) * Thickness * JointWidth * Density
-    const rateKgPerSqm = ((tileLength + tileWidth) / (tileLength * tileWidth)) * tileThickness * jointWidth * density;
+    const rateKgPerSqm =
+      ((tileLength + tileWidth) / (tileLength * tileWidth)) *
+      tileThickness *
+      jointWidth *
+      density;
 
     // 3. Total weight in kg
     const totalWeightKg = areaSqm * rateKgPerSqm;
@@ -115,13 +134,17 @@ class JointFillerStrategy {
     const unitsRequired = totalWeightKgWithWastage / packageWeight;
 
     // 6. Rounding
-    let bagsRequired = rounding === "NEAREST" ? Math.round(unitsRequired) : Math.ceil(unitsRequired);
+    let bagsRequired =
+      rounding === "NEAREST"
+        ? Math.round(unitsRequired)
+        : Math.ceil(unitsRequired);
     if (request.area > 0 && bagsRequired < 1) {
       bagsRequired = 1;
     }
 
     const calculatedWeightKg = parseFloat(totalWeightKgWithWastage.toFixed(2));
-    const wastageNote = wastage > 0 ? `including ${wastage}% wastage` : "no wastage added";
+    const wastageNote =
+      wastage > 0 ? `including ${wastage}% wastage` : "no wastage added";
     const roundingNote = rounding === "NEAREST" ? "nearest pack" : "next pack";
 
     return {
@@ -131,7 +154,7 @@ class JointFillerStrategy {
       unitsRequired: parseFloat(unitsRequired.toFixed(2)),
       bagsRequired,
       calculationNotes: `Joint filler estimation calculated using: tile size ${tileWidth}x${tileLength}x${tileThickness}mm, joint width ${jointWidth}mm, density ${density} kg/L, ${wastageNote}, and rounded to the ${roundingNote}.`,
-      materialRequired: `${calculatedWeightKg} kg` // Extra useful info for the response
+      materialRequired: `${calculatedWeightKg} kg`, // Extra useful info for the response
     };
   }
 }
@@ -144,7 +167,10 @@ const STRATEGIES = {
 const calculateCoverage = (product, request) => {
   const config = product.coverage;
   if (!config || !config.enabled) {
-    throw new AppError("Coverage calculator is not enabled for this product.", 400);
+    throw new AppError(
+      "Coverage calculator is not enabled for this product.",
+      400,
+    );
   }
 
   // Common Validations
@@ -156,15 +182,24 @@ const calculateCoverage = (product, request) => {
     throw new AppError("Area value must be greater than zero.", 400);
   }
   if (area > 10000000) {
-    throw new AppError("Area value is too large. Maximum supported area is 10,000,000.", 400);
+    throw new AppError(
+      "Area value is too large. Maximum supported area is 10,000,000.",
+      400,
+    );
   }
   if (!areaUnit || (areaUnit !== "sqft" && areaUnit !== "sqm")) {
-    throw new AppError('Invalid area unit specified. Must be "sqft" or "sqm".', 400);
+    throw new AppError(
+      'Invalid area unit specified. Must be "sqft" or "sqm".',
+      400,
+    );
   }
 
   const strategy = STRATEGIES[config.calculationType];
   if (!strategy) {
-    throw new AppError(`Unsupported calculation strategy type: ${config.calculationType}`, 400);
+    throw new AppError(
+      `Unsupported calculation strategy type: ${config.calculationType}`,
+      400,
+    );
   }
 
   strategy.validate(request, config);
