@@ -50,6 +50,9 @@ const contentSchema = new mongoose.Schema(
     },
     audience: { type: mongoose.Schema.Types.Mixed },
     tags: [{ type: String }],
+    bodyText: { type: String, default: "" },
+    media: [{ type: String }],
+    maxViews: { type: Number, default: null },
   },
   {
     timestamps: true,
