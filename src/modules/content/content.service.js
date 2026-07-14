@@ -1,5 +1,5 @@
 const Content = require("../../schemas/content.schema");
-const { ErrorHandler } = require("../../utils/heplers");
+const AppError = require("../../utils/appError");
 
 const ALLOWED_PLACEMENTS = [
   "HOME_TOP_CAROUSEL",
@@ -14,14 +14,21 @@ const ALLOWED_PLACEMENTS = [
   "REWARD_SUCCESS_SCREEN",
   "SEASON_LANDING_PAGE",
   "ANNOUNCEMENTS",
-  "SEASON_CAMPAIGN"
+  "SEASON_CAMPAIGN",
+  "HOME_ANNOUNCEMENT_FEED",
+  "HOME_OPENING",
+  "REWARDS_OPENING",
+  "SCAN_OPENING",
+  "PROFILE_OPENING",
+  "SEASON_LANDING_OPENING",
+  "PRODUCT_SELECTOR_OPENING"
 ];
 
 const validatePlacements = (placements) => {
   if (!placements || !Array.isArray(placements)) return;
   for (const p of placements) {
     if (!ALLOWED_PLACEMENTS.includes(p)) {
-      throw new ErrorHandler(`Invalid placement: ${p}. Allowed: ${ALLOWED_PLACEMENTS.join(", ")}`, 400);
+      throw new AppError(`Invalid placement: ${p}. Allowed: ${ALLOWED_PLACEMENTS.join(", ")}`, 400);
     }
   }
 };
@@ -37,7 +44,7 @@ const updateContent = async (id, data) => {
   validatePlacements(data.placements);
   const content = await Content.findByIdAndUpdate(id, data, { new: true });
   if (!content) {
-    throw new ErrorHandler("Content not found", 404);
+    throw new AppError("Content not found", 404);
   }
   return content;
 };
@@ -45,7 +52,7 @@ const updateContent = async (id, data) => {
 const deleteContent = async (id) => {
   const content = await Content.findByIdAndDelete(id);
   if (!content) {
-    throw new ErrorHandler("Content not found", 404);
+    throw new AppError("Content not found", 404);
   }
   return content;
 };
@@ -118,7 +125,7 @@ const getPlacementContent = async (placement) => {
 const getContentDetails = async (id) => {
   const content = await Content.findById(id);
   if (!content) {
-    throw new ErrorHandler("Content not found", 404);
+    throw new AppError("Content not found", 404);
   }
   return content;
 };

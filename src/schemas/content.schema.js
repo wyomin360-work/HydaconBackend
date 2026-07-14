@@ -31,6 +31,8 @@ const contentSchema = new mongoose.Schema(
         "OPEN_EXTERNAL_URL",
         "OPEN_INTERNAL_PAGE",
         "OPEN_CAMPAIGN_DETAILS",
+        "OPEN_BOTTOM_SHEET",
+        "OPEN_POPUP_MODAL",
         "DO_NOTHING",
       ],
       default: "DO_NOTHING",
