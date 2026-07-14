@@ -12,6 +12,13 @@ const verification = require("../../middlewares/jwtVerification");
 
 const router = express.Router();
 
+// Public
+router.post(
+  productPaths.publicList,
+  validateRequest(paginationType),
+  handleError(productController.listProducts),
+);
+
 router.post(
   productPaths.list,
   verification.verifyAdmin,

@@ -4,6 +4,8 @@ const VideoAnalytics = require("../../schemas/videoAnalytics.schema");
 // Helper: return today as 'YYYY-MM-DD'
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
+const GiftCategory = require("../../schemas/gift-category.schema");
+
 const createVideo = async (data) => {
   const video = new Video(data);
   return await video.save();
@@ -137,6 +139,8 @@ const getFeaturedVideos = async () => {
     .populate("categoryId")
     .populate("productId");
 };
+
+
 
 module.exports = {
   createVideo,

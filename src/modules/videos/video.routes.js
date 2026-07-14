@@ -12,7 +12,29 @@ const { verifyAdmin, verifyAdminOrUser, verifyUser } = require("../../middleware
 
 const router = express.Router();
 
-// Public / User / Admin Routes
+// Public Routes
+router.post(
+  videoPaths.publicList,
+  validateRequest(paginationType),
+  handleError(videoController.listVideos)
+);
+
+router.get(
+  videoPaths.publicDetails,
+  handleError(videoController.getVideo)
+);
+
+router.get(
+  videoPaths.publicMetrics,
+  handleError(videoController.getMetrics)
+);
+
+router.patch(
+  videoPaths.publicMetrics,
+  handleError(videoController.updateMetrics)
+);
+
+// User / Admin Routes
 // Featured videos (Mobile App usually needs this)
 router.get(
   videoPaths.featured,

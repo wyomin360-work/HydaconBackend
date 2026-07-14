@@ -14,6 +14,13 @@ const verification = require("../../middlewares/jwtVerification");
 
 const router = express.Router();
 
+// Categories (Public)
+router.post(
+  giftPaths.publicCategoryList,
+  validateRequest(paginationType),
+  handleError(giftController.listCategories),
+);
+
 // Categories (Admin)
 router.post(
   giftPaths.categoryList,
