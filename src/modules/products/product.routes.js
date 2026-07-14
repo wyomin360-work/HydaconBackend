@@ -11,6 +11,13 @@ const { paginationType } = require("../../validations/global.validations");
 
 const router = express.Router();
 
+// Public
+router.post(
+  productPaths.publicList,
+  validateRequest(paginationType),
+  handleError(productController.listProducts),
+);
+
 router.post(
   productPaths.list,
   validateRequest(paginationType),

@@ -41,7 +41,7 @@ globalRoutes.use(appPaths.root, appRoutes);
 globalRoutes.use(commonPaths.root, commonRoutes);
 globalRoutes.use(userPaths.root, userRoutes);
 globalRoutes.use(adminPaths.root, adminRoutes);
-globalRoutes.use(productPaths.root, verification.verifyAdmin, productRoutes);
+globalRoutes.use(productPaths.root, productRoutes);
 globalRoutes.use(rewardsPath.root, verification.verifyAdmin, rewardRoutes);
 globalRoutes.use(redeemsPath.root, redeemRoutes);
 globalRoutes.use(transactionsPath.root, transactionRoutes);
