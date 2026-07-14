@@ -58,21 +58,33 @@ const deleteContent = async (id) => {
 };
 
 const listContent = async (query = {}) => {
-  const { page = 1, limit = 10, type, placement, active } = query;
+  const { page, limit, type, placement, active } = query;
   
   const filter = {};
   if (type) filter.type = type;
   if (placement) filter.placements = placement;
   if (active !== undefined) filter.active = active === "true" || active === true;
 
-  const skip = (parseInt(page) - 1) * parseInt(limit);
-  
+  let queryBuilder = Content.find(filter).sort({ sortOrder: 1, createdAt: -1 });
+
+  if (page && limit) {
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    queryBuilder = queryBuilder.skip(skip).limit(parseInt(limit));
+  } else if (limit) {
+    queryBuilder = queryBuilder.limit(parseInt(limit));
+  }
+
   const [data, total] = await Promise.all([
-    Content.find(filter).sort({ sortOrder: 1, createdAt: -1 }).skip(skip).limit(parseInt(limit)),
+    queryBuilder,
     Content.countDocuments(filter)
   ]);
 
-  return { data, total, page: parseInt(page), limit: parseInt(limit) };
+  return { 
+    data, 
+    total, 
+    page: page ? parseInt(page) : 1, 
+    limit: limit ? parseInt(limit) : total 
+  };
 };
 
 const getHomepageContent = async () => {
