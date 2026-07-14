@@ -185,4 +185,10 @@ router.delete(
   handleError(controller.deleteUser),
 );
 
+router.patch(
+  userPaths.releaseBan,
+  verification.verifyAdmin,
+  handleError(controller.releaseBan),
+);
+
 module.exports = router;

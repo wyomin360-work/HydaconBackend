@@ -46,6 +46,10 @@ const giftRedemptionSchema = new mongoose.Schema(
     trackingNumber: { type: String },
     courierDetails: { type: String },
     cancellationReason: { type: String },
+    // --- Voucher-specific fields (snapshot at time of redemption) ---
+    voucherCode: { type: String },
+    voucherFileUrl: { type: String },
+    voucherSent: { type: Boolean, default: false },
   },
   { timestamps: true },
 );
