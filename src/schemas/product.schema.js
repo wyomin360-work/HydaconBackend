@@ -1,5 +1,36 @@
 const { default: mongoose } = require("mongoose");
 
+const calculatorConfigSchema = new mongoose.Schema(
+  {
+    wastagePercentage: { type: Number },
+    rounding: { type: String, enum: ["UP", "NEAREST"] },
+    materialDensity: { type: Number }, // specific gravity
+    minTileSize: { type: Number },
+    maxTileSize: { type: Number },
+    minJointWidth: { type: Number },
+    maxJointWidth: { type: Number },
+    minTileThickness: { type: Number },
+    maxTileThickness: { type: Number },
+  },
+  { _id: false }
+);
+
+const coverageSchema = new mongoose.Schema(
+  {
+    enabled: { type: Boolean, default: false },
+    calculationType: { type: String, enum: ["AREA", "JOINT_FILLER"] },
+    coveragePerUnit: { type: Number },
+    coverageUnit: { type: String, enum: ["sqft", "sqm"] },
+    packageWeight: { type: Number },
+    packageUnit: { type: String, enum: ["kg", "ltr"] },
+    calculatorConfig: {
+      type: calculatorConfigSchema,
+      default: () => ({}),
+    },
+  },
+  { _id: false }
+);
+
 const productSchema = new mongoose.Schema(
   {
     _id: {
@@ -33,34 +64,18 @@ const productSchema = new mongoose.Schema(
     tileTypes: { type: [String], default: [] },
     additionalTags: { type: [String], default: [] },
     coverage: {
-      enabled: { type: Boolean, default: false },
-      calculationType: { type: String, enum: ["AREA", "JOINT_FILLER"] },
-      coveragePerUnit: { type: Number },
-      coverageUnit: { type: String, enum: ["sqft", "sqm"] },
-      packageWeight: { type: Number },
-      packageUnit: { type: String, enum: ["kg", "ltr"] },
-      calculatorConfig: {
-        wastagePercentage: { type: Number },
-        rounding: { type: String, enum: ["UP", "NEAREST"] },
-        materialDensity: { type: Number }, // specific gravity
-        minTileSize: { type: Number },
-        maxTileSize: { type: Number },
-        minJointWidth: { type: Number },
-        maxJointWidth: { type: Number },
-        minTileThickness: { type: Number },
-        maxTileThickness: { type: Number },
-      },
+      type: coverageSchema,
+      default: () => ({}),
     },
   },
   { timestamps: true },
 );
 
-productSchema.index({
-  roomTypes: 1,
-  areaTypes: 1,
-  substrateTypes: 1,
-  applicationTypes: 1,
-});
+productSchema.index({ active: 1 });
+productSchema.index({ roomTypes: 1 });
+productSchema.index({ areaTypes: 1 });
+productSchema.index({ substrateTypes: 1 });
+productSchema.index({ applicationTypes: 1 });
 
 const Product = mongoose.model("Product", productSchema);
 module.exports = Product;

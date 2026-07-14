@@ -4,6 +4,12 @@ const { sendFailResponse } = require("../../utils/responseHandlers");
 const AppError = require("../../utils/appError");
 const { calculateCoverage } = require("./product.calculation");
 
+const normalizeTag = (tag) =>
+  typeof tag === "string" ? tag.trim().toLowerCase().replace(/\s+/g, "-") : tag;
+
+const normalizeArray = (arr) =>
+  Array.isArray(arr) ? arr.map(normalizeTag).filter(Boolean) : [];
+
 async function getProduct(productId) {
   const product = await Product.findById(productId)
     .populate("tdsDocument")
@@ -116,13 +122,13 @@ async function createProduct(productData) {
     tdsDocument,
     featuredImage,
     coverage,
-    roomTypes,
-    areaTypes,
-    applicationAreas,
-    substrateTypes,
-    applicationTypes,
-    tileTypes,
-    additionalTags,
+    roomTypes: normalizeArray(roomTypes),
+    areaTypes: normalizeArray(areaTypes),
+    applicationAreas: normalizeArray(applicationAreas),
+    substrateTypes: normalizeArray(substrateTypes),
+    applicationTypes: normalizeArray(applicationTypes),
+    tileTypes: normalizeArray(tileTypes),
+    additionalTags: normalizeArray(additionalTags),
   });
   const populatedProduct = await Product.findById(product._id).populate(
     "tdsDocument",
@@ -171,13 +177,13 @@ async function updateProduct(productData, productId) {
       tdsDocument,
       active,
       coverage,
-      roomTypes,
-      areaTypes,
-      applicationAreas,
-      substrateTypes,
-      applicationTypes,
-      tileTypes,
-      additionalTags,
+      roomTypes: normalizeArray(roomTypes),
+      areaTypes: normalizeArray(areaTypes),
+      applicationAreas: normalizeArray(applicationAreas),
+      substrateTypes: normalizeArray(substrateTypes),
+      applicationTypes: normalizeArray(applicationTypes),
+      tileTypes: normalizeArray(tileTypes),
+      additionalTags: normalizeArray(additionalTags),
     },
   });
   const updatedProduct =
@@ -421,9 +427,19 @@ async function seedMockProducts() {
   ];
 
   for (const prod of mockProducts) {
+    const normalizedProd = {
+      ...prod,
+      roomTypes: normalizeArray(prod.roomTypes),
+      areaTypes: normalizeArray(prod.areaTypes),
+      applicationAreas: normalizeArray(prod.applicationAreas),
+      substrateTypes: normalizeArray(prod.substrateTypes),
+      applicationTypes: normalizeArray(prod.applicationTypes),
+      tileTypes: normalizeArray(prod.tileTypes),
+      additionalTags: normalizeArray(prod.additionalTags),
+    };
     await Product.findByIdAndUpdate(
       prod._id,
-      { $set: prod },
+      { $set: normalizedProd },
       { upsert: true, new: true },
     );
     console.log(`Updated mock product: ${prod.name}`);
@@ -441,34 +457,67 @@ async function recommendProducts(criteria) {
     tags,
   } = criteria;
 
+  const normRoomType = normalizeTag(roomType);
+  const normAreaType = normalizeTag(areaType);
+  const normAppArea = normalizeTag(applicationArea);
+  const normSubstrate = normalizeTag(substrateType);
+  const normAppType = normalizeTag(applicationType);
+  const normTileType = normalizeTag(tileType);
+  const normTags = normalizeArray(tags);
+
   const query = {
     active: true,
-    roomTypes: roomType,
-    areaTypes: areaType,
-    applicationAreas: applicationArea,
-    substrateTypes: substrateType,
-    applicationTypes: applicationType,
   };
 
-  if (tileType) {
-    query.tileTypes = tileType;
+  if (normRoomType) {
+    query.roomTypes = normRoomType;
   }
-
-  if (tags && tags.length > 0) {
-    query.additionalTags = { $all: tags };
+  if (normAreaType) {
+    query.areaTypes = normAreaType;
+  }
+  if (normAppArea) {
+    query.applicationAreas = normAppArea;
+  }
+  if (normSubstrate) {
+    query.substrateTypes = normSubstrate;
+  }
+  if (normAppType) {
+    query.applicationTypes = normAppType;
+  }
+  if (normTileType) {
+    query.tileTypes = normTileType;
+  }
+  if (normTags && normTags.length > 0) {
+    query.additionalTags = { $all: normTags };
   }
 
   let products = await Product.find(query).populate("tdsDocument").lean();
   let isFallback = false;
 
-  if (products.length === 0) {
+  // Tier 1 Fallback: Drop tags but retain structural and tileType filters if applicable
+  if (products.length === 0 && ((normTags && normTags.length > 0) || normTileType)) {
     isFallback = true;
-    const fallbackQuery = {
+    const tier1Query = {
       active: true,
-      roomTypes: roomType,
-      applicationTypes: applicationType,
     };
-    products = await Product.find(fallbackQuery).populate("tdsDocument").lean();
+    if (normRoomType) tier1Query.roomTypes = normRoomType;
+    if (normAreaType) tier1Query.areaTypes = normAreaType;
+    if (normAppArea) tier1Query.applicationAreas = normAppArea;
+    if (normSubstrate) tier1Query.substrateTypes = normSubstrate;
+    if (normAppType) tier1Query.applicationTypes = normAppType;
+    if (normTileType) tier1Query.tileTypes = normTileType;
+    products = await Product.find(tier1Query).populate("tdsDocument").lean();
+  }
+
+  // Tier 2 Fallback: Broad fallback based only on active, roomType, and applicationType
+  if (products.length === 0 && (normRoomType || normAppType)) {
+    isFallback = true;
+    const tier2Query = {
+      active: true,
+    };
+    if (normRoomType) tier2Query.roomTypes = normRoomType;
+    if (normAppType) tier2Query.applicationTypes = normAppType;
+    products = await Product.find(tier2Query).populate("tdsDocument").lean();
   }
 
   return {

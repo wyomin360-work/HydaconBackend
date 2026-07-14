@@ -30,7 +30,12 @@ router.post(
 
 router.patch(
   productPaths.update,
-  verifyAdmin,
+  validateRequest(productUpdateRequestType),
+  handleError(productController.updateProduct),
+);
+
+router.put(
+  productPaths.update,
   validateRequest(productUpdateRequestType),
   handleError(productController.updateProduct),
 );
