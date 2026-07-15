@@ -159,8 +159,8 @@ exports.userList = async (req, res) => {
 
 exports.uploadProfilePhoto = async (req, res, next) => {
   const userId = req?.userId;
-  const file = req?.file;
-  const response = await userService.uploadProfilePhoto(userId, file);
+  const { fileUrl } = req?.body;
+  const response = await userService.uploadProfilePhoto(userId, fileUrl);
   return sendResponse(res, response);
 };
 
