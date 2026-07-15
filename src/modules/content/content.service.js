@@ -1,28 +1,6 @@
 const Content = require("../../schemas/content.schema");
 const AppError = require("../../utils/appError");
-
-const ALLOWED_PLACEMENTS = [
-  "HOME_TOP_CAROUSEL",
-  "HOME_MIDDLE_BANNER",
-  "HOME_BOTTOM_BANNER",
-  "REWARDS_PAGE",
-  "PRODUCT_SELECTOR",
-  "COVERAGE_CALCULATOR",
-  "GIFT_CATALOGUE",
-  "PROFILE",
-  "SCAN_PAGE",
-  "REWARD_SUCCESS_SCREEN",
-  "SEASON_LANDING_PAGE",
-  "ANNOUNCEMENTS",
-  "SEASON_CAMPAIGN",
-  "HOME_ANNOUNCEMENT_FEED",
-  "HOME_OPENING",
-  "REWARDS_OPENING",
-  "SCAN_OPENING",
-  "PROFILE_OPENING",
-  "SEASON_LANDING_OPENING",
-  "PRODUCT_SELECTOR_OPENING"
-];
+const { ALLOWED_PLACEMENTS } = require("./content.constants");
 
 const validatePlacements = (placements) => {
   if (!placements || !Array.isArray(placements)) return;
