@@ -171,6 +171,13 @@ exports.flagUser = async (req, res, next) => {
   return sendResponse(res, response);
 };
 
+exports.convertPoints = async (req, res, next) => {
+  const userId = req?.userId;
+  const data = req?.body;
+  const response = await userService.convertPointsToCoins(userId, data);
+  return sendResponse(res, response);
+};
+
 exports.toggleUserStatus = async (req, res, next) => {
   const targetUserId = req?.params?.id;
   const data = req?.body;
@@ -179,7 +186,13 @@ exports.toggleUserStatus = async (req, res, next) => {
 };
 
 exports.deleteUser = async (req, res, next) => {
-  const targetUserId = req?.params?.id;
-  const response = await userService.deleteUser(targetUserId);
+  const userId = req.params?.id;
+  const response = await userService.deleteUser(userId);
+  return sendResponse(res, response);
+};
+
+exports.releaseBan = async (req, res, next) => {
+  const userId = req.params?.id;
+  const response = await userService.releaseBan(userId);
   return sendResponse(res, response);
 };

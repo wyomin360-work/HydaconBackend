@@ -167,6 +167,12 @@ router.patch(
   handleError(controller.flagUser),
 );
 
+router.post(
+  userPaths.convertPoints,
+  verification.verifyUser,
+  handleError(controller.convertPoints),
+);
+
 router.patch(
   userPaths.toggleStatus,
   verification.verifyAdmin,
@@ -177,6 +183,12 @@ router.delete(
   userPaths.deleteUser,
   verification.verifyAdmin,
   handleError(controller.deleteUser),
+);
+
+router.patch(
+  userPaths.releaseBan,
+  verification.verifyAdmin,
+  handleError(controller.releaseBan),
 );
 
 module.exports = router;

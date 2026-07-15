@@ -36,6 +36,7 @@ const { validateIFSC } = require("../../functions/razorPay");
 const { sendFcmNotifications } = require("../../functions/fcm");
 const { sendSms } = require("../../functions/sms");
 const { sendMail } = require("../../functions/nodemailer");
+const AppConfig = require("../../schemas/app-config.schema");
 
 async function generateAndSaveToken(payload) {
   const accessToken = generateToken(payload);
@@ -414,7 +415,10 @@ async function updatePassword(data) {
 // User Details
 // ----------------------
 async function getUserDetails(userId) {
-  const user = await User.findById(userId).populate("roleId").lean();
+  const user = await User.findById(userId)
+    .populate("roleId")
+    .populate("currentTierId")
+    .lean();
   if (!user) sendFailResponse("User not found");
   let returnData = {};
 
@@ -888,10 +892,10 @@ async function deliverOtpViaSms(phoneNumber, message) {
 
   if (!smsSent) {
     const error = smsResult?.error || "";
-    const isTwilioAuthError = error.includes("(20003)");
-    const message = isTwilioAuthError
-      ? "Failed to send OTP because Twilio authentication failed. Please check TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in .env."
-      : "Failed to send OTP to your mobile number. If you are using a Twilio trial account, verify the recipient number in your Twilio console.";
+    const isAuthError = error.includes("(20003)");
+    const message = isAuthError
+      ? "Failed to send OTP check your SMS configuration"
+      : "Failed to send OTP to your mobile number";
 
     sendFailResponse(message);
   }
@@ -1426,6 +1430,58 @@ async function getAdminUserDetails(userId) {
   };
 }
 
+// ----------------------
+// Convert Points to Coins
+// ----------------------
+async function convertPointsToCoins(userId, data) {
+  const { points } = data;
+  if (!points || points <= 0) return sendFailResponse("Invalid points amount");
+
+  const session = await mongoose.startSession();
+  try {
+    let result;
+    await session.withTransaction(async () => {
+      const user = await User.findById(userId).session(session);
+      if (!user) throw new Error("User not found");
+      if (user.totalPoints < points) throw new Error("Insufficient points");
+
+      const config = await AppConfig.findOne().session(session);
+      const ratio = config?.coinSettings?.pointToCoinRatio || 100;
+
+      const coinsToAdd = points / ratio;
+
+      user.totalPoints -= points;
+      user.hydaconCoins = (user.hydaconCoins || 0) + coinsToAdd;
+      user.lifetimeHydaconCoins = (user.lifetimeHydaconCoins || 0) + coinsToAdd;
+
+      await user.save({ session });
+
+      // Optionally create a transaction log here if a schema existed for point->coin conversion.
+      result = attachId(user.toObject());
+    });
+
+    return {
+      message: "Points converted successfully",
+      data: result,
+    };
+  } catch (error) {
+    return { success: false, message: error.message };
+  } finally {
+    await session.endSession();
+  }
+}
+
+async function releaseBan(userId) {
+  const user = await User.findById(userId);
+  if (!user) sendFailResponse("User not found");
+
+  user.scanBanUntil = null;
+  user.failedScanAttempts = 0;
+  await user.save();
+
+  return { message: "Ban released successfully" };
+}
+
 module.exports = {
   registerUser,
   login,
@@ -1450,6 +1506,8 @@ module.exports = {
   updatePreferences,
   uploadProfilePhoto,
   flagUser,
+  convertPointsToCoins,
   toggleUserStatus,
   deleteUser,
+  releaseBan,
 };

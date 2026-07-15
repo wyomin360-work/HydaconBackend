@@ -103,6 +103,17 @@ const APP_NOTIFICATIONS = {
       body: "Your loyalty tier has been adjusted from {{oldTierName}} to {{newTierName}}.",
     },
   },
+
+  gifts: {
+    voucherRedeemed: {
+      title: "🎉 Your Voucher is Here!",
+      body: "Your {{giftName}} voucher has been sent to your email. Tap to view!",
+    },
+    voucherFile: {
+      title: "🎟️ Voucher Ready for Download!",
+      body: "Your {{giftName}} voucher file is ready. Check your email to download it!",
+    },
+  },
 };
 
 module.exports = { APP_NOTIFICATIONS };

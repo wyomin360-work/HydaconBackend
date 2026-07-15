@@ -11,6 +11,11 @@ const productSchema = new mongoose.Schema(
       ref: "Document",
       required: false,
     },
+    categoryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "GiftCategory", // Using GiftCategory for now as it's the only category model
+      required: false,
+    },
     price: { type: Number, required: false },
     images: { type: [String], required: false, default: [] },
     featuredImage: { type: String, required: false },

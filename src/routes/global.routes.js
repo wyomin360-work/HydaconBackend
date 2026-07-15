@@ -24,10 +24,14 @@ const loyaltyRoutes = require("../modules/loyalty/loyalty.routes");
 const loyaltyPaths = require("../modules/loyalty/loyalty.paths");
 const campaignsRoutes = require("../modules/campaigns/campaigns.routes");
 const campaignsPaths = require("../modules/campaigns/campaigns.paths");
+const giftPaths = require("../modules/gift/gift.paths");
+const giftRoutes = require("../modules/gift/gift.routes");
 const documentRoutes = require("../modules/document/document.routes");
 const documentPaths = require("../modules/document/document.paths");
 const filesPaths = require("../modules/files/files.paths");
 const filesRoutes = require("../modules/files/files.routes");
+const ruleSetPaths = require("../modules/rule-set/rule-set.paths");
+const ruleSetRoutes = require("../modules/rule-set/rule-set.routes");
 const referralRoutes = require("../modules/referral/referral.routes");
 const referralPaths = require("../modules/referral/referral.paths");
 
@@ -45,8 +49,10 @@ globalRoutes.use(rolePaths.root, roleRoutes);
 globalRoutes.use(kycPaths.root, kycRoutes);
 globalRoutes.use(loyaltyPaths.root, loyaltyRoutes);
 globalRoutes.use(campaignsPaths.root, campaignsRoutes);
+globalRoutes.use(giftPaths.root, giftRoutes);
 globalRoutes.use(documentPaths.root, documentRoutes);
 globalRoutes.use(filesPaths.root, filesRoutes);
+globalRoutes.use(ruleSetPaths.root, ruleSetRoutes);
 globalRoutes.use(referralPaths.root, referralRoutes);
 globalRoutes.use("/referrals", referralRoutes);
 
