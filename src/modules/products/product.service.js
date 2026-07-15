@@ -30,6 +30,7 @@ async function productList(data) {
     search = "",
     sortBy = "createdAt",
     sortOrder = "desc",
+    categoryId,
     filters = {},
   } = data;
 
@@ -41,6 +42,10 @@ async function productList(data) {
       { name: { $regex: search, $options: "i" } },
       { description: { $regex: search, $options: "i" } },
     ];
+  }
+
+  if (categoryId) {
+    query.categoryId = categoryId;
   }
 
   if (filters.active !== undefined) {
