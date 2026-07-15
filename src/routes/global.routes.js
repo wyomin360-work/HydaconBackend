@@ -54,6 +54,6 @@ globalRoutes.use(documentPaths.root, documentRoutes);
 globalRoutes.use(filesPaths.root, filesRoutes);
 globalRoutes.use(ruleSetPaths.root, ruleSetRoutes);
 globalRoutes.use(referralPaths.root, referralRoutes);
-globalRoutes.use("/referrals", referralRoutes);
+
 
 module.exports = globalRoutes;
