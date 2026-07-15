@@ -1,5 +1,5 @@
 module.exports = {
-  root: "/referral",
+  root: "/referrals",
 
   // User endpoints
   send: "/send",

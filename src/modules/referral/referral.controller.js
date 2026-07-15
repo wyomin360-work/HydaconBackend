@@ -36,3 +36,13 @@ exports.sendMobileReferralReminder = async (req, res) => {
   );
   return sendResponse(res, response);
 };
+
+/**
+ * POST /referrals/milestone
+ * Simulates a referred user completing one of the transactional referral milestones.
+ */
+exports.completeMilestone = async (req, res) => {
+  const { milestone } = req.body;
+  const response = await referralService.completeMilestone(req.userId, milestone);
+  return sendResponse(res, response);
+};

@@ -9,6 +9,8 @@ const User = require("../../schemas/user.schema");
 const { attachId, formatNotification } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const AppConfig = require("../../schemas/app-config.schema");
+const referralService = require("../referral/referral.service");
+const { REFERRAL_MILESTONES } = require("../../constants/referrals");
 
 async function listRedeems(data) {
   const { page = 1, limit = 20 } = data;
@@ -84,7 +86,7 @@ async function createRedeem(redeemData, reqUser = null) {
   if (!allowedKycStatuses.includes(user.kycStatus)) {
     sendFailResponse(
       "KYC verification is required to redeem points. Your current KYC status: " +
-        (user.kycStatus || KYC_STATUS.NOT_STARTED),
+      (user.kycStatus || KYC_STATUS.NOT_STARTED),
       403,
     );
   }
@@ -210,8 +212,20 @@ async function createRedeem(redeemData, reqUser = null) {
   });
 
   try {
-    const referralService = require("../referral/referral.service");
-    await referralService.evaluateReferralReward(userId, user.totalScans);
+
+    // 1. First scan milestone
+    await referralService.completeMilestone(userId, REFERRAL_MILESTONES.FIRST_SCAN);
+
+    // 2. Daily scan milestone check
+    const todayStr = new Date().toDateString();
+    const lastScanStr = user.lastScanDate ? new Date(user.lastScanDate).toDateString() : "";
+    if (todayStr !== lastScanStr) {
+      await User.findByIdAndUpdate(userId, { $set: { lastScanDate: new Date() } });
+      await referralService.completeMilestone(userId, REFERRAL_MILESTONES.DAILY_SCAN);
+    }
+
+    // 3. AppConfig scans configuration fallback
+    await referralService.evaluateReferralReward(userId, user.totalScans + 1);
   } catch (err) {
     console.error("Error evaluating referral rewards:", err);
   }

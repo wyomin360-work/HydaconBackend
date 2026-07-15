@@ -45,4 +45,13 @@ router.post(
   handleError(controller.sendMobileReferralReminder),
 );
 
+/**
+ * POST /referrals/milestone
+ */
+router.post(
+  "/milestone",
+  verification.verifyUser,
+  handleError(controller.completeMilestone),
+);
+
 module.exports = router;

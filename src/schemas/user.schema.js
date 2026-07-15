@@ -126,6 +126,8 @@ const userSchema = new mongoose.Schema(
     // Tracks which referral scan milestones have already been rewarded.
     // Prevents double-crediting if the same scan is processed more than once.
     referralRewardedMilestones: { type: [Number], default: [] },
+    // Tracks completed transactional referral milestones (e.g. phone transfer, QR payment)
+    completedReferralMilestones: { type: [String], default: [] },
   },
   {
     timestamps: true,

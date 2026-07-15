@@ -12,6 +12,8 @@ const {
   KYC_DOCUMENT_TYPES,
 } = require("../../constants/user");
 const { sendTemplateEmail } = require("../../functions/nodemailer");
+const referralService = require("../referral/referral.service");
+const { REFERRAL_MILESTONES } = require("../../constants/referrals");
 
 async function compressImage(filePath) {
   const parsedPath = path.parse(filePath);
@@ -322,6 +324,11 @@ async function reviewKycDocument(
         const title = APP_NOTIFICATIONS.kyc.approved.title;
         const body = APP_NOTIFICATIONS.kyc.approved.body;
         await sendFcmNotifications(user.fcmTokens, title, body);
+        try {
+          await referralService.completeMilestone(userId, REFERRAL_MILESTONES.KYC_VERIFICATION);
+        } catch (milestoneErr) {
+          console.error("Error triggering KYC milestone:", milestoneErr);
+        }
       } else if (user.kycStatus === KYC_STATUS.REJECTED) {
         const title = APP_NOTIFICATIONS.kyc.rejected.title;
         const body = formatNotification(APP_NOTIFICATIONS.kyc.rejected.body, {
