@@ -1,6 +1,7 @@
 const User = require("../../schemas/user.schema");
 const ServiceRequest = require("../../schemas/service-request.schema");
 const RefreshToken = require("../../schemas/refreshtoken.schema");
+const { checkS3FileExists, deleteS3File } = require("../../utils/s3");
 const path = require("path");
 const sharp = require("sharp");
 const fs = require("fs");
@@ -1228,71 +1229,26 @@ async function compressProfileImage(filePath) {
   }
 }
 
-async function uploadProfilePhoto(userId, file) {
-  if (!file) {
-    throw new Error("No file uploaded");
+async function uploadProfilePhoto(userId, fileUrl) {
+  if (!fileUrl) {
+    throw new Error("fileUrl is required");
   }
 
-  const allowedMimeTypes = ["image/jpeg", "image/png", "image/jpg"];
-  const allowedExtensions = [".jpg", ".jpeg", ".png"];
-  const ext = path.extname(file.originalname || "").toLowerCase();
-
-  if (
-    !allowedMimeTypes.includes(file.mimetype) ||
-    !allowedExtensions.includes(ext)
-  ) {
-    if (file.path && fs.existsSync(file.path)) {
-      try {
-        fs.unlinkSync(file.path);
-      } catch (err) {
-        console.error("Error deleting invalid file type:", err);
-      }
-    }
-    throw new Error(
-      "Invalid file type. Only JPG, JPEG, and PNG files are allowed.",
-    );
-  }
-
-  const maxFileSize = 5 * 1024 * 1024;
-  if (file.size > maxFileSize) {
-    if (file.path && fs.existsSync(file.path)) {
-      try {
-        fs.unlinkSync(file.path);
-      } catch (err) {
-        console.error("Error deleting oversized file:", err);
-      }
-    }
-    throw new Error("File size exceeds the 5MB limit.");
+  const isFileExist = await checkS3FileExists(fileUrl);
+  if (!isFileExist) {
+    throw new Error("File not found on S3.");
   }
 
   const user = await User.findById(userId);
   if (!user) {
-    if (file.path && fs.existsSync(file.path)) {
-      try {
-        fs.unlinkSync(file.path);
-      } catch (err) {
-        console.error("Error deleting orphaned file:", err);
-      }
-    }
     throw new Error("User not found");
   }
 
-  if (user.profilePhoto) {
-    const prevPhotoPath = path.join(__dirname, "../..", user.profilePhoto);
-    if (fs.existsSync(prevPhotoPath)) {
-      try {
-        fs.unlinkSync(prevPhotoPath);
-      } catch (err) {
-        console.error("Error deleting previous profile photo:", err);
-      }
-    }
+  if (user.profilePhoto && user.profilePhoto.startsWith("http") && user.profilePhoto.includes("amazonaws.com")) {
+    await deleteS3File(user.profilePhoto);
   }
 
-  const originalFilename = file.filename;
-  const compressedFilename = await compressProfileImage(file.path);
-  const profilePhotoUrl = `/uploads/images/${compressedFilename}`;
-
-  user.profilePhoto = profilePhotoUrl;
+  user.profilePhoto = fileUrl;
   await user.save();
 
   const populatedUser = await User.findById(userId).populate("roleId");

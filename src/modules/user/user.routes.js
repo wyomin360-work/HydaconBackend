@@ -96,7 +96,6 @@ router.patch(
 router.post(
   userPaths.profilePhoto,
   verification.verifyUser,
-  upload.single("profilePhoto"),
   handleError(controller.uploadProfilePhoto),
 );
 
