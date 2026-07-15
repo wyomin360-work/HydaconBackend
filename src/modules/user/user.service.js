@@ -222,7 +222,6 @@ async function providerAuth(data) {
     });
 
     const { password: pw, ...rest } = attachId(cleanData);
-
     return {
       message: "Registered successfully",
       data: {
