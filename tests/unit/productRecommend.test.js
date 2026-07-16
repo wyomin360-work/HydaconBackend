@@ -106,22 +106,49 @@ describe("Product Recommendation Engine", () => {
   });
 
   describe("API Endpoint: POST /api/v1/products/recommend", () => {
-    it("should fail validation if mandatory parameters are missing", async () => {
-      const incompletePayload = {
+    it("should succeed validation even if some parameters are missing (all filters are optional)", async () => {
+      const partialPayload = {
         roomType: "bathroom",
         areaType: "wet-area",
-        // missing applicationArea, substrateType, applicationType
+      };
+
+      const mockProducts = [
+        { _id: "product-1", name: "TileBond Premium", active: true },
+      ];
+
+      Product.find.mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockResolvedValue(mockProducts),
+      });
+
+      const res = await request(app)
+        .post("/api/v1/products/recommend")
+        .send(partialPayload);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.status).toBe("success");
+      expect(Product.find).toHaveBeenCalledWith({
+        active: true,
+        roomTypes: "bathroom",
+        areaTypes: "wet-area",
+      });
+    });
+
+    it("should fail validation if unknown properties are passed", async () => {
+      const invalidPayload = {
+        roomType: "bathroom",
+        unknownProperty: "should-fail",
       };
 
       const res = await request(app)
         .post("/api/v1/products/recommend")
-        .send(incompletePayload);
+        .send(invalidPayload);
 
       expect(res.statusCode).toBe(400);
       expect(res.body.status).toBe("fail");
     });
 
-    it("should succeed and return products if payload is valid", async () => {
+    it("should succeed and return products if full payload is valid", async () => {
       const mockProducts = [
         { _id: "product-1", name: "TileBond Premium", active: true },
       ];

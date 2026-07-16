@@ -107,13 +107,6 @@ const productRecommendRequestType = {
     tileType: { type: "string" },
     tags: { type: "array", items: { type: "string", minLength: 1 } },
   },
-  required: [
-    "roomType",
-    "areaType",
-    "applicationArea",
-    "substrateType",
-    "applicationType",
-  ],
   additionalProperties: false,
 };
 

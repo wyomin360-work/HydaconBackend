@@ -515,7 +515,7 @@ async function recommendProducts(criteria) {
     applicationType,
     tileType,
     tags,
-  } = criteria;
+  } = criteria || {};
 
   const normRoomType = normalizeTag(roomType);
   const normAreaType = normalizeTag(areaType);
