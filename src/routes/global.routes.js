@@ -1,7 +1,8 @@
 const express = require("express");
 
-// -- Middleware --
+// -- Middleware & Helpers --
 const verification = require("../middlewares/jwtVerification");
+const { handleError } = require("../utils/heplers");
 
 // -- App & Common --
 const appRoutes = require("../modules/app/app.routes");
@@ -13,13 +14,6 @@ const commonPaths = require("../modules/common/common.paths");
 const userRoutes = require("../modules/user/user.routes");
 const userPaths = require("../modules/user/user.paths");
 const adminRoutes = require("../modules/admin/admin.routes");
-const productRoutes = require("../modules/products/product.routes");
-const productController = require("../modules/products/product.controller");
-const rewardRoutes = require("../modules/rewards/rewards.routes");
-const redeemRoutes = require("../modules/redeems/redeems.routes");
-const transactionRoutes = require("../modules/transactions/transactions.routes");
-const appPaths = require("../modules/app/app.paths");
-const commonPaths = require("../modules/common/common.paths");
 const adminPaths = require("../modules/admin/admin.paths");
 const roleRoutes = require("../modules/roles/role.routes");
 const rolePaths = require("../modules/roles/role.paths");
@@ -29,6 +23,7 @@ const kycPaths = require("../modules/kyc/kyc.paths");
 // -- Products --
 const productRoutes = require("../modules/products/product.routes");
 const productPaths = require("../modules/products/product.paths");
+const productController = require("../modules/products/product.controller");
 
 // -- Rewards & Redeems --
 const rewardRoutes = require("../modules/rewards/rewards.routes");
@@ -58,7 +53,6 @@ const filesPaths = require("../modules/files/files.paths");
 
 // -- Rule Set --
 const ruleSetRoutes = require("../modules/rule-set/rule-set.routes");
-const { handleError } = require("../utils/heplers");
 const ruleSetPaths = require("../modules/rule-set/rule-set.paths");
 
 // -- Videos --
@@ -82,17 +76,17 @@ globalRoutes.use(commonPaths.root, commonRoutes);
 // Users & Admins
 globalRoutes.use(userPaths.root, userRoutes);
 globalRoutes.use(adminPaths.root, adminRoutes);
-
-// Public route for calculator
-globalRoutes.post(
-  `${productPaths.root}${productPaths.calculateCoverage}`,
-  handleError(productController.calculateCoverage),
-);
-
-globalRoutes.use(productPaths.root, productRoutes);
-
 globalRoutes.use(rolePaths.root, roleRoutes);
 globalRoutes.use(kycPaths.root, kycRoutes);
+
+// Products & Calculator (Public)
+globalRoutes.post(
+  `${productPaths.root}${productPaths.calculateCoverage}`,
+  handleError(productController.calculateCoverage)
+);
+globalRoutes.use(productPaths.root, productRoutes);
+
+// Rewards & Redeems
 globalRoutes.use(rewardsPath.root, verification.verifyAdmin, rewardRoutes);
 globalRoutes.use(redeemsPath.root, redeemRoutes);
 

@@ -9,62 +9,53 @@ const {
   productUpdateRequestType,
 } = require("../../validations/product.validations");
 const { paginationType } = require("../../validations/global.validations");
-const verification = require("../../middlewares/jwtVerification");
 
 const router = express.Router();
 
-// Public
+// Public Routes
 router.post(
   productPaths.publicList,
   validateRequest(paginationType),
-  handleError(productController.listProducts),
+  handleError(productController.publicListProducts)
 );
 
+router.get(
+  productPaths.publicDetails,
+  handleError(productController.publicGetProduct)
+);
+
+// Admin Routes (Protected)
 router.post(
   productPaths.list,
-  verification.verifyAdmin,
+  verifyAdmin,
   validateRequest(paginationType),
-  handleError(productController.listProducts),
+  handleError(productController.listProducts)
 );
 
 router.get(
   productPaths.details,
-  verification.verifyAdmin,
+  verifyAdmin,
   handleError(productController.getProduct)
 );
 
 router.post(
   productPaths.create,
   verifyAdmin,
-  verification.verifyAdmin,
   validateRequest(productCreateRequestType),
-  handleError(productController.createProduct),
+  handleError(productController.createProduct)
 );
 
 router.patch(
   productPaths.update,
   verifyAdmin,
-  verification.verifyAdmin,
   validateRequest(productUpdateRequestType),
-  handleError(productController.updateProduct),
+  handleError(productController.updateProduct)
 );
 
 router.delete(
   productPaths.delete,
   verifyAdmin,
-  verification.verifyAdmin,
-  handleError(productController.deleteProduct),
-);
-
-router.post(
-  productPaths.publicList,
-  validateRequest(paginationType),
-  handleError(productController.publicListProducts),
-);
-
-router.get(
-  productPaths.publicDetails,
-  handleError(productController.publicGetProduct)
+  handleError(productController.deleteProduct)
 );
 
 module.exports = router;
