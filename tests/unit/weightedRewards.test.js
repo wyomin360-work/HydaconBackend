@@ -94,7 +94,8 @@ describe("Weighted Rewards Calculation", () => {
     expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
       "user123",
       expect.objectContaining({
-        $inc: { totalPoints: 50, lifetimePoints: 50 },
+        $inc: { totalPoints: 50, lifetimePoints: 50, totalScans: 1 },
+        $set: { failedScanAttempts: 0, scanBanUntil: null },
       }),
     );
   });
@@ -117,7 +118,8 @@ describe("Weighted Rewards Calculation", () => {
     expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
       "user123",
       expect.objectContaining({
-        $inc: { totalPoints: 10, lifetimePoints: 10 },
+        $inc: { totalPoints: 10, lifetimePoints: 10, totalScans: 1 },
+        $set: { failedScanAttempts: 0, scanBanUntil: null },
       }),
     );
   });
@@ -138,7 +140,10 @@ describe("Weighted Rewards Calculation", () => {
     expect(response.data.pointsRewarded).toBe(5);
     expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
       "user123",
-      expect.objectContaining({ $inc: { totalPoints: 5, lifetimePoints: 5 } }),
+      expect.objectContaining({
+        $inc: { totalPoints: 5, lifetimePoints: 5, totalScans: 1 },
+        $set: { failedScanAttempts: 0, scanBanUntil: null },
+      }),
     );
   });
 });

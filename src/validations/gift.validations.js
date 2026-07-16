@@ -31,6 +31,10 @@ const giftCreateRequestType = {
     image: { type: "string" },
     active: { type: "boolean" },
     ruleSetId: { type: "string" },
+    voucherRedemptionType: { type: "string", enum: ["code", "file"] },
+    voucherCode: { type: "string", minLength: 1 },
+    voucherFileUrl: { type: "string", minLength: 1 },
+    themeColor: { type: "string" },
   },
   required: [
     "name",
@@ -54,6 +58,10 @@ const giftUpdateRequestType = {
     image: { type: "string" },
     active: { type: "boolean" },
     ruleSetId: { type: "string" },
+    voucherRedemptionType: { type: "string", enum: ["code", "file"] },
+    voucherCode: { type: "string", minLength: 1 },
+    voucherFileUrl: { type: "string", minLength: 1 },
+    themeColor: { type: "string" },
   },
   additionalProperties: false,
 };
