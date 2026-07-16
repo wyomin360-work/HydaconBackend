@@ -14,14 +14,17 @@ const ALLOWED_PLACEMENTS = [
   "REWARD_SUCCESS_SCREEN",
   "SEASON_LANDING_PAGE",
   "ANNOUNCEMENTS",
-  "SEASON_CAMPAIGN"
+  "SEASON_CAMPAIGN",
 ];
 
 const validatePlacements = (placements) => {
   if (!placements || !Array.isArray(placements)) return;
   for (const p of placements) {
     if (!ALLOWED_PLACEMENTS.includes(p)) {
-      throw new ErrorHandler(`Invalid placement: ${p}. Allowed: ${ALLOWED_PLACEMENTS.join(", ")}`, 400);
+      throw new ErrorHandler(
+        `Invalid placement: ${p}. Allowed: ${ALLOWED_PLACEMENTS.join(", ")}`,
+        400,
+      );
     }
   }
 };
@@ -52,17 +55,21 @@ const deleteContent = async (id) => {
 
 const listContent = async (query = {}) => {
   const { page = 1, limit = 10, type, placement, active } = query;
-  
+
   const filter = {};
   if (type) filter.type = type;
   if (placement) filter.placements = placement;
-  if (active !== undefined) filter.active = active === "true" || active === true;
+  if (active !== undefined)
+    filter.active = active === "true" || active === true;
 
   const skip = (parseInt(page) - 1) * parseInt(limit);
-  
+
   const [data, total] = await Promise.all([
-    Content.find(filter).sort({ sortOrder: 1, createdAt: -1 }).skip(skip).limit(parseInt(limit)),
-    Content.countDocuments(filter)
+    Content.find(filter)
+      .sort({ sortOrder: 1, createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit)),
+    Content.countDocuments(filter),
   ]);
 
   return { data, total, page: parseInt(page), limit: parseInt(limit) };
@@ -70,14 +77,14 @@ const listContent = async (query = {}) => {
 
 const getHomepageContent = async () => {
   const now = new Date();
-  
+
   // Find active content where current date is within start/end dates (or dates are null)
   const activeContents = await Content.find({
     active: true,
     $and: [
       { $or: [{ startDate: null }, { startDate: { $lte: now } }] },
-      { $or: [{ endDate: null }, { endDate: { $gte: now } }] }
-    ]
+      { $or: [{ endDate: null }, { endDate: { $gte: now } }] },
+    ],
   }).sort({ priority: -1, sortOrder: 1 });
 
   // Group by placement
@@ -108,8 +115,8 @@ const getPlacementContent = async (placement) => {
     placements: placement,
     $and: [
       { $or: [{ startDate: null }, { startDate: { $lte: now } }] },
-      { $or: [{ endDate: null }, { endDate: { $gte: now } }] }
-    ]
+      { $or: [{ endDate: null }, { endDate: { $gte: now } }] },
+    ],
   }).sort({ priority: -1, sortOrder: 1 });
 
   return contents;
@@ -131,5 +138,5 @@ module.exports = {
   getHomepageContent,
   getPlacementContent,
   getContentDetails,
-  ALLOWED_PLACEMENTS
+  ALLOWED_PLACEMENTS,
 };

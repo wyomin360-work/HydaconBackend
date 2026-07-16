@@ -8,4 +8,5 @@ module.exports = {
   publicList: "/public/list",
   publicDetails: "/public/details/:productId",
   calculateCoverage: "/calculate-coverage",
+  recommend: "/recommend",
 };

@@ -1,8 +1,42 @@
 const { default: mongoose } = require("mongoose");
 
+const calculatorConfigSchema = new mongoose.Schema(
+  {
+    wastagePercentage: { type: Number },
+    rounding: { type: String, enum: ["UP", "NEAREST"] },
+    materialDensity: { type: Number }, // specific gravity
+    minTileSize: { type: Number },
+    maxTileSize: { type: Number },
+    minJointWidth: { type: Number },
+    maxJointWidth: { type: Number },
+    minTileThickness: { type: Number },
+    maxTileThickness: { type: Number },
+  },
+  { _id: false },
+);
+
+const coverageSchema = new mongoose.Schema(
+  {
+    enabled: { type: Boolean, default: false },
+    calculationType: { type: String, enum: ["AREA", "JOINT_FILLER"] },
+    coveragePerUnit: { type: Number },
+    coverageUnit: { type: String, enum: ["sqft", "sqm"] },
+    packageWeight: { type: Number },
+    packageUnit: { type: String, enum: ["kg", "ltr"] },
+    calculatorConfig: {
+      type: calculatorConfigSchema,
+      default: () => ({}),
+    },
+  },
+  { _id: false },
+);
+
 const productSchema = new mongoose.Schema(
   {
-    _id: { type: String, default: () => new mongoose.Types.ObjectId().toString() },
+    _id: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: () => new mongoose.Types.ObjectId(),
+    },
     name: { type: String, required: true },
     description: { type: String, required: true },
     weightValue: { type: Number, required: true },
@@ -52,29 +86,26 @@ const productSchema = new mongoose.Schema(
     featuredImage: { type: String, required: false },
     rewardPoints: { type: Number, required: true, default: 0 },
     active: { type: Boolean, default: true },
+    roomTypes: { type: [String], default: [] },
+    areaTypes: { type: [String], default: [] },
+    applicationAreas: { type: [String], default: [] },
+    substrateTypes: { type: [String], default: [] },
+    applicationTypes: { type: [String], default: [] },
+    tileTypes: { type: [String], default: [] },
+    additionalTags: { type: [String], default: [] },
     coverage: {
-      enabled: { type: Boolean, default: false },
-      calculationType: { type: String, enum: ["AREA", "JOINT_FILLER"] },
-      coveragePerUnit: { type: Number },
-      coverageUnit: { type: String, enum: ["sqft", "sqm"] },
-      packageWeight: { type: Number },
-      packageUnit: { type: String, enum: ["kg", "ltr"] },
-      calculatorConfig: {
-        wastagePercentage: { type: Number },
-        rounding: { type: String, enum: ["UP", "NEAREST"] },
-        materialDensity: { type: Number }, // specific gravity
-        minTileSize: { type: Number },
-        maxTileSize: { type: Number },
-        minJointWidth: { type: Number },
-        maxJointWidth: { type: Number },
-        minTileThickness: { type: Number },
-        maxTileThickness: { type: Number }
-      }
-    }
+      type: coverageSchema,
+      default: () => ({}),
+    },
   },
   { timestamps: true },
 );
 
+productSchema.index({ active: 1 });
+productSchema.index({ roomTypes: 1 });
+productSchema.index({ areaTypes: 1 });
+productSchema.index({ substrateTypes: 1 });
+productSchema.index({ applicationTypes: 1 });
+
 const Product = mongoose.model("Product", productSchema);
 module.exports = Product;
-

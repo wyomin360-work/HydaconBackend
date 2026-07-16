@@ -40,6 +40,19 @@ const productCreateRequestType = {
     weightUnit: { type: "string", enum: ["kg", "g", "l", "ml"] },
     tdsDocument: { type: "string", pattern: "^([0-9a-fA-F]{24}|)$" },
     coverage: coverageSchema,
+    roomTypes: { type: "array", items: { type: "string", minLength: 1 } },
+    areaTypes: { type: "array", items: { type: "string", minLength: 1 } },
+    applicationAreas: {
+      type: "array",
+      items: { type: "string", minLength: 1 },
+    },
+    substrateTypes: { type: "array", items: { type: "string", minLength: 1 } },
+    applicationTypes: {
+      type: "array",
+      items: { type: "string", minLength: 1 },
+    },
+    tileTypes: { type: "array", items: { type: "string", minLength: 1 } },
+    additionalTags: { type: "array", items: { type: "string", minLength: 1 } },
   },
   required: [
     "name",
@@ -49,7 +62,7 @@ const productCreateRequestType = {
     "weightValue",
     "weightUnit",
   ],
-  additionalProperties: true,
+  additionalProperties: false,
 };
 
 const productUpdateRequestType = {
@@ -66,11 +79,46 @@ const productUpdateRequestType = {
     tdsDocument: { type: "string", pattern: "^([0-9a-fA-F]{24}|)$" },
     active: { type: "boolean" },
     coverage: coverageSchema,
+    roomTypes: { type: "array", items: { type: "string", minLength: 1 } },
+    areaTypes: { type: "array", items: { type: "string", minLength: 1 } },
+    applicationAreas: {
+      type: "array",
+      items: { type: "string", minLength: 1 },
+    },
+    substrateTypes: { type: "array", items: { type: "string", minLength: 1 } },
+    applicationTypes: {
+      type: "array",
+      items: { type: "string", minLength: 1 },
+    },
+    tileTypes: { type: "array", items: { type: "string", minLength: 1 } },
+    additionalTags: { type: "array", items: { type: "string", minLength: 1 } },
   },
+  additionalProperties: true,
+};
+
+const productRecommendRequestType = {
+  type: "object",
+  properties: {
+    roomType: { type: "string" },
+    areaType: { type: "string" },
+    applicationArea: { type: "string" },
+    substrateType: { type: "string" },
+    applicationType: { type: "string" },
+    tileType: { type: "string" },
+    tags: { type: "array", items: { type: "string", minLength: 1 } },
+  },
+  required: [
+    "roomType",
+    "areaType",
+    "applicationArea",
+    "substrateType",
+    "applicationType",
+  ],
   additionalProperties: false,
 };
 
 module.exports = {
   productCreateRequestType,
   productUpdateRequestType,
+  productRecommendRequestType,
 };
