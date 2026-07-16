@@ -13,6 +13,7 @@ module.exports = {
   userEligibility: "/user/eligibility/:giftId",
   userRedemptionDetails: "/user/redemptions/:redemptionId",
   userCategoryList: "/user/categories",
+  publicCategoryList: "/public/categories/list",
 
   // Category Routes (Admin)
   categoryList: "/categories/list",

@@ -32,6 +32,8 @@ const filesPaths = require("../modules/files/files.paths");
 const filesRoutes = require("../modules/files/files.routes");
 const ruleSetPaths = require("../modules/rule-set/rule-set.paths");
 const ruleSetRoutes = require("../modules/rule-set/rule-set.routes");
+const videoPaths = require("../modules/videos/video.paths");
+const videoRoutes = require("../modules/videos/video.routes");
 const referralRoutes = require("../modules/referral/referral.routes");
 const referralPaths = require("../modules/referral/referral.paths");
 
@@ -41,7 +43,7 @@ globalRoutes.use(appPaths.root, appRoutes);
 globalRoutes.use(commonPaths.root, commonRoutes);
 globalRoutes.use(userPaths.root, userRoutes);
 globalRoutes.use(adminPaths.root, adminRoutes);
-globalRoutes.use(productPaths.root, verification.verifyAdmin, productRoutes);
+globalRoutes.use(productPaths.root, productRoutes);
 globalRoutes.use(rewardsPath.root, verification.verifyAdmin, rewardRoutes);
 globalRoutes.use(redeemsPath.root, redeemRoutes);
 globalRoutes.use(transactionsPath.root, transactionRoutes);
@@ -53,6 +55,7 @@ globalRoutes.use(giftPaths.root, giftRoutes);
 globalRoutes.use(documentPaths.root, documentRoutes);
 globalRoutes.use(filesPaths.root, filesRoutes);
 globalRoutes.use(ruleSetPaths.root, ruleSetRoutes);
+globalRoutes.use(videoPaths.root, videoRoutes);
 globalRoutes.use(referralPaths.root, referralRoutes);
 
 
