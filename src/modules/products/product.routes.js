@@ -9,20 +9,34 @@ const {
   productUpdateRequestType,
 } = require("../../validations/product.validations");
 const { paginationType } = require("../../validations/global.validations");
+const verification = require("../../middlewares/jwtVerification");
 
 const router = express.Router();
 
+// Public
 router.post(
-  productPaths.list,
+  productPaths.publicList,
   validateRequest(paginationType),
   handleError(productController.listProducts),
 );
 
-router.get(productPaths.details, handleError(productController.getProduct));
+router.post(
+  productPaths.list,
+  verification.verifyAdmin,
+  validateRequest(paginationType),
+  handleError(productController.listProducts),
+);
+
+router.get(
+  productPaths.details,
+  verification.verifyAdmin,
+  handleError(productController.getProduct)
+);
 
 router.post(
   productPaths.create,
   verifyAdmin,
+  verification.verifyAdmin,
   validateRequest(productCreateRequestType),
   handleError(productController.createProduct),
 );
@@ -30,6 +44,7 @@ router.post(
 router.patch(
   productPaths.update,
   verifyAdmin,
+  verification.verifyAdmin,
   validateRequest(productUpdateRequestType),
   handleError(productController.updateProduct),
 );
@@ -37,7 +52,19 @@ router.patch(
 router.delete(
   productPaths.delete,
   verifyAdmin,
+  verification.verifyAdmin,
   handleError(productController.deleteProduct),
+);
+
+router.post(
+  productPaths.publicList,
+  validateRequest(paginationType),
+  handleError(productController.publicListProducts),
+);
+
+router.get(
+  productPaths.publicDetails,
+  handleError(productController.publicGetProduct)
 );
 
 module.exports = router;
