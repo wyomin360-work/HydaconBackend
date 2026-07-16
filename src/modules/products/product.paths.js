@@ -7,4 +7,5 @@ module.exports = {
   list: "/list",
   delete: "/delete/:productId",
   publicList: "/public/list",
+  publicDetails: "/public/details/:productId",
 };

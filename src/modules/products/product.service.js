@@ -2,11 +2,24 @@ const Product = require("../../schemas/product.schema");
 const Document = require("../../schemas/document.schema");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 
+const DOCUMENT_POPULATE = [
+  { path: "tdsDocument" },
+  { path: "msdsDocument" },
+  { path: "brochureDocument" },
+  { path: "catalogueDocument" },
+];
+
 async function getProduct(productId) {
   const product = await Product.findById(productId)
-    .populate("tdsDocument")
+    .populate(DOCUMENT_POPULATE)
     .lean();
   if (!product) sendFailResponse("product not found");
+  // Convert specifications Map → plain object for JSON serialisation
+  if (product?.specifications) {
+    product.specifications = Object.fromEntries(
+      Object.entries(product.specifications)
+    );
+  }
   return { data: product };
 }
 
@@ -17,6 +30,7 @@ async function productList(data) {
     search = "",
     sortBy = "createdAt",
     sortOrder = "desc",
+    categoryId,
     filters = {},
   } = data;
 
@@ -28,6 +42,10 @@ async function productList(data) {
       { name: { $regex: search, $options: "i" } },
       { description: { $regex: search, $options: "i" } },
     ];
+  }
+
+  if (categoryId) {
+    query.categoryId = categoryId;
   }
 
   if (filters.active !== undefined) {
@@ -59,7 +77,7 @@ async function productList(data) {
 
   const products =
     (await Product.find(query)
-      .populate("tdsDocument")
+      .populate(DOCUMENT_POPULATE)
       .sort(sort)
       .skip(skip)
       .limit(limit)
@@ -78,8 +96,14 @@ async function productList(data) {
   };
 }
 
+function extractDocId(val) {
+  if (!val || val === "") return null;
+  if (typeof val === "object") return val.id || val._id || null;
+  return val;
+}
+
 async function createProduct(productData) {
-  let {
+  const {
     name,
     description,
     images,
@@ -88,12 +112,22 @@ async function createProduct(productData) {
     rewardPoints,
     weightValue,
     weightUnit,
+    netWeight,
+    features,
+    specifications,
+    applicationAreas,
+    applicationTypes,
+    areaTypes,
+    roomTypes,
+    substrateTypes,
+    tileTypes,
+    additionalTags,
     tdsDocument,
+    msdsDocument,
+    brochureDocument,
+    catalogueDocument,
+    categoryId,
   } = productData;
-
-  if (tdsDocument === "") {
-    tdsDocument = null;
-  }
 
   const product = await Product.create({
     name,
@@ -103,12 +137,25 @@ async function createProduct(productData) {
     rewardPoints,
     weightValue,
     weightUnit,
-    tdsDocument,
+    netWeight,
+    features: features || [],
+    specifications: specifications || {},
+    applicationAreas: applicationAreas || [],
+    applicationTypes: applicationTypes || [],
+    areaTypes: areaTypes || [],
+    roomTypes: roomTypes || [],
+    substrateTypes: substrateTypes || [],
+    tileTypes: tileTypes || [],
+    additionalTags: additionalTags || [],
+    tdsDocument: extractDocId(tdsDocument),
+    msdsDocument: extractDocId(msdsDocument),
+    brochureDocument: extractDocId(brochureDocument),
+    catalogueDocument: extractDocId(catalogueDocument),
     featuredImage,
+    categoryId: categoryId || null,
   });
-  const populatedProduct = await Product.findById(product._id).populate(
-    "tdsDocument",
-  );
+
+  const populatedProduct = await Product.findById(product._id).populate(DOCUMENT_POPULATE);
   return {
     message: "Product created",
     data: { product: populatedProduct, productCreated: true },
@@ -116,7 +163,7 @@ async function createProduct(productData) {
 }
 
 async function updateProduct(productData, productId) {
-  let {
+  const {
     name,
     description,
     images,
@@ -125,29 +172,55 @@ async function updateProduct(productData, productId) {
     rewardPoints,
     weightValue,
     weightUnit,
+    netWeight,
+    features,
+    specifications,
+    applicationAreas,
+    applicationTypes,
+    areaTypes,
+    roomTypes,
+    substrateTypes,
+    tileTypes,
+    additionalTags,
     tdsDocument,
+    msdsDocument,
+    brochureDocument,
+    catalogueDocument,
+    categoryId,
     active,
   } = productData;
 
-  if (tdsDocument === "") {
-    tdsDocument = null;
-  }
-  await Product.findByIdAndUpdate(productId, {
-    $set: {
-      name,
-      description,
-      images,
-      featuredImage,
-      price,
-      rewardPoints,
-      weightValue,
-      weightUnit,
-      tdsDocument,
-      active,
-    },
-  });
-  const updatedProduct =
-    await Product.findById(productId).populate("tdsDocument");
+  const updateFields = {
+    name,
+    description,
+    images,
+    featuredImage,
+    price,
+    rewardPoints,
+    weightValue,
+    weightUnit,
+    active,
+    tdsDocument: extractDocId(tdsDocument),
+    msdsDocument: extractDocId(msdsDocument),
+    brochureDocument: extractDocId(brochureDocument),
+    catalogueDocument: extractDocId(catalogueDocument),
+  };
+
+  if (netWeight !== undefined) updateFields.netWeight = netWeight;
+  if (features !== undefined) updateFields.features = features;
+  if (specifications !== undefined) updateFields.specifications = specifications;
+  if (applicationAreas !== undefined) updateFields.applicationAreas = applicationAreas;
+  if (applicationTypes !== undefined) updateFields.applicationTypes = applicationTypes;
+  if (areaTypes !== undefined) updateFields.areaTypes = areaTypes;
+  if (roomTypes !== undefined) updateFields.roomTypes = roomTypes;
+  if (substrateTypes !== undefined) updateFields.substrateTypes = substrateTypes;
+  if (tileTypes !== undefined) updateFields.tileTypes = tileTypes;
+  if (additionalTags !== undefined) updateFields.additionalTags = additionalTags;
+  if (categoryId !== undefined) updateFields.categoryId = categoryId || null;
+
+  await Product.findByIdAndUpdate(productId, { $set: updateFields });
+
+  const updatedProduct = await Product.findById(productId).populate(DOCUMENT_POPULATE);
   return {
     message: "Product updated",
     data: { product: updatedProduct, productUpdated: true },
