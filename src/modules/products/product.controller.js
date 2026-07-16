@@ -31,6 +31,12 @@ exports.deleteProduct = async (req, res) => {
   return sendResponse(res, response);
 };
 
+exports.calculateCoverage = async (req, res) => {
+  const calculationData = req?.body;
+  const response = await productService.calculateProductCoverage(calculationData);
+  return sendResponse(res, response);
+};
+
 exports.publicListProducts = async (req, res) => {
   const paginationData = req?.body || {};
   paginationData.filters = { ...paginationData.filters, active: true };

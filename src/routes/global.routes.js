@@ -1,7 +1,8 @@
 const express = require("express");
 
-// -- Middleware --
+// -- Middleware & Helpers --
 const verification = require("../middlewares/jwtVerification");
+const { handleError } = require("../utils/heplers");
 
 // -- App & Common --
 const appRoutes = require("../modules/app/app.routes");
@@ -22,6 +23,7 @@ const kycPaths = require("../modules/kyc/kyc.paths");
 // -- Products --
 const productRoutes = require("../modules/products/product.routes");
 const productPaths = require("../modules/products/product.paths");
+const productController = require("../modules/products/product.controller");
 
 // -- Rewards & Redeems --
 const rewardRoutes = require("../modules/rewards/rewards.routes");
@@ -77,7 +79,11 @@ globalRoutes.use(adminPaths.root, adminRoutes);
 globalRoutes.use(rolePaths.root, roleRoutes);
 globalRoutes.use(kycPaths.root, kycRoutes);
 
-// Products
+// Products & Calculator (Public)
+globalRoutes.post(
+  `${productPaths.root}${productPaths.calculateCoverage}`,
+  handleError(productController.calculateCoverage)
+);
 globalRoutes.use(productPaths.root, productRoutes);
 
 // Rewards & Redeems
