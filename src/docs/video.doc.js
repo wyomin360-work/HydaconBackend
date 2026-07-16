@@ -12,14 +12,39 @@ module.exports = {
               type: "object",
               required: ["title", "thumbnailUrl", "videoUrl"],
               properties: {
-                title: { type: "string", minLength: 1, example: "How to use HydaCon" },
-                description: { type: "string", example: "A step-by-step guide" },
-                thumbnailUrl: { type: "string", format: "uri", example: "https://cdn.example.com/thumb.jpg" },
-                videoUrl: { type: "string", format: "uri", example: "https://cdn.example.com/video.mp4" },
+                title: {
+                  type: "string",
+                  minLength: 1,
+                  example: "How to use HydaCon",
+                },
+                description: {
+                  type: "string",
+                  example: "A step-by-step guide",
+                },
+                thumbnailUrl: {
+                  type: "string",
+                  format: "uri",
+                  example: "https://cdn.example.com/thumb.jpg",
+                },
+                videoUrl: {
+                  type: "string",
+                  format: "uri",
+                  example: "https://cdn.example.com/video.mp4",
+                },
                 duration: { type: "string", example: "02:30" },
-                categoryId: { type: "string", example: "64f1a2b3c4d5e6f7a8b9c0d1" },
-                productId: { type: "string", example: "64f1a2b3c4d5e6f7a8b9c0d2" },
-                tags: { type: "array", items: { type: "string" }, example: ["tutorial", "hydacon"] },
+                categoryId: {
+                  type: "string",
+                  example: "64f1a2b3c4d5e6f7a8b9c0d1",
+                },
+                productId: {
+                  type: "string",
+                  example: "64f1a2b3c4d5e6f7a8b9c0d2",
+                },
+                tags: {
+                  type: "array",
+                  items: { type: "string" },
+                  example: ["tutorial", "hydacon"],
+                },
                 language: { type: "string", example: "en" },
                 region: { type: "string", example: "IN" },
                 sortOrder: { type: "integer", minimum: 0, example: 1 },
@@ -38,7 +63,10 @@ module.exports = {
               schema: {
                 type: "object",
                 properties: {
-                  message: { type: "string", example: "Video created successfully" },
+                  message: {
+                    type: "string",
+                    example: "Video created successfully",
+                  },
                   data: { $ref: "#/components/schemas/Video" },
                 },
               },
@@ -65,9 +93,19 @@ module.exports = {
               properties: {
                 page: { type: "integer", default: 1, example: 1 },
                 limit: { type: "integer", default: 10, example: 10 },
-                search: { type: "string", description: "Search by title", example: "tutorial" },
-                categoryId: { type: "string", example: "64f1a2b3c4d5e6f7a8b9c0d1" },
-                productId: { type: "string", example: "64f1a2b3c4d5e6f7a8b9c0d2" },
+                search: {
+                  type: "string",
+                  description: "Search by title",
+                  example: "tutorial",
+                },
+                categoryId: {
+                  type: "string",
+                  example: "64f1a2b3c4d5e6f7a8b9c0d1",
+                },
+                productId: {
+                  type: "string",
+                  example: "64f1a2b3c4d5e6f7a8b9c0d2",
+                },
                 language: { type: "string", example: "en" },
                 active: { type: "boolean", example: true },
                 featured: { type: "boolean", example: false },
@@ -96,7 +134,10 @@ module.exports = {
               schema: {
                 type: "object",
                 properties: {
-                  message: { type: "string", example: "Videos fetched successfully" },
+                  message: {
+                    type: "string",
+                    example: "Videos fetched successfully",
+                  },
                   data: {
                     type: "object",
                     properties: {
@@ -133,7 +174,10 @@ module.exports = {
               schema: {
                 type: "object",
                 properties: {
-                  message: { type: "string", example: "Featured videos fetched successfully" },
+                  message: {
+                    type: "string",
+                    example: "Featured videos fetched successfully",
+                  },
                   data: {
                     type: "array",
                     items: { $ref: "#/components/schemas/Video" },
@@ -170,7 +214,10 @@ module.exports = {
               schema: {
                 type: "object",
                 properties: {
-                  message: { type: "string", example: "Video fetched successfully" },
+                  message: {
+                    type: "string",
+                    example: "Video fetched successfully",
+                  },
                   data: { $ref: "#/components/schemas/Video" },
                 },
               },
@@ -226,7 +273,10 @@ module.exports = {
               schema: {
                 type: "object",
                 properties: {
-                  message: { type: "string", example: "Video updated successfully" },
+                  message: {
+                    type: "string",
+                    example: "Video updated successfully",
+                  },
                   data: { $ref: "#/components/schemas/Video" },
                 },
               },
@@ -238,7 +288,8 @@ module.exports = {
       },
     },
     delete: {
-      summary: "Hard delete a video by ID (Admin only) — removes document and all analytics",
+      summary:
+        "Hard delete a video by ID (Admin only) — removes document and all analytics",
       tags: ["Videos"],
       security: [{ bearerAuth: [] }],
       parameters: [
@@ -257,7 +308,10 @@ module.exports = {
               schema: {
                 type: "object",
                 properties: {
-                  message: { type: "string", example: "Video deleted successfully" },
+                  message: {
+                    type: "string",
+                    example: "Video deleted successfully",
+                  },
                   data: { $ref: "#/components/schemas/Video" },
                 },
               },
@@ -291,7 +345,10 @@ module.exports = {
               schema: {
                 type: "object",
                 properties: {
-                  message: { type: "string", example: "Video status updated successfully" },
+                  message: {
+                    type: "string",
+                    example: "Video status updated successfully",
+                  },
                   data: { $ref: "#/components/schemas/Video" },
                 },
               },
@@ -344,7 +401,10 @@ module.exports = {
               schema: {
                 type: "object",
                 properties: {
-                  message: { type: "string", example: "Video metrics updated successfully" },
+                  message: {
+                    type: "string",
+                    example: "Video metrics updated successfully",
+                  },
                   data: { $ref: "#/components/schemas/Video" },
                 },
               },
