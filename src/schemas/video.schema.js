@@ -29,9 +29,8 @@ const videoSchema = new mongoose.Schema(
     saves: { type: Number, default: 0 },
     shares: { type: Number, default: 0 },
     publishedDate: { type: Date, default: Date.now },
-
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // Add indexes for optimized querying

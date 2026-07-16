@@ -13,11 +13,11 @@ const createVideo = async (req, res, next) => {
   try {
     const data = req.body;
     data.slug = generateSlug(data.title) + "-" + Date.now().toString(36);
-    
+
     // Sanitize empty strings to prevent Mongoose CastError
     if (data.categoryId === "") data.categoryId = null;
     if (data.productId === "") data.productId = null;
-    
+
     // Hardcode duration if not provided by client
     if (!data.duration) {
       data.duration = "00:00";
@@ -34,7 +34,7 @@ const updateVideo = async (req, res, next) => {
   try {
     const { id } = req.params;
     const data = req.body;
-    
+
     // Sanitize empty strings to prevent Mongoose CastError
     if (data.categoryId === "") data.categoryId = null;
     if (data.productId === "") data.productId = null;
@@ -78,7 +78,16 @@ const getVideo = async (req, res, next) => {
 const listVideos = async (req, res, next) => {
   try {
     const paginationParams = getPaginationParams(req.body);
-    const { search, categoryId, productId, language, active, featured, sortBy, sortOrder } = req.body;
+    const {
+      search,
+      categoryId,
+      productId,
+      language,
+      active,
+      featured,
+      sortBy,
+      sortOrder,
+    } = req.body;
 
     const query = {};
     query.deleted = { $ne: true };
@@ -192,7 +201,12 @@ const getMetrics = async (req, res, next) => {
     if (!video) {
       return sendResponse(res, null, 404, "Video not found");
     }
-    return sendResponse(res, video, 200, "Video metrics incremented successfully");
+    return sendResponse(
+      res,
+      video,
+      200,
+      "Video metrics incremented successfully",
+    );
   } catch (error) {
     next(error);
   }
@@ -201,7 +215,12 @@ const getMetrics = async (req, res, next) => {
 const getFeaturedVideos = async (req, res, next) => {
   try {
     const videos = await videoService.getFeaturedVideos();
-    return sendResponse(res, videos, 200, "Featured videos fetched successfully");
+    return sendResponse(
+      res,
+      videos,
+      200,
+      "Featured videos fetched successfully",
+    );
   } catch (error) {
     next(error);
   }
@@ -218,8 +237,6 @@ const getAnalytics = async (req, res, next) => {
     next(error);
   }
 };
-
-
 
 module.exports = {
   createVideo,

@@ -30,17 +30,24 @@ const restoreVideo = async (id) => {
   return await Video.findByIdAndUpdate(id, { deleted: false }, { new: true });
 };
 
-
 const getVideoById = async (id) => {
   return await Video.findById(id).populate("categoryId").populate("productId");
 };
 
-const listVideos = async (query, { page = 1, limit = 10, sortBy = "createdAt", sortOrder = "desc" }) => {
+const listVideos = async (
+  query,
+  { page = 1, limit = 10, sortBy = "createdAt", sortOrder = "desc" },
+) => {
   const skip = (page - 1) * limit;
   const sort = { [sortBy]: sortOrder === "asc" ? 1 : -1 };
 
   const [videos, total] = await Promise.all([
-    Video.find(query).sort(sort).skip(skip).limit(limit).populate("categoryId").populate("productId"),
+    Video.find(query)
+      .sort(sort)
+      .skip(skip)
+      .limit(limit)
+      .populate("categoryId")
+      .populate("productId"),
     Video.countDocuments(query),
   ]);
 
@@ -56,7 +63,7 @@ const listVideos = async (query, { page = 1, limit = 10, sortBy = "createdAt", s
 const toggleStatus = async (id) => {
   const video = await Video.findById(id);
   if (!video) throw new Error("Video not found");
-  
+
   video.active = !video.active;
   return await video.save();
 };
@@ -73,7 +80,7 @@ const updateMetrics = async (id, metricType) => {
   await VideoAnalytics.findOneAndUpdate(
     { videoId: id, date: todayStr() },
     { $inc: incField },
-    { upsert: true, new: true }
+    { upsert: true, new: true },
   );
 
   return await Video.findByIdAndUpdate(id, updateQuery, { new: true });
@@ -92,11 +99,15 @@ const getAnalytics = async (id, days = 30) => {
   const rows = await VideoAnalytics.find({
     videoId: id,
     date: { $gte: fromStr },
-  }).sort({ date: 1 }).lean();
+  })
+    .sort({ date: 1 })
+    .lean();
 
   // Build a map so we can fill gaps with zeroes
   const byDate = {};
-  rows.forEach((r) => { byDate[r.date] = r; });
+  rows.forEach((r) => {
+    byDate[r.date] = r;
+  });
 
   const series = [];
   for (let i = 0; i < days; i++) {
@@ -112,7 +123,9 @@ const getAnalytics = async (id, days = 30) => {
   }
 
   // Totals for summary cards
-  const video = await Video.findById(id).select('views saves shares title').lean();
+  const video = await Video.findById(id)
+    .select("views saves shares title")
+    .lean();
 
   return {
     series,
@@ -128,8 +141,14 @@ const getAnalytics = async (id, days = 30) => {
 const countVideos = async () => {
   // Use $ne:true so documents with missing/null/undefined fields are handled correctly
   const total = await Video.countDocuments({ deleted: { $ne: true } });
-  const active = await Video.countDocuments({ active: true, deleted: { $ne: true } });
-  const inactive = await Video.countDocuments({ active: { $ne: true }, deleted: { $ne: true } });
+  const active = await Video.countDocuments({
+    active: true,
+    deleted: { $ne: true },
+  });
+  const inactive = await Video.countDocuments({
+    active: { $ne: true },
+    deleted: { $ne: true },
+  });
   return { total, active, inactive };
 };
 
@@ -139,8 +158,6 @@ const getFeaturedVideos = async () => {
     .populate("categoryId")
     .populate("productId");
 };
-
-
 
 module.exports = {
   createVideo,

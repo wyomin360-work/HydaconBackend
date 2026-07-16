@@ -209,9 +209,13 @@ const extractActualValue = async (rule, user, context, session) => {
       const Redeem = mongoose.model("Redeem");
       const match = { userId: user._id };
       if (metadata && (metadata.targetCategory || metadata.targetId)) {
-        const targetCatId = metadata.targetCategory ? metadata.targetCategory._id : metadata.targetId;
-        const productsInCat = await Product.find({ categoryId: targetCatId }).select('_id').session(session);
-        const productIds = productsInCat.map(p => p._id);
+        const targetCatId = metadata.targetCategory
+          ? metadata.targetCategory._id
+          : metadata.targetId;
+        const productsInCat = await Product.find({ categoryId: targetCatId })
+          .select("_id")
+          .session(session);
+        const productIds = productsInCat.map((p) => p._id);
         match.productId = { $in: productIds };
       }
       await applyScopeFilter(match, scope, session);
@@ -235,9 +239,14 @@ const extractActualValue = async (rule, user, context, session) => {
       const LoyaltySeason = mongoose.model("LoyaltySeason");
       const UserTierProgress = mongoose.model("UserTierProgress");
       const Tier = mongoose.model("Tier");
-      const activeSeason = await LoyaltySeason.findOne({ active: true }).session(session);
+      const activeSeason = await LoyaltySeason.findOne({
+        active: true,
+      }).session(session);
       if (!activeSeason) return null;
-      const progress = await UserTierProgress.findOne({ userId: user._id, seasonId: activeSeason._id }).session(session);
+      const progress = await UserTierProgress.findOne({
+        userId: user._id,
+        seasonId: activeSeason._id,
+      }).session(session);
       if (!progress) return null;
       const tier = await Tier.findById(progress.currentTierId).session(session);
       return tier ? tier._id : null;
@@ -247,9 +256,14 @@ const extractActualValue = async (rule, user, context, session) => {
       const LoyaltySeason = mongoose.model("LoyaltySeason");
       const UserTierProgress = mongoose.model("UserTierProgress");
       const Tier = mongoose.model("Tier");
-      const activeSeason = await LoyaltySeason.findOne({ active: true }).session(session);
+      const activeSeason = await LoyaltySeason.findOne({
+        active: true,
+      }).session(session);
       if (!activeSeason) return -1;
-      const progress = await UserTierProgress.findOne({ userId: user._id, seasonId: activeSeason._id }).session(session);
+      const progress = await UserTierProgress.findOne({
+        userId: user._id,
+        seasonId: activeSeason._id,
+      }).session(session);
       if (!progress) return -1;
       const tier = await Tier.findById(progress.currentTierId).session(session);
       return tier ? tier.rank : -1;

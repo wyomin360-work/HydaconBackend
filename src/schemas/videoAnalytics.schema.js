@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 /**
  * One document per (videoId + date) combination.
@@ -8,7 +8,7 @@ const videoAnalyticsSchema = new mongoose.Schema(
   {
     videoId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Video',
+      ref: "Video",
       required: true,
       index: true,
     },
@@ -20,11 +20,11 @@ const videoAnalyticsSchema = new mongoose.Schema(
     saves: { type: Number, default: 0 },
     shares: { type: Number, default: 0 },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // Compound unique index so upserts are safe
 videoAnalyticsSchema.index({ videoId: 1, date: 1 }, { unique: true });
 
-const VideoAnalytics = mongoose.model('VideoAnalytics', videoAnalyticsSchema);
+const VideoAnalytics = mongoose.model("VideoAnalytics", videoAnalyticsSchema);
 module.exports = VideoAnalytics;
