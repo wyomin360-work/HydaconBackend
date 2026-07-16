@@ -1,62 +1,106 @@
 const express = require("express");
-const appRoutes = require("../modules/app/app.routes");
-const commonRoutes = require("../modules/common/common.routes");
-const userRoutes = require("../modules/user/user.routes");
-const adminRoutes = require("../modules/admin/admin.routes");
-const productRoutes = require("../modules/products/product.routes");
-const rewardRoutes = require("../modules/rewards/rewards.routes");
-const redeemRoutes = require("../modules/redeems/redeems.routes");
-const transactionRoutes = require("../modules/transactions/transactions.routes");
-const appPaths = require("../modules/app/app.paths");
-const commonPaths = require("../modules/common/common.paths");
-const adminPaths = require("../modules/admin/admin.paths");
-const userPaths = require("../modules/user/user.paths");
-const productPaths = require("../modules/products/product.paths");
-const rewardsPath = require("../modules/rewards/rewards.path");
-const redeemsPath = require("../modules/redeems/redeems.path");
+
+// -- Middleware --
 const verification = require("../middlewares/jwtVerification");
-const transactionsPath = require("../modules/transactions/transactions.path");
+
+// -- App & Common --
+const appRoutes = require("../modules/app/app.routes");
+const appPaths = require("../modules/app/app.paths");
+const commonRoutes = require("../modules/common/common.routes");
+const commonPaths = require("../modules/common/common.paths");
+
+// -- Users & Admins --
+const userRoutes = require("../modules/user/user.routes");
+const userPaths = require("../modules/user/user.paths");
+const adminRoutes = require("../modules/admin/admin.routes");
+const adminPaths = require("../modules/admin/admin.paths");
 const roleRoutes = require("../modules/roles/role.routes");
 const rolePaths = require("../modules/roles/role.paths");
 const kycRoutes = require("../modules/kyc/kyc.routes");
 const kycPaths = require("../modules/kyc/kyc.paths");
+
+// -- Products --
+const productRoutes = require("../modules/products/product.routes");
+const productPaths = require("../modules/products/product.paths");
+
+// -- Rewards & Redeems --
+const rewardRoutes = require("../modules/rewards/rewards.routes");
+const rewardsPath = require("../modules/rewards/rewards.path");
+const redeemRoutes = require("../modules/redeems/redeems.routes");
+const redeemsPath = require("../modules/redeems/redeems.path");
+
+// -- Transactions --
+const transactionRoutes = require("../modules/transactions/transactions.routes");
+const transactionsPath = require("../modules/transactions/transactions.path");
+
+// -- Loyalty & Campaigns --
 const loyaltyRoutes = require("../modules/loyalty/loyalty.routes");
 const loyaltyPaths = require("../modules/loyalty/loyalty.paths");
 const campaignsRoutes = require("../modules/campaigns/campaigns.routes");
 const campaignsPaths = require("../modules/campaigns/campaigns.paths");
-const giftPaths = require("../modules/gift/gift.paths");
+
+// -- Gifts --
 const giftRoutes = require("../modules/gift/gift.routes");
+const giftPaths = require("../modules/gift/gift.paths");
+
+// -- Documents & Files --
 const documentRoutes = require("../modules/document/document.routes");
 const documentPaths = require("../modules/document/document.paths");
-const filesPaths = require("../modules/files/files.paths");
 const filesRoutes = require("../modules/files/files.routes");
-const ruleSetPaths = require("../modules/rule-set/rule-set.paths");
+const filesPaths = require("../modules/files/files.paths");
+
+// -- Rule Set --
 const ruleSetRoutes = require("../modules/rule-set/rule-set.routes");
-const videoPaths = require("../modules/videos/video.paths");
+const ruleSetPaths = require("../modules/rule-set/rule-set.paths");
+
+// -- Videos --
 const videoRoutes = require("../modules/videos/video.routes");
+const videoPaths = require("../modules/videos/video.paths");
+
+// -- Referral --
 const referralRoutes = require("../modules/referral/referral.routes");
 const referralPaths = require("../modules/referral/referral.paths");
 
 const globalRoutes = express.Router();
 
+// App & Common
 globalRoutes.use(appPaths.root, appRoutes);
 globalRoutes.use(commonPaths.root, commonRoutes);
+
+// Users & Admins
 globalRoutes.use(userPaths.root, userRoutes);
 globalRoutes.use(adminPaths.root, adminRoutes);
-globalRoutes.use(productPaths.root, productRoutes);
-globalRoutes.use(rewardsPath.root, verification.verifyAdmin, rewardRoutes);
-globalRoutes.use(redeemsPath.root, redeemRoutes);
-globalRoutes.use(transactionsPath.root, transactionRoutes);
 globalRoutes.use(rolePaths.root, roleRoutes);
 globalRoutes.use(kycPaths.root, kycRoutes);
+
+// Products
+globalRoutes.use(productPaths.root, productRoutes);
+
+// Rewards & Redeems
+globalRoutes.use(rewardsPath.root, verification.verifyAdmin, rewardRoutes);
+globalRoutes.use(redeemsPath.root, redeemRoutes);
+
+// Transactions
+globalRoutes.use(transactionsPath.root, transactionRoutes);
+
+// Loyalty & Campaigns
 globalRoutes.use(loyaltyPaths.root, loyaltyRoutes);
 globalRoutes.use(campaignsPaths.root, campaignsRoutes);
+
+// Gifts
 globalRoutes.use(giftPaths.root, giftRoutes);
+
+// Documents & Files
 globalRoutes.use(documentPaths.root, documentRoutes);
 globalRoutes.use(filesPaths.root, filesRoutes);
-globalRoutes.use(ruleSetPaths.root, ruleSetRoutes);
-globalRoutes.use(videoPaths.root, videoRoutes);
-globalRoutes.use(referralPaths.root, referralRoutes);
 
+// Rule Set
+globalRoutes.use(ruleSetPaths.root, ruleSetRoutes);
+
+// Videos
+globalRoutes.use(videoPaths.root, videoRoutes);
+
+// Referral
+globalRoutes.use(referralPaths.root, referralRoutes);
 
 module.exports = globalRoutes;
