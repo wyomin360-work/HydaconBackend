@@ -42,7 +42,7 @@ const userProfileUpdateRequestType = {
     shopName: { type: "string" },
     experience: { type: "number" },
     areaOfOperation: { type: "string" },
-    profilePhoto: { type: "string" },
+    profilePhoto: { type: ["string", "null"] },
   },
   additionalProperties: false,
 };

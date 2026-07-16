@@ -32,6 +32,8 @@ const filesPaths = require("../modules/files/files.paths");
 const filesRoutes = require("../modules/files/files.routes");
 const ruleSetPaths = require("../modules/rule-set/rule-set.paths");
 const ruleSetRoutes = require("../modules/rule-set/rule-set.routes");
+const referralRoutes = require("../modules/referral/referral.routes");
+const referralPaths = require("../modules/referral/referral.paths");
 const videoPaths = require("../modules/videos/video.paths");
 const videoRoutes = require("../modules/videos/video.routes");
 const contentPaths = require("../modules/content/content.paths");
@@ -55,6 +57,7 @@ globalRoutes.use(giftPaths.root, giftRoutes);
 globalRoutes.use(documentPaths.root, documentRoutes);
 globalRoutes.use(filesPaths.root, filesRoutes);
 globalRoutes.use(ruleSetPaths.root, ruleSetRoutes);
+globalRoutes.use(referralPaths.root, referralRoutes);
 globalRoutes.use(videoPaths.root, videoRoutes);
 globalRoutes.use(contentPaths.root, contentRoutes);
 

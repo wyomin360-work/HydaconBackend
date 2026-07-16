@@ -12,6 +12,7 @@ jest.mock("../../src/schemas/product.schema");
 jest.mock("../../src/schemas/reward.schema");
 jest.mock("../../src/schemas/redeem.schema");
 jest.mock("../../src/schemas/tier-configuration.schema");
+jest.mock("../../src/schemas/app-config.schema");
 jest.mock("../../src/functions/fcm", () => ({
   sendFcmNotifications: jest.fn(),
 }));
@@ -33,6 +34,11 @@ describe("Weighted Rewards Calculation", () => {
     const TierConfiguration = require("../../src/schemas/tier-configuration.schema");
     TierConfiguration.findOne.mockReturnValue({
       lean: jest.fn().mockResolvedValue({ pointMultiplier: 1.0 }),
+    });
+
+    const AppConfig = require("../../src/schemas/app-config.schema");
+    AppConfig.findOne.mockReturnValue({
+      sort: jest.fn().mockResolvedValue(null),
     });
 
     mockRole = {
