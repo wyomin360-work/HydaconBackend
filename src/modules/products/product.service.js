@@ -291,9 +291,12 @@ async function calculateProductCoverage(calculationData) {
 }
 
 async function seedMockProducts() {
+  // Purge any legacy product documents that used invalid non-hex string IDs
+  await Product.deleteMany({ _id: { $not: /^[0-9a-fA-F]{24}$/ } });
+
   const mockProducts = [
     {
-      _id: "tilebond-ultra",
+      _id: "6695ecb8b3f2a52f4c8b4567",
       name: "Hydacon TileBond Ultra",
       description:
         "A premium-grade, highly flexible polymer-modified cementitious tile adhesive.",
@@ -323,7 +326,7 @@ async function seedMockProducts() {
       },
     },
     {
-      _id: "tilegrout-hs",
+      _id: "6695ecb8b3f2a52f4c8b4568",
       name: "Hydacon TileGrout HS",
       description:
         "A high-performance, water-repellent, polymer-modified cementitious tile grout.",
@@ -358,7 +361,7 @@ async function seedMockProducts() {
       },
     },
     {
-      _id: "jointfiller-gf100",
+      _id: "6695ecb8b3f2a52f4c8b4569",
       name: "Hydacon Joint Filler GF-100",
       description:
         "A premium-grade joint filler for tile and stone applications, offering stain-resistance and high flexibility.",
@@ -393,7 +396,7 @@ async function seedMockProducts() {
       },
     },
     {
-      _id: "hydroshield-2k",
+      _id: "6695ecb8b3f2a52f4c8b456a",
       name: "Hydacon HydroShield 2K",
       description:
         "A state-of-the-art, flexible, two-component polymer-modified waterproofing membrane.",
@@ -423,7 +426,7 @@ async function seedMockProducts() {
       },
     },
     {
-      _id: "levelmax-self",
+      _id: "6695ecb8b3f2a52f4c8b456b",
       name: "Hydacon LevelMax Self-Leveling",
       description:
         "A calcium-aluminate based, rapid-hardening self-leveling underlayment.",
@@ -453,7 +456,7 @@ async function seedMockProducts() {
       },
     },
     {
-      _id: "tilebond-eco",
+      _id: "6695ecb8b3f2a52f4c8b456c",
       name: "Hydacon TileBond Eco",
       description: "An eco-friendly, standard-setting cementitious adhesive.",
       weightValue: 25,
