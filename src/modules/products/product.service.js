@@ -292,7 +292,7 @@ async function calculateProductCoverage(calculationData) {
 
 async function seedMockProducts() {
   // Purge any legacy product documents that used invalid non-hex string IDs
-  await Product.deleteMany({ _id: { $not: /^[0-9a-fA-F]{24}$/ } });
+  await Product.collection.deleteMany({ _id: { $not: { $type: "objectId" } } });
 
   const mockProducts = [
     {
