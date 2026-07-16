@@ -60,8 +60,8 @@ const videoPaths = require("../modules/videos/video.paths");
 // -- Referral --
 const referralRoutes = require("../modules/referral/referral.routes");
 const referralPaths = require("../modules/referral/referral.paths");
-const videoPaths = require("../modules/videos/video.paths");
-const videoRoutes = require("../modules/videos/video.routes");
+
+// -- Content --
 const contentPaths = require("../modules/content/content.paths");
 const contentRoutes = require("../modules/content/content.routes");
 
@@ -106,7 +106,8 @@ globalRoutes.use(videoPaths.root, videoRoutes);
 
 // Referral
 globalRoutes.use(referralPaths.root, referralRoutes);
-globalRoutes.use(videoPaths.root, videoRoutes);
+
+// Content
 globalRoutes.use(contentPaths.root, contentRoutes);
 
 module.exports = globalRoutes;
