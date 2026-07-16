@@ -52,7 +52,11 @@ describe("kyc.service unit tests", () => {
   describe("uploadDocument", () => {
     it("should throw error if document type is invalid", async () => {
       await expect(
-        kycService.uploadDocument("userId123", "invalidType", "https://s3.bucket/url.jpg"),
+        kycService.uploadDocument(
+          "userId123",
+          "invalidType",
+          "https://s3.bucket/url.jpg",
+        ),
       ).rejects.toThrow("Invalid document type");
     });
 
@@ -67,7 +71,11 @@ describe("kyc.service unit tests", () => {
       checkS3FileExists.mockResolvedValueOnce(false);
 
       await expect(
-        kycService.uploadDocument("userId123", "aadhaar", "https://s3.bucket/nonexistent.jpg"),
+        kycService.uploadDocument(
+          "userId123",
+          "aadhaar",
+          "https://s3.bucket/nonexistent.jpg",
+        ),
       ).rejects.toThrow("File not found on S3.");
     });
 
@@ -75,7 +83,11 @@ describe("kyc.service unit tests", () => {
       User.findById.mockResolvedValue(null);
 
       await expect(
-        kycService.uploadDocument("userId123", "aadhaar", "https://s3.bucket/url.jpg"),
+        kycService.uploadDocument(
+          "userId123",
+          "aadhaar",
+          "https://s3.bucket/url.jpg",
+        ),
       ).rejects.toThrow("User not found");
     });
 

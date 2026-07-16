@@ -12,7 +12,7 @@ const calculatorConfigSchema = new mongoose.Schema(
     minTileThickness: { type: Number },
     maxTileThickness: { type: Number },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const coverageSchema = new mongoose.Schema(
@@ -28,7 +28,7 @@ const coverageSchema = new mongoose.Schema(
       default: () => ({}),
     },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const productSchema = new mongoose.Schema(
@@ -109,4 +109,3 @@ productSchema.index({ applicationTypes: 1 });
 
 const Product = mongoose.model("Product", productSchema);
 module.exports = Product;
-

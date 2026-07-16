@@ -392,9 +392,15 @@ async function evaluateTierUpgrade(userId, seasonId) {
 
       if (!oldTier || !oldTier._id) {
         try {
-          await referralService.completeMilestone(userId, REFERRAL_MILESTONES.FIRST_TIER_UP);
+          await referralService.completeMilestone(
+            userId,
+            REFERRAL_MILESTONES.FIRST_TIER_UP,
+          );
         } catch (milestoneErr) {
-          console.error("Error triggering first tier up milestone:", milestoneErr);
+          console.error(
+            "Error triggering first tier up milestone:",
+            milestoneErr,
+          );
         }
       }
 

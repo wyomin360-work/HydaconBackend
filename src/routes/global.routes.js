@@ -82,7 +82,7 @@ globalRoutes.use(kycPaths.root, kycRoutes);
 // Products & Calculator (Public)
 globalRoutes.post(
   `${productPaths.root}${productPaths.calculateCoverage}`,
-  handleError(productController.calculateCoverage)
+  handleError(productController.calculateCoverage),
 );
 globalRoutes.use(productPaths.root, productRoutes);
 

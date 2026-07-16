@@ -54,7 +54,7 @@ exports.publicListProducts = async (req, res) => {
 exports.publicGetProduct = async (req, res) => {
   const productId = req.params?.productId;
   const response = await productService.getProduct(productId);
-  
+
   if (response?.data && !response.data.active) {
     return sendResponse(res, { data: null });
   }

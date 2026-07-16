@@ -81,7 +81,12 @@ async function uploadDocument(userId, documentType, fileUrl) {
   }
 
   const prevDoc = user.kycDocuments[documentType];
-  if (prevDoc && prevDoc.originalUrl && prevDoc.originalUrl.startsWith("http") && prevDoc.originalUrl.includes("amazonaws.com")) {
+  if (
+    prevDoc &&
+    prevDoc.originalUrl &&
+    prevDoc.originalUrl.startsWith("http") &&
+    prevDoc.originalUrl.includes("amazonaws.com")
+  ) {
     await deleteS3File(prevDoc.originalUrl);
   }
 
@@ -325,7 +330,10 @@ async function reviewKycDocument(
         const body = APP_NOTIFICATIONS.kyc.approved.body;
         await sendFcmNotifications(user.fcmTokens, title, body);
         try {
-          await referralService.completeMilestone(userId, REFERRAL_MILESTONES.KYC_VERIFICATION);
+          await referralService.completeMilestone(
+            userId,
+            REFERRAL_MILESTONES.KYC_VERIFICATION,
+          );
         } catch (milestoneErr) {
           console.error("Error triggering KYC milestone:", milestoneErr);
         }

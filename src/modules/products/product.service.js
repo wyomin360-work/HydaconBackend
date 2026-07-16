@@ -25,7 +25,7 @@ async function getProduct(productId) {
   // Convert specifications Map → plain object for JSON serialisation
   if (product?.specifications) {
     product.specifications = Object.fromEntries(
-      Object.entries(product.specifications)
+      Object.entries(product.specifications),
     );
   }
   return { data: product };
@@ -165,7 +165,9 @@ async function createProduct(productData) {
     categoryId: categoryId || null,
   });
 
-  const populatedProduct = await Product.findById(product._id).populate(DOCUMENT_POPULATE);
+  const populatedProduct = await Product.findById(product._id).populate(
+    DOCUMENT_POPULATE,
+  );
   return {
     message: "Product created",
     data: { product: populatedProduct, productCreated: true },
@@ -220,20 +222,29 @@ async function updateProduct(productData, productId) {
 
   if (netWeight !== undefined) updateFields.netWeight = netWeight;
   if (features !== undefined) updateFields.features = features;
-  if (specifications !== undefined) updateFields.specifications = specifications;
+  if (specifications !== undefined)
+    updateFields.specifications = specifications;
   if (categoryId !== undefined) updateFields.categoryId = categoryId || null;
 
-  if (roomTypes !== undefined) updateFields.roomTypes = normalizeArray(roomTypes);
-  if (areaTypes !== undefined) updateFields.areaTypes = normalizeArray(areaTypes);
-  if (applicationAreas !== undefined) updateFields.applicationAreas = normalizeArray(applicationAreas);
-  if (substrateTypes !== undefined) updateFields.substrateTypes = normalizeArray(substrateTypes);
-  if (applicationTypes !== undefined) updateFields.applicationTypes = normalizeArray(applicationTypes);
-  if (tileTypes !== undefined) updateFields.tileTypes = normalizeArray(tileTypes);
-  if (additionalTags !== undefined) updateFields.additionalTags = normalizeArray(additionalTags);
+  if (roomTypes !== undefined)
+    updateFields.roomTypes = normalizeArray(roomTypes);
+  if (areaTypes !== undefined)
+    updateFields.areaTypes = normalizeArray(areaTypes);
+  if (applicationAreas !== undefined)
+    updateFields.applicationAreas = normalizeArray(applicationAreas);
+  if (substrateTypes !== undefined)
+    updateFields.substrateTypes = normalizeArray(substrateTypes);
+  if (applicationTypes !== undefined)
+    updateFields.applicationTypes = normalizeArray(applicationTypes);
+  if (tileTypes !== undefined)
+    updateFields.tileTypes = normalizeArray(tileTypes);
+  if (additionalTags !== undefined)
+    updateFields.additionalTags = normalizeArray(additionalTags);
 
   await Product.findByIdAndUpdate(productId, { $set: updateFields });
 
-  const updatedProduct = await Product.findById(productId).populate(DOCUMENT_POPULATE);
+  const updatedProduct =
+    await Product.findById(productId).populate(DOCUMENT_POPULATE);
   return {
     message: "Product updated",
     data: { product: updatedProduct, productUpdated: true },
@@ -541,7 +552,10 @@ async function recommendProducts(criteria) {
   let isFallback = false;
 
   // Tier 1 Fallback: Drop tags but retain structural and tileType filters if applicable
-  if (products.length === 0 && ((normTags && normTags.length > 0) || normTileType)) {
+  if (
+    products.length === 0 &&
+    ((normTags && normTags.length > 0) || normTileType)
+  ) {
     isFallback = true;
     const tier1Query = {
       active: true,

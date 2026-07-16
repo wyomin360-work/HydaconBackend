@@ -17,12 +17,12 @@ const router = express.Router();
 router.post(
   productPaths.publicList,
   validateRequest(paginationType),
-  handleError(productController.publicListProducts)
+  handleError(productController.publicListProducts),
 );
 
 router.get(
   productPaths.publicDetails,
-  handleError(productController.publicGetProduct)
+  handleError(productController.publicGetProduct),
 );
 
 // Admin Routes (Protected)
@@ -30,20 +30,20 @@ router.post(
   productPaths.list,
   verifyAdmin,
   validateRequest(paginationType),
-  handleError(productController.listProducts)
+  handleError(productController.listProducts),
 );
 
 router.get(
   productPaths.details,
   verifyAdmin,
-  handleError(productController.getProduct)
+  handleError(productController.getProduct),
 );
 
 router.post(
   productPaths.create,
   verifyAdmin,
   validateRequest(productCreateRequestType),
-  handleError(productController.createProduct)
+  handleError(productController.createProduct),
 );
 
 router.patch(
@@ -55,13 +55,13 @@ router.patch(
 router.put(
   productPaths.update,
   validateRequest(productUpdateRequestType),
-  handleError(productController.updateProduct)
+  handleError(productController.updateProduct),
 );
 
 router.delete(
   productPaths.delete,
   verifyAdmin,
-  handleError(productController.deleteProduct)
+  handleError(productController.deleteProduct),
 );
 
 router.post(

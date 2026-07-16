@@ -43,6 +43,9 @@ exports.sendMobileReferralReminder = async (req, res) => {
  */
 exports.completeMilestone = async (req, res) => {
   const { milestone } = req.body;
-  const response = await referralService.completeMilestone(req.userId, milestone);
+  const response = await referralService.completeMilestone(
+    req.userId,
+    milestone,
+  );
   return sendResponse(res, response);
 };
