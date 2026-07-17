@@ -13,7 +13,6 @@ const ScratchCardRule = require("../../schemas/scratch-card-rule.schema");
 const mongoose = require("mongoose");
 const { attachId, formatNotification } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
-const AppConfig = require("../../schemas/app-config.schema");
 const referralService = require("../referral/referral.service");
 const { REFERRAL_MILESTONES } = require("../../constants/referrals");
 
