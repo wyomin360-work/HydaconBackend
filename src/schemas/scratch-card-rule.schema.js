@@ -7,6 +7,11 @@ const scratchCardRuleSchema = new mongoose.Schema(
       ref: "Tier",
       required: false,
     },
+    ruleSetId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "RuleSet",
+      required: false,
+    },
     rewardType: {
       type: String,
       enum: ["POINTS", "GIFT"],
@@ -25,17 +30,6 @@ const scratchCardRuleSchema = new mongoose.Schema(
       ref: "Gift",
       default: null,
     },
-    productScope: {
-      type: String,
-      enum: ["EVERY_PRODUCT", "SELECTED_PRODUCTS"],
-      default: "EVERY_PRODUCT",
-    },
-    products: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Product",
-      },
-    ],
     gifts: [
       {
         giftId: {
@@ -73,17 +67,6 @@ const scratchCardRuleSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
-    tierScope: {
-      type: String,
-      enum: ["ALL_TIERS", "SELECTED_TIERS"],
-      default: "ALL_TIERS",
-    },
-    tiers: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Tier",
-      },
-    ],
     totalScratchLimit: {
       type: Number,
       default: 0,

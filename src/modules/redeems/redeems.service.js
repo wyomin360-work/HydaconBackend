@@ -15,8 +15,8 @@ const { attachId, formatNotification } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const referralService = require("../referral/referral.service");
 const { REFERRAL_MILESTONES } = require("../../constants/referrals");
-  const loyaltyService = require("../loyalty/loyalty.service");
-  const TierConfiguration = require("../../schemas/tier-configuration.schema");
+const loyaltyService = require("../loyalty/loyalty.service");
+const TierConfiguration = require("../../schemas/tier-configuration.schema");
 
 async function listRedeems(data) {
   const { page = 1, limit = 20 } = data;
@@ -251,24 +251,8 @@ async function createRedeem(redeemData, reqUser = null) {
           continue;
         if (campaign.endDate && new Date(campaign.endDate) < nowTime) continue;
 
-        // B. Check Tier eligibility
-        if (campaign.tierScope === "SELECTED_TIERS") {
-          const tierStrList = (campaign.tiers || []).map((t) => String(t));
-          if (!userTierId || !tierStrList.includes(String(userTierId))) {
-            continue;
-          }
-        }
 
-        // C. Check Product eligibility
-        if (campaign.productScope === "SELECTED_PRODUCTS") {
-          const prodStrList = (campaign.products || []).map((p) => String(p));
-          if (
-            !actualProductId ||
-            !prodStrList.includes(String(actualProductId))
-          ) {
-            continue;
-          }
-        }
+        // const eligibility = await checkEligibility(user, campaign) // add later
 
         // D. Check Scratch Limits
         if (campaign.totalScratchLimit > 0) {
@@ -527,7 +511,7 @@ async function createRedeem(redeemData, reqUser = null) {
     user?.currentTierId;
   contestsService
     .syncUserContestEntries(userId, weightedPoints, actualProductId, userTierId)
-    .catch(() => {});
+    .catch(() => { });
   if (user?.fcmTokens?.length && user?.enableNotification) {
     await sendFcmNotifications(
       user.fcmTokens,
@@ -578,10 +562,10 @@ async function createRedeem(redeemData, reqUser = null) {
       rewardType,
       gift: chosenGift
         ? {
-            id: chosenGift._id,
-            name: chosenGift.name,
-            image: chosenGift.image,
-          }
+          id: chosenGift._id,
+          name: chosenGift.name,
+          image: chosenGift.image,
+        }
         : null,
       pointsRewarded: weightedPoints,
       bonusPoints: rewardType === "POINTS" ? bonusPoints : 0,

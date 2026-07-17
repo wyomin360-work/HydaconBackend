@@ -874,7 +874,7 @@ exports.listScratchCardRules = async () => {
     const rules = await ScratchCardRule.find()
       .populate("tierId")
       .populate("giftId")
-      .populate("products")
+      .populate("ruleSetId")
       .populate("gifts.giftId")
       .populate({
         path: "rewards.giftId",
@@ -882,7 +882,6 @@ exports.listScratchCardRules = async () => {
           path: "categoryId",
         },
       })
-      .populate("tiers")
       .sort({ createdAt: -1 })
       .lean();
     return { success: true, data: rules };
@@ -900,15 +899,12 @@ exports.createScratchCardRule = async (data) => {
       maxCoins,
       giftId,
       active,
-      productScope,
-      products,
+      ruleSetId,
       gifts,
       name,
       description,
       startDate,
       endDate,
-      tierScope,
-      tiers,
       totalScratchLimit,
       perUserScratchLimit,
       rewards,
@@ -920,16 +916,13 @@ exports.createScratchCardRule = async (data) => {
       minCoins: rewardType === "POINTS" ? Number(minCoins) : 0,
       maxCoins: rewardType === "POINTS" ? Number(maxCoins) : 0,
       giftId: rewardType === "GIFT" ? giftId || null : null,
-      productScope: productScope || "EVERY_PRODUCT",
-      products: products || [],
+      ruleSetId,
       gifts: gifts || [],
       active: active !== undefined ? active : true,
       name: name || "",
       description: description || "",
       startDate: startDate || null,
       endDate: endDate || null,
-      tierScope: tierScope || "ALL_TIERS",
-      tiers: tiers || [],
       totalScratchLimit:
         totalScratchLimit !== undefined ? Number(totalScratchLimit) : 0,
       perUserScratchLimit:
@@ -941,7 +934,6 @@ exports.createScratchCardRule = async (data) => {
     const populated = await ScratchCardRule.findById(newRule._id)
       .populate("tierId")
       .populate("giftId")
-      .populate("products")
       .populate("gifts.giftId")
       .populate({
         path: "rewards.giftId",
@@ -949,7 +941,6 @@ exports.createScratchCardRule = async (data) => {
           path: "categoryId",
         },
       })
-      .populate("tiers")
       .lean();
 
     return {
@@ -971,15 +962,12 @@ exports.updateScratchCardRule = async (id, data) => {
       maxCoins,
       giftId,
       active,
-      productScope,
-      products,
+      ruleSetId,
       gifts,
       name,
       description,
       startDate,
       endDate,
-      tierScope,
-      tiers,
       totalScratchLimit,
       perUserScratchLimit,
       rewards,
@@ -1012,8 +1000,6 @@ exports.updateScratchCardRule = async (id, data) => {
           : rule.giftId
         : null;
     if (active !== undefined) rule.active = active;
-    if (productScope !== undefined) rule.productScope = productScope;
-    if (products !== undefined) rule.products = products;
     if (gifts !== undefined) rule.gifts = gifts;
 
     // Campaign fields
@@ -1021,13 +1007,12 @@ exports.updateScratchCardRule = async (id, data) => {
     if (description !== undefined) rule.description = description;
     if (startDate !== undefined) rule.startDate = startDate || null;
     if (endDate !== undefined) rule.endDate = endDate || null;
-    if (tierScope !== undefined) rule.tierScope = tierScope;
-    if (tiers !== undefined) rule.tiers = tiers;
     if (totalScratchLimit !== undefined)
       rule.totalScratchLimit = Number(totalScratchLimit);
     if (perUserScratchLimit !== undefined)
       rule.perUserScratchLimit = Number(perUserScratchLimit);
     if (rewards !== undefined) rule.rewards = rewards;
+    if (ruleSetId !== undefined) rule.ruleSetId = ruleSetId;
 
     await rule.save();
 
@@ -1035,7 +1020,6 @@ exports.updateScratchCardRule = async (id, data) => {
     const populated = await ScratchCardRule.findById(rule._id)
       .populate("tierId")
       .populate("giftId")
-      .populate("products")
       .populate("gifts.giftId")
       .populate({
         path: "rewards.giftId",
@@ -1043,7 +1027,6 @@ exports.updateScratchCardRule = async (id, data) => {
           path: "categoryId",
         },
       })
-      .populate("tiers")
       .lean();
 
     return {
