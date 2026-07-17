@@ -11,6 +11,7 @@ const { RuleSet } = require("../../schemas/rule-set.schema");
 const ruleSetEvaluator = require("../rule-set/rule-set.evaluator");
 const { sendTemplateEmail } = require("../../functions/nodemailer");
 const { sendFcmNotifications } = require("../../functions/fcm");
+const ScratchCardRule = require("../../schemas/scratch-card-rule.schema");
 
 // --- Categories ---
 
