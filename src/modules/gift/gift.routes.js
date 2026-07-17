@@ -14,6 +14,13 @@ const verification = require("../../middlewares/jwtVerification");
 
 const router = express.Router();
 
+// Categories (Public)
+router.post(
+  giftPaths.publicCategoryList,
+  validateRequest(paginationType),
+  handleError(giftController.listCategories),
+);
+
 // Categories (Admin)
 router.post(
   giftPaths.categoryList,
@@ -71,6 +78,12 @@ router.delete(
 
 // Gifts (User)
 router.post(
+  giftPaths.userCategoryList,
+  verification.verifyUser,
+  validateRequest(paginationType),
+  handleError(giftController.listCategories),
+);
+router.post(
   giftPaths.userList,
   verification.verifyUser,
   validateRequest(paginationType),
@@ -127,39 +140,4 @@ router.get(
   verification.verifyAdmin,
   handleError(giftController.getAnalytics),
 );
-
-// Scratch Card Configuration
-router.get(
-  giftPaths.scratchCardConfig,
-  verification.verifyAdmin,
-  handleError(giftController.getScratchCardConfig),
-);
-router.patch(
-  giftPaths.scratchCardConfig,
-  verification.verifyAdmin,
-  handleError(giftController.updateScratchCardConfig),
-);
-
-// Scratch Card Rules
-router.get(
-  giftPaths.scratchCardRules,
-  verification.verifyAdmin,
-  handleError(giftController.listScratchCardRules),
-);
-router.post(
-  giftPaths.scratchCardRules,
-  verification.verifyAdmin,
-  handleError(giftController.createScratchCardRule),
-);
-router.patch(
-  giftPaths.scratchCardRuleDetail,
-  verification.verifyAdmin,
-  handleError(giftController.updateScratchCardRule),
-);
-router.delete(
-  giftPaths.scratchCardRuleDetail,
-  verification.verifyAdmin,
-  handleError(giftController.deleteScratchCardRule),
-);
-
 module.exports = router;

@@ -25,6 +25,12 @@ const giftRedemptionSchema = new mongoose.Schema(
       required: true,
     },
     coinsUsed: { type: Number, required: true },
+    giftType: {
+      type: String,
+      enum: ["physical", "voucher"],
+      required: true,
+      default: "physical",
+    },
     status: {
       type: String,
       required: true,
@@ -33,11 +39,17 @@ const giftRedemptionSchema = new mongoose.Schema(
     },
     shippingAddress: {
       type: shippingAddressSchema,
-      required: true,
+      required: function () {
+        return this.giftType === "physical";
+      },
     },
     trackingNumber: { type: String },
     courierDetails: { type: String },
     cancellationReason: { type: String },
+    // --- Voucher-specific fields (snapshot at time of redemption) ---
+    voucherCode: { type: String },
+    voucherFileUrl: { type: String },
+    voucherSent: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

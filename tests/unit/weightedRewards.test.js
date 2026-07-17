@@ -54,6 +54,7 @@ jest.mock("mongoose", () => {
     }),
   };
 });
+jest.mock("../../src/schemas/app-config.schema");
 jest.mock("../../src/functions/fcm", () => ({
   sendFcmNotifications: jest.fn(),
 }));

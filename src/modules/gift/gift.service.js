@@ -1,12 +1,16 @@
 const GiftCategory = require("../../schemas/gift-category.schema");
 const Gift = require("../../schemas/gift.schema");
-const ScratchCardRule = require("../../schemas/scratch-card-rule.schema");
 const mongoose = require("mongoose");
 const GiftRedemption = require("../../schemas/gift-redemption.schema");
+const Document = require("../../schemas/document.schema");
 const User = require("../../schemas/user.schema");
-const AppConfig = require("../../schemas/app-config.schema");
 const { GIFT_REDEMPTION_STATUS } = require("../../constants/gift");
-const { getPaginationParams } = require("../../utils/heplers");
+const { APP_NOTIFICATIONS } = require("../../constants/notifications");
+const { getPaginationParams, attachId } = require("../../utils/heplers");
+const { RuleSet } = require("../../schemas/rule-set.schema");
+const ruleSetEvaluator = require("../rule-set/rule-set.evaluator");
+const { sendTemplateEmail } = require("../../functions/nodemailer");
+const { sendFcmNotifications } = require("../../functions/fcm");
 
 // --- Categories ---
 
@@ -144,10 +148,11 @@ exports.giftList = async (data, isAdmin) => {
 
     const records = await Gift.find(matchQuery)
       .populate("categoryId", "name active")
-      .populate("rewardRules.minTierId", "name")
+      .populate("ruleSetId", "name")
       .skip(skip)
       .limit(limitNum)
-      .sort(sort);
+      .sort(sort)
+      .lean();
 
     const total = await Gift.countDocuments(matchQuery);
 
@@ -170,7 +175,7 @@ exports.getGiftDetails = async (giftId) => {
   try {
     const gift = await Gift.findById(giftId)
       .populate("categoryId", "name")
-      .populate("rewardRules.minTierId", "name");
+      .populate("ruleSetId", "name active validFrom validUntil");
 
     if (!gift) return { success: false, message: "Gift not found" };
     return { success: true, data: gift };
@@ -218,13 +223,6 @@ const checkEligibility = async (user, gift, session = null) => {
       current: user.hydaconCoins || 0,
       satisfied: (user.hydaconCoins || 0) >= gift.priceInCoins,
     },
-    tier: { required: "None", current: "None", satisfied: true },
-    scans: { required: 0, current: 0, satisfied: true },
-    region: {
-      required: [],
-      current: user.areaOfOperation || "None",
-      satisfied: true,
-    },
   };
 
   const reasons = [];
@@ -236,80 +234,28 @@ const checkEligibility = async (user, gift, session = null) => {
     );
   }
 
-  // Tier requirement
-  if (gift.rewardRules && gift.rewardRules.minTierId) {
-    const Tier = mongoose.model("Tier");
-    const requiredTier = await Tier.findById(
-      gift.rewardRules.minTierId,
-    ).session(session);
-    if (requiredTier) {
-      rules.tier.required = requiredTier.name;
-      let userTier = null;
-      if (user.currentTierId) {
-        userTier = await Tier.findById(user.currentTierId).session(session);
-      }
-      rules.tier.current = userTier ? userTier.name : "Beginner";
-      const userRank = userTier ? userTier.rank : 0;
-      rules.tier.satisfied = userRank >= requiredTier.rank;
-      if (!rules.tier.satisfied) {
-        reasons.push(
-          `Requires ${requiredTier.name} membership tier or above (Current: ${rules.tier.current})`,
-        );
+  let eligible = rules.coins.satisfied;
+  let dynamicRules = [];
+
+  // RuleSet Evaluation
+  if (gift.ruleSetId) {
+    const ruleSet = await RuleSet.findById(gift.ruleSetId).session(session);
+    if (ruleSet) {
+      const evaluation = await ruleSetEvaluator.evaluateRuleSet(
+        ruleSet,
+        user,
+        { targetId: gift._id },
+        session,
+      );
+      dynamicRules = evaluation.evaluatedRules;
+      if (!evaluation.eligible) {
+        eligible = false;
+        reasons.push(...evaluation.reasons);
       }
     }
   }
 
-  // Scan requirement
-  if (gift.rewardRules && gift.rewardRules.minScansThisMonth > 0) {
-    const requiredScans = gift.rewardRules.minScansThisMonth;
-    rules.scans.required = requiredScans;
-
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
-
-    const Redeem = mongoose.model("Redeem");
-    const scansCount = await Redeem.countDocuments({
-      userId: user._id,
-      createdAt: { $gte: startOfMonth },
-    }).session(session);
-
-    rules.scans.current = scansCount;
-    rules.scans.satisfied = scansCount >= requiredScans;
-    if (!rules.scans.satisfied) {
-      reasons.push(
-        `Requires at least ${requiredScans} bag scans this month (Current: ${scansCount})`,
-      );
-    }
-  }
-
-  // Region restriction
-  if (
-    gift.rewardRules &&
-    gift.rewardRules.regionRestrictions &&
-    gift.rewardRules.regionRestrictions.length > 0
-  ) {
-    const allowedRegions = gift.rewardRules.regionRestrictions;
-    rules.region.required = allowedRegions;
-
-    const userRegion = user.areaOfOperation || "";
-    rules.region.satisfied = allowedRegions.some(
-      (r) => r.trim().toLowerCase() === userRegion.trim().toLowerCase(),
-    );
-    if (!rules.region.satisfied) {
-      reasons.push(
-        `Gift is not available in your region (${userRegion || "No region set"})`,
-      );
-    }
-  }
-
-  const eligible =
-    rules.coins.satisfied &&
-    rules.tier.satisfied &&
-    rules.scans.satisfied &&
-    rules.region.satisfied;
-
-  return { eligible, reasons, rules };
+  return { eligible, reasons, rules: { ...rules, dynamic: dynamicRules } };
 };
 
 exports.getGiftEligibility = async (userId, giftId) => {
@@ -328,38 +274,132 @@ exports.getGiftEligibility = async (userId, giftId) => {
 
 exports.getUserRedemptionDetails = async (userId, redemptionId) => {
   try {
-    const redemption = await GiftRedemption.findById(redemptionId).populate({
-      path: "giftId",
-      select: "name image priceInCoins description categoryId",
-      populate: { path: "categoryId", select: "name" },
-    });
+    const redemption = await GiftRedemption.findById(redemptionId)
+      .populate({
+        path: "giftId",
+        select: "name image priceInCoins description categoryId",
+        populate: { path: "categoryId", select: "name" },
+      })
+      .lean();
     if (!redemption) return { success: false, message: "Redemption not found" };
     if (String(redemption.userId) !== String(userId)) {
       return { success: false, message: "Unauthorized access" };
     }
+
+    if (redemption.voucherFileUrl) {
+      const doc = await Document.findById(redemption.voucherFileUrl).lean();
+      if (doc && doc.docUrl) {
+        redemption.voucherFileUrl = doc.docUrl;
+      }
+    }
+
     return { success: true, data: redemption };
   } catch (error) {
     return { success: false, message: error.message };
   }
 };
 
+/**
+ * Sends voucher email + push notification after a successful voucher redemption.
+ * Runs outside the transaction (fire-and-forget, non-blocking).
+ */
+const sendVoucherNotifications = async (user, gift, redemption) => {
+  try {
+    const isCode = gift.voucherRedemptionType === "code";
+    const isFile = gift.voucherRedemptionType === "file";
+
+    let resolvedVoucherFileUrl = redemption.voucherFileUrl || "";
+    if (isFile && resolvedVoucherFileUrl) {
+      const doc = await Document.findById(resolvedVoucherFileUrl).lean();
+      if (doc && doc.docUrl) {
+        resolvedVoucherFileUrl = doc.docUrl;
+      }
+    }
+
+    // 1. Send celebratory email
+    if (user.email) {
+      await sendTemplateEmail(
+        user.email,
+        "users/voucher-redeemed",
+        `🎉 Your ${gift.name} Voucher is Here!`,
+        {
+          userName: user.name || "there",
+          giftName: gift.name,
+          coinsUsed: redemption.coinsUsed,
+          voucherCode: redemption.voucherCode || "",
+          voucherFileUrl: resolvedVoucherFileUrl,
+          isCode,
+          isFile,
+          year: new Date().getFullYear(),
+        },
+      );
+    }
+
+    // 2. Send FCM push notification
+    const fcmTokens = (user.fcmTokens || []).filter(Boolean);
+    if (fcmTokens.length > 0) {
+      const notif = isFile
+        ? APP_NOTIFICATIONS.gifts.voucherFile
+        : APP_NOTIFICATIONS.gifts.voucherRedeemed;
+      const notifBody = notif.body.replace("{{giftName}}", gift.name);
+      await sendFcmNotifications(fcmTokens, notif.title, notifBody, {
+        type: "voucher_redeemed",
+        redemptionId: String(redemption._id),
+        giftId: String(gift._id),
+      });
+    }
+
+    // 3. Mark voucherSent on the redemption record
+    await GiftRedemption.findByIdAndUpdate(redemption._id, {
+      voucherSent: true,
+    });
+  } catch (err) {
+    console.error("[Gift] sendVoucherNotifications error:", err.message);
+  }
+};
+
 exports.redeemGift = async (userId, data) => {
   const { giftId, shippingAddress } = data;
-  if (!giftId || !shippingAddress)
+  if (!giftId)
     return {
       success: false,
-      message: "Gift ID and shipping address are required",
+      message: "Gift ID is required",
     };
 
   const session = await mongoose.startSession();
   try {
     let result;
+    let userForNotification;
+    let giftForNotification;
+
     await session.withTransaction(async () => {
       const user = await User.findById(userId).session(session);
       const gift = await Gift.findById(giftId).session(session);
 
       if (!user) throw new Error("User not found");
       if (!gift || !gift.active) throw new Error("Gift not available");
+      if (gift.giftType === "physical" && !shippingAddress) {
+        throw new Error("Shipping address is required for physical gifts");
+      }
+
+      // Validate voucher gift has required redemption data
+      if (gift.giftType === "voucher") {
+        if (!gift.voucherRedemptionType) {
+          throw new Error(
+            "This voucher gift is not properly configured. Please contact support.",
+          );
+        }
+        if (gift.voucherRedemptionType === "code" && !gift.voucherCode) {
+          throw new Error(
+            "This voucher code is not yet available. Please try again later.",
+          );
+        }
+        if (gift.voucherRedemptionType === "file" && !gift.voucherFileUrl) {
+          throw new Error(
+            "This voucher file is not yet available. Please try again later.",
+          );
+        }
+      }
 
       const eligibility = await checkEligibility(user, gift, session);
       if (!eligibility.eligible) {
@@ -369,22 +409,73 @@ exports.redeemGift = async (userId, data) => {
       const availableStock = gift.stockQuantity - gift.reservedQuantity;
       if (availableStock <= 0) throw new Error("Gift is out of stock");
 
-      user.hydaconCoins -= gift.priceInCoins;
-      gift.reservedQuantity += 1;
+      // Atomically deduct coins ensuring balance doesn't dip below required amount concurrently
+      const updatedUser = await User.findOneAndUpdate(
+        { _id: userId, hydaconCoins: { $gte: gift.priceInCoins } },
+        { $inc: { hydaconCoins: -gift.priceInCoins } },
+        { session, new: true },
+      );
 
-      await user.save({ session });
-      await gift.save({ session });
+      if (!updatedUser) {
+        throw new Error("Insufficient coins for redemption");
+      }
 
-      const redemption = new GiftRedemption({
+      // Atomically reserve stock ensuring it hasn't been taken by another concurrent request
+      const updatedGift = await Gift.findOneAndUpdate(
+        {
+          _id: giftId,
+          $expr: { $gt: ["$stockQuantity", "$reservedQuantity"] },
+        },
+        { $inc: { reservedQuantity: 1 } },
+        { session, new: true },
+      );
+
+      if (!updatedGift) {
+        throw new Error("Gift is out of stock");
+      }
+
+      // Build redemption payload
+      const isVoucher = gift.giftType === "voucher";
+      const redemptionData = {
         userId,
         giftId,
         coinsUsed: gift.priceInCoins,
-        shippingAddress,
-      });
+        giftType: gift.giftType,
+        ...(gift.giftType === "physical" && { shippingAddress }),
+        // For vouchers: auto-deliver and snapshot voucher details
+        ...(isVoucher && {
+          status: GIFT_REDEMPTION_STATUS.DELIVERED,
+          voucherCode: gift.voucherCode || undefined,
+          voucherFileUrl: gift.voucherFileUrl || undefined,
+        }),
+      };
 
+      // For vouchers: also reduce actual stock immediately (digital delivery)
+      if (isVoucher) {
+        await Gift.findOneAndUpdate(
+          { _id: giftId },
+          { $inc: { stockQuantity: -1, reservedQuantity: -1 } },
+          { session },
+        );
+      }
+
+      const redemption = new GiftRedemption(redemptionData);
       await redemption.save({ session });
       result = redemption;
+      userForNotification = user;
+      giftForNotification = gift;
     });
+
+    // After transaction: fire email + push for vouchers (non-blocking)
+    if (giftForNotification?.giftType === "voucher" && userForNotification) {
+      setImmediate(() =>
+        sendVoucherNotifications(
+          userForNotification,
+          giftForNotification,
+          result,
+        ),
+      );
+    }
 
     return {
       success: true,
@@ -400,19 +491,32 @@ exports.redeemGift = async (userId, data) => {
 
 exports.userRedemptions = async (userId, data) => {
   try {
+    const { search = "" } = data;
     const { page: pageNum, limit: limitNum, skip } = getPaginationParams(data);
 
-    const records = await GiftRedemption.find({ userId })
+    let matchQuery = { userId };
+
+    if (search) {
+      const matchingGifts = await Gift.find({
+        name: { $regex: search, $options: "i" },
+      })
+        .select("_id")
+        .lean();
+      const giftIds = matchingGifts.map((g) => g._id);
+      matchQuery.giftId = { $in: giftIds };
+    }
+
+    const records = await GiftRedemption.find(matchQuery)
       .populate({
         path: "giftId",
         select: "name image categoryId",
         populate: { path: "categoryId", select: "name active" },
       })
+      .sort({ updatedAt: -1 })
       .skip(skip)
-      .limit(limitNum)
-      .sort({ createdAt: -1 });
+      .limit(limitNum);
 
-    const total = await GiftRedemption.countDocuments({ userId });
+    const total = await GiftRedemption.countDocuments(matchQuery);
 
     return {
       success: true,
@@ -466,9 +570,17 @@ exports.adminRedemptionDetails = async (redemptionId) => {
       .populate(
         "giftId",
         "name image priceInCoins description stockQuantity reservedQuantity",
-      );
+      )
+      .lean();
 
     if (!redemption) return { success: false, message: "Redemption not found" };
+
+    if (redemption.voucherFileUrl) {
+      const doc = await Document.findById(redemption.voucherFileUrl).lean();
+      if (doc && doc.docUrl) {
+        redemption.voucherFileUrl = doc.docUrl;
+      }
+    }
 
     return { success: true, data: redemption };
   } catch (error) {
@@ -626,329 +738,6 @@ exports.getAnalytics = async () => {
         },
       },
     };
-  } catch (error) {
-    return { success: false, message: error.message };
-  }
-};
-
-// --- Scratch Card Configuration ---
-
-exports.getScratchCardConfig = async () => {
-  try {
-    const configDoc = await AppConfig.findOne().lean();
-    if (!configDoc) return { success: false, message: "App config not found" };
-
-    const settings = configDoc.scratchCardSettings || {};
-
-    // Populate selectedGiftIds with full gift data if any are set
-    let giftPool = [];
-    if (settings.selectedGiftIds && settings.selectedGiftIds.length > 0) {
-      giftPool = await Gift.find({ _id: { $in: settings.selectedGiftIds } })
-        .select(
-          "_id name image priceInCoins active stockQuantity reservedQuantity",
-        )
-        .lean();
-    }
-
-    // Count all available gifts for context
-    const totalActiveGifts = await Gift.countDocuments({
-      active: true,
-      stockQuantity: { $gt: 0 },
-    });
-
-    return {
-      success: true,
-      data: {
-        ...settings,
-        giftPool,
-        totalActiveGifts,
-        useAllGifts:
-          !settings.selectedGiftIds || settings.selectedGiftIds.length === 0,
-      },
-    };
-  } catch (error) {
-    return { success: false, message: error.message };
-  }
-};
-
-exports.updateScratchCardConfig = async (configData) => {
-  try {
-    const {
-      enabled,
-      probability,
-      minBonusPoints,
-      maxBonusPoints,
-      giftProbability,
-      selectedGiftIds,
-    } = configData;
-
-    // Validate probability values
-    if (probability !== undefined && (probability < 0 || probability > 100)) {
-      return {
-        success: false,
-        message: "Probability must be between 0 and 100",
-      };
-    }
-    if (
-      giftProbability !== undefined &&
-      (giftProbability < 0 || giftProbability > 100)
-    ) {
-      return {
-        success: false,
-        message: "Gift probability must be between 0 and 100",
-      };
-    }
-    if (
-      minBonusPoints !== undefined &&
-      maxBonusPoints !== undefined &&
-      minBonusPoints > maxBonusPoints
-    ) {
-      return {
-        success: false,
-        message: "Min bonus points cannot exceed max bonus points",
-      };
-    }
-
-    // If selectedGiftIds provided, verify each gift exists
-    if (selectedGiftIds && selectedGiftIds.length > 0) {
-      const count = await Gift.countDocuments({
-        _id: { $in: selectedGiftIds },
-      });
-      if (count !== selectedGiftIds.length) {
-        return {
-          success: false,
-          message: "One or more selected gift IDs are invalid",
-        };
-      }
-    }
-
-    const update = {};
-    if (enabled !== undefined) update["scratchCardSettings.enabled"] = enabled;
-    if (probability !== undefined)
-      update["scratchCardSettings.probability"] = probability;
-    if (minBonusPoints !== undefined)
-      update["scratchCardSettings.minBonusPoints"] = minBonusPoints;
-    if (maxBonusPoints !== undefined)
-      update["scratchCardSettings.maxBonusPoints"] = maxBonusPoints;
-    if (giftProbability !== undefined)
-      update["scratchCardSettings.giftProbability"] = giftProbability;
-    if (selectedGiftIds !== undefined)
-      update["scratchCardSettings.selectedGiftIds"] = selectedGiftIds;
-
-    const updatedConfig = await AppConfig.findOneAndUpdate(
-      {},
-      { $set: update },
-      { new: true, upsert: false },
-    );
-
-    if (!updatedConfig)
-      return { success: false, message: "App config not found" };
-
-    return {
-      success: true,
-      message: "Scratch card configuration updated successfully",
-      data: updatedConfig.scratchCardSettings,
-    };
-  } catch (error) {
-    return { success: false, message: error.message };
-  }
-};
-
-// --- Scratch Card Rules CRUD ---
-
-exports.listScratchCardRules = async () => {
-  try {
-    const rules = await ScratchCardRule.find()
-      .populate("tierId")
-      .populate("giftId")
-      .populate("products")
-      .populate("gifts.giftId")
-      .populate({
-        path: "rewards.giftId",
-        populate: {
-          path: "categoryId",
-        },
-      })
-      .populate("tiers")
-      .sort({ createdAt: -1 })
-      .lean();
-    return { success: true, data: rules };
-  } catch (error) {
-    return { success: false, message: error.message };
-  }
-};
-
-exports.createScratchCardRule = async (data) => {
-  try {
-    const {
-      tierId,
-      rewardType,
-      minCoins,
-      maxCoins,
-      giftId,
-      active,
-      productScope,
-      products,
-      gifts,
-      name,
-      description,
-      startDate,
-      endDate,
-      tierScope,
-      tiers,
-      totalScratchLimit,
-      perUserScratchLimit,
-      rewards,
-    } = data;
-
-    const newRule = await ScratchCardRule.create({
-      tierId: tierId || null,
-      rewardType: rewardType || "GIFT",
-      minCoins: rewardType === "POINTS" ? Number(minCoins) : 0,
-      maxCoins: rewardType === "POINTS" ? Number(maxCoins) : 0,
-      giftId: rewardType === "GIFT" ? giftId || null : null,
-      productScope: productScope || "EVERY_PRODUCT",
-      products: products || [],
-      gifts: gifts || [],
-      active: active !== undefined ? active : true,
-      name: name || "",
-      description: description || "",
-      startDate: startDate || null,
-      endDate: endDate || null,
-      tierScope: tierScope || "ALL_TIERS",
-      tiers: tiers || [],
-      totalScratchLimit:
-        totalScratchLimit !== undefined ? Number(totalScratchLimit) : 0,
-      perUserScratchLimit:
-        perUserScratchLimit !== undefined ? Number(perUserScratchLimit) : 0,
-      rewards: rewards || [],
-    });
-
-    // Populate rule references for clean response
-    const populated = await ScratchCardRule.findById(newRule._id)
-      .populate("tierId")
-      .populate("giftId")
-      .populate("products")
-      .populate("gifts.giftId")
-      .populate({
-        path: "rewards.giftId",
-        populate: {
-          path: "categoryId",
-        },
-      })
-      .populate("tiers")
-      .lean();
-
-    return {
-      success: true,
-      message: "Scratch card rule created successfully",
-      data: populated,
-    };
-  } catch (error) {
-    return { success: false, message: error.message };
-  }
-};
-
-exports.updateScratchCardRule = async (id, data) => {
-  try {
-    const {
-      tierId,
-      rewardType,
-      minCoins,
-      maxCoins,
-      giftId,
-      active,
-      productScope,
-      products,
-      gifts,
-      name,
-      description,
-      startDate,
-      endDate,
-      tierScope,
-      tiers,
-      totalScratchLimit,
-      perUserScratchLimit,
-      rewards,
-    } = data;
-    const rule = await ScratchCardRule.findById(id);
-    if (!rule)
-      return { success: false, message: "Scratch card rule not found" };
-
-    const finalRewardType =
-      rewardType !== undefined ? rewardType : rule.rewardType;
-
-    if (tierId !== undefined) rule.tierId = tierId || null;
-    if (rewardType !== undefined) rule.rewardType = rewardType;
-    rule.minCoins =
-      finalRewardType === "POINTS"
-        ? minCoins !== undefined
-          ? Number(minCoins)
-          : rule.minCoins
-        : 0;
-    rule.maxCoins =
-      finalRewardType === "POINTS"
-        ? maxCoins !== undefined
-          ? Number(maxCoins)
-          : rule.maxCoins
-        : 0;
-    rule.giftId =
-      finalRewardType === "GIFT"
-        ? giftId !== undefined
-          ? giftId
-          : rule.giftId
-        : null;
-    if (active !== undefined) rule.active = active;
-    if (productScope !== undefined) rule.productScope = productScope;
-    if (products !== undefined) rule.products = products;
-    if (gifts !== undefined) rule.gifts = gifts;
-
-    // Campaign fields
-    if (name !== undefined) rule.name = name;
-    if (description !== undefined) rule.description = description;
-    if (startDate !== undefined) rule.startDate = startDate || null;
-    if (endDate !== undefined) rule.endDate = endDate || null;
-    if (tierScope !== undefined) rule.tierScope = tierScope;
-    if (tiers !== undefined) rule.tiers = tiers;
-    if (totalScratchLimit !== undefined)
-      rule.totalScratchLimit = Number(totalScratchLimit);
-    if (perUserScratchLimit !== undefined)
-      rule.perUserScratchLimit = Number(perUserScratchLimit);
-    if (rewards !== undefined) rule.rewards = rewards;
-
-    await rule.save();
-
-    // Populate rule references for clean response
-    const populated = await ScratchCardRule.findById(rule._id)
-      .populate("tierId")
-      .populate("giftId")
-      .populate("products")
-      .populate("gifts.giftId")
-      .populate({
-        path: "rewards.giftId",
-        populate: {
-          path: "categoryId",
-        },
-      })
-      .populate("tiers")
-      .lean();
-
-    return {
-      success: true,
-      message: "Scratch card rule updated successfully",
-      data: populated,
-    };
-  } catch (error) {
-    return { success: false, message: error.message };
-  }
-};
-
-exports.deleteScratchCardRule = async (id) => {
-  try {
-    const rule = await ScratchCardRule.findByIdAndDelete(id);
-    if (!rule)
-      return { success: false, message: "Scratch card rule not found" };
-    return { success: true, message: "Scratch card rule deleted successfully" };
   } catch (error) {
     return { success: false, message: error.message };
   }

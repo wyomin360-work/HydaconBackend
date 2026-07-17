@@ -1,35 +1,56 @@
 const { default: mongoose } = require("mongoose");
 
-const rewardRulesSchema = new mongoose.Schema(
-  {
-    minTierId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Tier",
-      required: false,
-    },
-    minScansThisMonth: { type: Number, default: 0 },
-    regionRestrictions: [{ type: String }],
-  },
-  { _id: false },
-);
-
 const giftSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
     description: { type: String, required: true },
+    giftType: {
+      type: String,
+      enum: ["physical", "voucher"],
+      required: true,
+      default: "physical",
+    },
     categoryId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "GiftCategory",
-      required: true,
+      required: function () {
+        return this.giftType === "physical";
+      },
     },
     priceInCoins: { type: Number, required: true },
     stockQuantity: { type: Number, required: true, default: 0 },
     reservedQuantity: { type: Number, required: true, default: 0 },
     image: { type: String },
+    themeColor: { type: String },
     active: { type: Boolean, default: true },
-    rewardRules: {
-      type: rewardRulesSchema,
-      default: () => ({}),
+    ruleSetId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "RuleSet",
+      required: false,
+    },
+    // --- Voucher-specific fields ---
+    voucherRedemptionType: {
+      type: String,
+      enum: ["code", "file"],
+      required: function () {
+        return this.giftType === "voucher";
+      },
+    },
+    voucherCode: {
+      type: String,
+      required: function () {
+        return (
+          this.giftType === "voucher" && this.voucherRedemptionType === "code"
+        );
+      },
+    },
+    voucherFileUrl: {
+      type: String,
+      required: function () {
+        return (
+          this.giftType === "voucher" && this.voucherRedemptionType === "file"
+        );
+      },
     },
   },
   { timestamps: true },

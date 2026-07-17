@@ -1,4 +1,5 @@
 const User = require("../../schemas/user.schema");
+const { checkS3FileExists, deleteS3File } = require("../../utils/s3");
 const path = require("path");
 const sharp = require("sharp");
 const fs = require("fs");
@@ -11,6 +12,8 @@ const {
   KYC_DOCUMENT_TYPES,
 } = require("../../constants/user");
 const { sendTemplateEmail } = require("../../functions/nodemailer");
+const referralService = require("../referral/referral.service");
+const { REFERRAL_MILESTONES } = require("../../constants/referrals");
 
 async function compressImage(filePath) {
   const parsedPath = path.parse(filePath);
@@ -51,120 +54,79 @@ function safeUnlink(filePath) {
   }
 }
 
-async function uploadDocument(userId, documentType, file) {
-  // Bug 1: Validate documentType first and clean up file on failure
+async function uploadDocument(userId, documentType, fileUrl) {
   if (!Object.values(KYC_DOCUMENT_TYPES).includes(documentType)) {
-    safeUnlink(file?.path);
     throw new Error(
       `Invalid document type. Allowed: ${Object.values(KYC_DOCUMENT_TYPES).join(", ")}`,
     );
   }
 
-  if (!file) {
-    throw new Error("No file uploaded");
+  if (!fileUrl) {
+    throw new Error("fileUrl is required");
   }
 
-  // File type & extension validation
-  const allowedMimeTypes = [
-    "image/jpeg",
-    "image/png",
-    "image/jpg",
-    "application/pdf",
-  ];
-  const allowedExtensions = [".jpg", ".jpeg", ".png", ".pdf"];
-  const ext = path.extname(file.originalname || "").toLowerCase();
+  const isFileExist = await checkS3FileExists(fileUrl);
+  if (!isFileExist) {
+    throw new Error("File not found on S3.");
+  }
 
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  // Initialize kycDocuments if not already present
+  if (!user.kycDocuments) {
+    user.kycDocuments = {};
+  }
+
+  const prevDoc = user.kycDocuments[documentType];
   if (
-    !allowedMimeTypes.includes(file.mimetype) ||
-    !allowedExtensions.includes(ext)
+    prevDoc &&
+    prevDoc.originalUrl &&
+    prevDoc.originalUrl.startsWith("http") &&
+    prevDoc.originalUrl.includes("amazonaws.com")
   ) {
-    safeUnlink(file.path);
-    throw new Error(
-      "Invalid file type. Only JPG, JPEG, PNG, and PDF files are allowed.",
-    );
+    await deleteS3File(prevDoc.originalUrl);
   }
 
-  // File size validation (5MB max)
-  const maxFileSize = 5 * 1024 * 1024;
-  if (file.size > maxFileSize) {
-    safeUnlink(file.path);
-    throw new Error("File size exceeds the 5MB limit.");
+  // Set the document details — newly uploaded document resets to PENDING
+  user.kycDocuments[documentType] = {
+    originalUrl: fileUrl,
+    compressedUrl: fileUrl,
+    uploadedAt: new Date(),
+    status: KYC_DOCUMENT_STATUS.PENDING,
+    rejectionReason: null,
+  };
+
+  const docs = user.kycDocuments;
+  const allUploaded =
+    docs.aadhaar?.originalUrl &&
+    docs.pan?.originalUrl &&
+    docs.shopPhoto?.originalUrl;
+
+  const anyRejected =
+    docs.aadhaar?.status === KYC_DOCUMENT_STATUS.REJECTED ||
+    docs.pan?.status === KYC_DOCUMENT_STATUS.REJECTED ||
+    docs.shopPhoto?.status === KYC_DOCUMENT_STATUS.REJECTED;
+
+  if (anyRejected) {
+    user.kycStatus = KYC_STATUS.REJECTED;
+  } else if (allUploaded) {
+    user.kycStatus = KYC_STATUS.PENDING;
+  } else {
+    if (!user.kycStatus || user.kycStatus === KYC_STATUS.NOT_STARTED) {
+      user.kycStatus = KYC_STATUS.NOT_STARTED;
+    }
   }
 
-  let compressedPath = null;
-  try {
-    // Bug 2 fix: Compress image FIRST, then fetch user to avoid race condition.
-    // Fetching the user after the slow compressImage avoids stale document / VersionError on save.
-    const originalFilename = file.filename;
-    const compressedFilename = await compressImage(file.path);
+  await user.save();
 
-    if (compressedFilename !== file.filename) {
-      const parsedPath = path.parse(file.path);
-      compressedPath = path.join(parsedPath.dir, compressedFilename);
-    }
-
-    const originalUrl = `/uploads/images/${originalFilename}`;
-    const compressedUrl = `/uploads/images/${compressedFilename}`;
-
-    // Fetch user AFTER compression completes (Bug 2 fix)
-    const user = await User.findById(userId);
-    if (!user) {
-      throw new Error("User not found");
-    }
-
-    // Initialize kycDocuments if not already present
-    if (!user.kycDocuments) {
-      user.kycDocuments = {};
-    }
-
-    // Set the document details — newly uploaded document resets to PENDING
-    user.kycDocuments[documentType] = {
-      originalUrl,
-      compressedUrl,
-      uploadedAt: new Date(),
-      status: KYC_DOCUMENT_STATUS.PENDING,
-      rejectionReason: null,
-    };
-
-    // Bug 3 fix: Correctly recalculate overall status on re-upload.
-    // If any OTHER document is still REJECTED, overall status must remain REJECTED,
-    // not prematurely flip to PENDING just because all docs have been uploaded at least once.
-    const docs = user.kycDocuments;
-    const allUploaded =
-      docs.aadhaar?.originalUrl &&
-      docs.pan?.originalUrl &&
-      docs.shopPhoto?.originalUrl;
-
-    const anyRejected =
-      docs.aadhaar?.status === KYC_DOCUMENT_STATUS.REJECTED ||
-      docs.pan?.status === KYC_DOCUMENT_STATUS.REJECTED ||
-      docs.shopPhoto?.status === KYC_DOCUMENT_STATUS.REJECTED;
-
-    if (anyRejected) {
-      user.kycStatus = KYC_STATUS.REJECTED;
-    } else if (allUploaded) {
-      user.kycStatus = KYC_STATUS.PENDING;
-    } else {
-      if (!user.kycStatus || user.kycStatus === KYC_STATUS.NOT_STARTED) {
-        user.kycStatus = KYC_STATUS.NOT_STARTED;
-      }
-    }
-
-    await user.save();
-
-    return {
-      message: `${documentType.toUpperCase()} document uploaded successfully`,
-      kycStatus: user.kycStatus,
-      documents: normalizeKycDocuments(user.kycDocuments),
-    };
-  } catch (error) {
-    // Bug 1 fix: Clean up both original and compressed files on any error
-    safeUnlink(file.path);
-    if (compressedPath) {
-      safeUnlink(compressedPath);
-    }
-    throw error;
-  }
+  return {
+    message: `${documentType.toUpperCase()} document uploaded successfully`,
+    kycStatus: user.kycStatus,
+    documents: normalizeKycDocuments(user.kycDocuments),
+  };
 }
 
 function normalizeKycDocuments(kycDocuments) {
@@ -367,6 +329,14 @@ async function reviewKycDocument(
         const title = APP_NOTIFICATIONS.kyc.approved.title;
         const body = APP_NOTIFICATIONS.kyc.approved.body;
         await sendFcmNotifications(user.fcmTokens, title, body);
+        try {
+          await referralService.completeMilestone(
+            userId,
+            REFERRAL_MILESTONES.KYC_VERIFICATION,
+          );
+        } catch (milestoneErr) {
+          console.error("Error triggering KYC milestone:", milestoneErr);
+        }
       } else if (user.kycStatus === KYC_STATUS.REJECTED) {
         const title = APP_NOTIFICATIONS.kyc.rejected.title;
         const body = formatNotification(APP_NOTIFICATIONS.kyc.rejected.body, {

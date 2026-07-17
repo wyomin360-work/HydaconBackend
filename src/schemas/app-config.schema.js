@@ -22,6 +22,24 @@ const coinSettingsSchema = new mongoose.Schema(
     minWithdrawAmount: { type: Number, default: 100 },
     maxWithdrawAmount: { type: Number, default: 1000 },
     referralBonus: { type: Number, default: 50 },
+    pointToCoinRatio: { type: Number, default: 100 }, // 100 points = 1 coin
+  },
+  { _id: false },
+);
+
+const securitySettingsSchema = new mongoose.Schema(
+  {
+    scanCountForBan: { type: Number, default: 8 },
+    autoBanEnabled: { type: Boolean, default: true },
+  },
+  { _id: false },
+);
+
+const referralRewardsSchema = new mongoose.Schema(
+  {
+    requiredScans: { type: Number, default: 1 },
+    referrerRewardPoints: { type: Number, default: 50 },
+    refereeRewardPoints: { type: Number, default: 50 },
   },
   { _id: false },
 );
@@ -68,6 +86,15 @@ const appConfigSchema = new mongoose.Schema({
   scratchCardSettings: {
     type: scratchCardSettingsSchema,
     default: () => ({}),
+  },
+  securitySettings: {
+    type: securitySettingsSchema,
+    default: () => ({}),
+  },
+  referralRewards: {
+    type: [referralRewardsSchema],
+    required: true,
+    default: () => [],
   },
   lastUpdatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "Admin" },
 });

@@ -1,6 +1,7 @@
 const User = require("../../schemas/user.schema");
 const ServiceRequest = require("../../schemas/service-request.schema");
 const RefreshToken = require("../../schemas/refreshtoken.schema");
+const { checkS3FileExists, deleteS3File } = require("../../utils/s3");
 const path = require("path");
 const sharp = require("sharp");
 const fs = require("fs");
@@ -36,6 +37,7 @@ const { validateIFSC } = require("../../functions/razorPay");
 const { sendFcmNotifications } = require("../../functions/fcm");
 const { sendSms } = require("../../functions/sms");
 const { sendMail } = require("../../functions/nodemailer");
+const AppConfig = require("../../schemas/app-config.schema");
 
 async function generateAndSaveToken(payload) {
   const accessToken = generateToken(payload);
@@ -61,13 +63,41 @@ async function generateAndSaveToken(payload) {
 }
 
 // ----------------------
+// Resolve Referrer by Code
+// ----------------------
+async function resolveReferrer(referralCode) {
+  if (!referralCode)
+    return { isReferred: 0, referredById: null, referredByDetails: null };
+
+  const referrer = await User.findOne({
+    referralCode: referralCode.trim().toUpperCase(),
+  }).lean();
+  if (!referrer)
+    return { isReferred: 0, referredById: null, referredByDetails: null };
+
+  return {
+    isReferred: 1,
+    referredById: referrer._id,
+    referredByDetails: {
+      isHydaconUser: true,
+      userId: referrer._id,
+      name: referrer.name || null,
+    },
+  };
+}
+
+// ----------------------
 // Register User
 // ----------------------
 async function registerUser(userData) {
-  const { name, email, password, avatarId, phone, roleId } = userData;
+  const { name, email, password, avatarId, phone, roleId, referralCode } =
+    userData;
 
   const userExist = await User.findOne({ email });
   if (userExist) sendFailResponse("The mail id exist");
+
+  const { isReferred, referredById, referredByDetails } =
+    await resolveReferrer(referralCode);
 
   const user = await User.create({
     name,
@@ -77,6 +107,7 @@ async function registerUser(userData) {
     authType: AuthTypes.EMAIL,
     avatarId,
     roleId,
+    ...(referredById && { referredBy: referredById }),
   });
 
   const { refreshToken, accessToken } = await generateAndSaveToken({
@@ -89,7 +120,13 @@ async function registerUser(userData) {
 
   return {
     message: "Registration successful",
-    data: { ...rest, accessToken, refreshToken },
+    data: {
+      ...rest,
+      accessToken,
+      refreshToken,
+      isReferred,
+      ...(isReferred === 1 && { referredByDetails }),
+    },
   };
 }
 
@@ -159,6 +196,9 @@ async function providerAuth(data) {
   const userExist = await User.findOne({ email }).populate("roleId").lean();
 
   if (!userExist) {
+    const { isReferred, referredById, referredByDetails } =
+      await resolveReferrer(data.referralCode);
+
     const newUser = await User.create({
       email,
       password: generateRandomPassword(48),
@@ -167,6 +207,7 @@ async function providerAuth(data) {
       name: userName,
       avatarId,
       roleId: data.roleId,
+      ...(referredById && { referredBy: referredById }),
     });
 
     const { refreshToken, accessToken } = await generateAndSaveToken({
@@ -183,10 +224,16 @@ async function providerAuth(data) {
     });
 
     const { password: pw, ...rest } = attachId(cleanData);
-
     return {
       message: "Registered successfully",
-      data: { ...rest, accessToken, refreshToken, newUser: true },
+      data: {
+        ...rest,
+        accessToken,
+        refreshToken,
+        newUser: true,
+        isReferred,
+        ...(isReferred === 1 && { referredByDetails }),
+      },
     };
   } else {
     // if (userExist && userExist.authType !== AuthTypes.GOOGLE)
@@ -369,7 +416,10 @@ async function updatePassword(data) {
 // User Details
 // ----------------------
 async function getUserDetails(userId) {
-  const user = await User.findById(userId).populate("roleId").lean();
+  const user = await User.findById(userId)
+    .populate("roleId")
+    .populate("currentTierId")
+    .lean();
   if (!user) sendFailResponse("User not found");
   let returnData = {};
 
@@ -843,10 +893,10 @@ async function deliverOtpViaSms(phoneNumber, message) {
 
   if (!smsSent) {
     const error = smsResult?.error || "";
-    const isTwilioAuthError = error.includes("(20003)");
-    const message = isTwilioAuthError
-      ? "Failed to send OTP because Twilio authentication failed. Please check TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in .env."
-      : "Failed to send OTP to your mobile number. If you are using a Twilio trial account, verify the recipient number in your Twilio console.";
+    const isAuthError = error.includes("(20003)");
+    const message = isAuthError
+      ? "Failed to send OTP check your SMS configuration"
+      : "Failed to send OTP to your mobile number";
 
     sendFailResponse(message);
   }
@@ -1179,71 +1229,30 @@ async function compressProfileImage(filePath) {
   }
 }
 
-async function uploadProfilePhoto(userId, file) {
-  if (!file) {
-    throw new Error("No file uploaded");
+async function uploadProfilePhoto(userId, fileUrl) {
+  if (!fileUrl) {
+    throw new Error("fileUrl is required");
   }
 
-  const allowedMimeTypes = ["image/jpeg", "image/png", "image/jpg"];
-  const allowedExtensions = [".jpg", ".jpeg", ".png"];
-  const ext = path.extname(file.originalname || "").toLowerCase();
-
-  if (
-    !allowedMimeTypes.includes(file.mimetype) ||
-    !allowedExtensions.includes(ext)
-  ) {
-    if (file.path && fs.existsSync(file.path)) {
-      try {
-        fs.unlinkSync(file.path);
-      } catch (err) {
-        console.error("Error deleting invalid file type:", err);
-      }
-    }
-    throw new Error(
-      "Invalid file type. Only JPG, JPEG, and PNG files are allowed.",
-    );
-  }
-
-  const maxFileSize = 5 * 1024 * 1024;
-  if (file.size > maxFileSize) {
-    if (file.path && fs.existsSync(file.path)) {
-      try {
-        fs.unlinkSync(file.path);
-      } catch (err) {
-        console.error("Error deleting oversized file:", err);
-      }
-    }
-    throw new Error("File size exceeds the 5MB limit.");
+  const isFileExist = await checkS3FileExists(fileUrl);
+  if (!isFileExist) {
+    throw new Error("File not found on S3.");
   }
 
   const user = await User.findById(userId);
   if (!user) {
-    if (file.path && fs.existsSync(file.path)) {
-      try {
-        fs.unlinkSync(file.path);
-      } catch (err) {
-        console.error("Error deleting orphaned file:", err);
-      }
-    }
     throw new Error("User not found");
   }
 
-  if (user.profilePhoto) {
-    const prevPhotoPath = path.join(__dirname, "../..", user.profilePhoto);
-    if (fs.existsSync(prevPhotoPath)) {
-      try {
-        fs.unlinkSync(prevPhotoPath);
-      } catch (err) {
-        console.error("Error deleting previous profile photo:", err);
-      }
-    }
+  if (
+    user.profilePhoto &&
+    user.profilePhoto.startsWith("http") &&
+    user.profilePhoto.includes("amazonaws.com")
+  ) {
+    await deleteS3File(user.profilePhoto);
   }
 
-  const originalFilename = file.filename;
-  const compressedFilename = await compressProfileImage(file.path);
-  const profilePhotoUrl = `/uploads/images/${compressedFilename}`;
-
-  user.profilePhoto = profilePhotoUrl;
+  user.profilePhoto = fileUrl;
   await user.save();
 
   const populatedUser = await User.findById(userId).populate("roleId");
@@ -1381,6 +1390,58 @@ async function getAdminUserDetails(userId) {
   };
 }
 
+// ----------------------
+// Convert Points to Coins
+// ----------------------
+async function convertPointsToCoins(userId, data) {
+  const { points } = data;
+  if (!points || points <= 0) return sendFailResponse("Invalid points amount");
+
+  const session = await mongoose.startSession();
+  try {
+    let result;
+    await session.withTransaction(async () => {
+      const user = await User.findById(userId).session(session);
+      if (!user) throw new Error("User not found");
+      if (user.totalPoints < points) throw new Error("Insufficient points");
+
+      const config = await AppConfig.findOne().session(session);
+      const ratio = config?.coinSettings?.pointToCoinRatio || 100;
+
+      const coinsToAdd = points / ratio;
+
+      user.totalPoints -= points;
+      user.hydaconCoins = (user.hydaconCoins || 0) + coinsToAdd;
+      user.lifetimeHydaconCoins = (user.lifetimeHydaconCoins || 0) + coinsToAdd;
+
+      await user.save({ session });
+
+      // Optionally create a transaction log here if a schema existed for point->coin conversion.
+      result = attachId(user.toObject());
+    });
+
+    return {
+      message: "Points converted successfully",
+      data: result,
+    };
+  } catch (error) {
+    return { success: false, message: error.message };
+  } finally {
+    await session.endSession();
+  }
+}
+
+async function releaseBan(userId) {
+  const user = await User.findById(userId);
+  if (!user) sendFailResponse("User not found");
+
+  user.scanBanUntil = null;
+  user.failedScanAttempts = 0;
+  await user.save();
+
+  return { message: "Ban released successfully" };
+}
+
 module.exports = {
   registerUser,
   login,
@@ -1405,6 +1466,8 @@ module.exports = {
   updatePreferences,
   uploadProfilePhoto,
   flagUser,
+  convertPointsToCoins,
   toggleUserStatus,
   deleteUser,
+  releaseBan,
 };

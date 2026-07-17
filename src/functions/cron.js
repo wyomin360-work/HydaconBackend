@@ -9,6 +9,7 @@ const {
   LOYALTY_TRANSACTION_TYPES,
   CARRY_FORWARD_BEHAVIOR,
 } = require("../constants/loyalty");
+const Content = require("../schemas/content.schema");
 
 function initCronJobs() {
   console.log("Initializing CRON jobs...");
@@ -186,6 +187,30 @@ function initCronJobs() {
       }
     } catch (error) {
       console.error("Error in Points Expiration Task:", error);
+    }
+  });
+  // 3. Content Expiration Task
+  // Runs every day at 00:15 AM
+  cron.schedule("15 0 * * *", async () => {
+    try {
+      console.log("📅 Running Content Expiration Task...");
+      const now = new Date();
+
+      const result = await Content.updateMany(
+        {
+          endDate: { $lt: now, $ne: null },
+          active: true,
+        },
+        { $set: { active: false } },
+      );
+
+      if (result.modifiedCount > 0) {
+        console.log(
+          `Deactivated ${result.modifiedCount} expired content items.`,
+        );
+      }
+    } catch (error) {
+      console.error("Error in Content Expiration Task:", error);
     }
   });
 }

@@ -229,13 +229,21 @@ function parseUserAgent(userAgent, headers = {}) {
 
   return info;
 }
-
-const getPaginationParams = (data) => {
-  const page = data?.page ? Number(data.page) : 1;
-  const limit = data?.limit ? Number(data.limit) : 10;
-  const skip = (page - 1) * limit;
-  return { page, limit, skip };
+const getPaginationParams = (data = {}, defaultLimit = 10) => {
+  const page = data.page || 1;
+  const limit = data.limit || defaultLimit;
+  const pageNum = Math.max(1, parseInt(page, 10) || 1);
+  const limitNum = Math.max(1, parseInt(limit, 10) || defaultLimit);
+  const skip = (pageNum - 1) * limitNum;
+  return { page: pageNum, limit: limitNum, skip };
 };
+
+function normalizeString(str) {
+  if (str) {
+    return str.toLowerCase().trim().replace(/\s+/g, "_");
+  }
+  return "";
+}
 
 module.exports = {
   handleError,
@@ -253,4 +261,5 @@ module.exports = {
   buildPhoneLookupVariants,
   parseUserAgent,
   getPaginationParams,
+  normalizeString,
 };
