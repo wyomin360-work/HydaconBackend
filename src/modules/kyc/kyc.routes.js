@@ -11,10 +11,6 @@ const router = express.Router();
 router.post(
   kycPaths.upload,
   verification.verifyUser,
-  upload.fields([
-    { name: "document", maxCount: 1 },
-    { name: "image", maxCount: 1 },
-  ]),
   handleError(controller.uploadKycDocument),
 );
 

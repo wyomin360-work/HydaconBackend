@@ -96,7 +96,6 @@ router.patch(
 router.post(
   userPaths.profilePhoto,
   verification.verifyUser,
-  upload.single("profilePhoto"),
   handleError(controller.uploadProfilePhoto),
 );
 
@@ -183,6 +182,12 @@ router.delete(
   userPaths.deleteUser,
   verification.verifyAdmin,
   handleError(controller.deleteUser),
+);
+
+router.patch(
+  userPaths.releaseBan,
+  verification.verifyAdmin,
+  handleError(controller.releaseBan),
 );
 
 module.exports = router;

@@ -41,7 +41,8 @@ const listContent = async (query = {}) => {
   const filter = {};
   if (type) filter.type = type;
   if (placement) filter.placements = placement;
-  if (active !== undefined) filter.active = active === "true" || active === true;
+  if (active !== undefined)
+    filter.active = active === "true" || active === true;
 
   let queryBuilder = Content.find(filter).sort({ sortOrder: 1, createdAt: -1 });
 
@@ -67,14 +68,14 @@ const listContent = async (query = {}) => {
 
 const getHomepageContent = async () => {
   const now = new Date();
-  
+
   // Find active content where current date is within start/end dates (or dates are null)
   const activeContents = await Content.find({
     active: true,
     $and: [
       { $or: [{ startDate: null }, { startDate: { $lte: now } }] },
-      { $or: [{ endDate: null }, { endDate: { $gte: now } }] }
-    ]
+      { $or: [{ endDate: null }, { endDate: { $gte: now } }] },
+    ],
   }).sort({ priority: -1, sortOrder: 1 });
 
   // Group by placement
@@ -105,8 +106,8 @@ const getPlacementContent = async (placement) => {
     placements: placement,
     $and: [
       { $or: [{ startDate: null }, { startDate: { $lte: now } }] },
-      { $or: [{ endDate: null }, { endDate: { $gte: now } }] }
-    ]
+      { $or: [{ endDate: null }, { endDate: { $gte: now } }] },
+    ],
   }).sort({ priority: -1, sortOrder: 1 });
 
   return contents;
@@ -128,5 +129,5 @@ module.exports = {
   getHomepageContent,
   getPlacementContent,
   getContentDetails,
-  ALLOWED_PLACEMENTS
+  ALLOWED_PLACEMENTS,
 };

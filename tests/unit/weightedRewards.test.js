@@ -12,6 +12,7 @@ jest.mock("../../src/schemas/product.schema");
 jest.mock("../../src/schemas/reward.schema");
 jest.mock("../../src/schemas/redeem.schema");
 jest.mock("../../src/schemas/tier-configuration.schema");
+jest.mock("../../src/schemas/app-config.schema");
 jest.mock("../../src/functions/fcm", () => ({
   sendFcmNotifications: jest.fn(),
 }));
@@ -33,6 +34,11 @@ describe("Weighted Rewards Calculation", () => {
     const TierConfiguration = require("../../src/schemas/tier-configuration.schema");
     TierConfiguration.findOne.mockReturnValue({
       lean: jest.fn().mockResolvedValue({ pointMultiplier: 1.0 }),
+    });
+
+    const AppConfig = require("../../src/schemas/app-config.schema");
+    AppConfig.findOne.mockReturnValue({
+      sort: jest.fn().mockResolvedValue(null),
     });
 
     mockRole = {
@@ -94,7 +100,8 @@ describe("Weighted Rewards Calculation", () => {
     expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
       "user123",
       expect.objectContaining({
-        $inc: { totalPoints: 50, lifetimePoints: 50 },
+        $inc: { totalPoints: 50, lifetimePoints: 50, totalScans: 1 },
+        $set: { failedScanAttempts: 0, scanBanUntil: null },
       }),
     );
   });
@@ -117,7 +124,8 @@ describe("Weighted Rewards Calculation", () => {
     expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
       "user123",
       expect.objectContaining({
-        $inc: { totalPoints: 10, lifetimePoints: 10 },
+        $inc: { totalPoints: 10, lifetimePoints: 10, totalScans: 1 },
+        $set: { failedScanAttempts: 0, scanBanUntil: null },
       }),
     );
   });
@@ -138,7 +146,10 @@ describe("Weighted Rewards Calculation", () => {
     expect(response.data.pointsRewarded).toBe(5);
     expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
       "user123",
-      expect.objectContaining({ $inc: { totalPoints: 5, lifetimePoints: 5 } }),
+      expect.objectContaining({
+        $inc: { totalPoints: 5, lifetimePoints: 5, totalScans: 1 },
+        $set: { failedScanAttempts: 0, scanBanUntil: null },
+      }),
     );
   });
 });

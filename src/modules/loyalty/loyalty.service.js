@@ -11,6 +11,8 @@ const { sendFcmNotifications } = require("../../functions/fcm");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const { logAudit, buildChanges } = require("../audit-log/audit-log.service");
 const { createTierConfigHistorySnapshot } = require("./loyalty-audit.service");
+const referralService = require("../referral/referral.service");
+const { REFERRAL_MILESTONES } = require("../../constants/referrals");
 
 async function logConfigurationAudit(payload) {
   return logAudit(payload.action, payload);
@@ -387,6 +389,20 @@ async function evaluateTierUpgrade(userId, seasonId) {
     if (user) {
       user.currentTierId = newTier._id;
       await user.save();
+
+      if (!oldTier || !oldTier._id) {
+        try {
+          await referralService.completeMilestone(
+            userId,
+            REFERRAL_MILESTONES.FIRST_TIER_UP,
+          );
+        } catch (milestoneErr) {
+          console.error(
+            "Error triggering first tier up milestone:",
+            milestoneErr,
+          );
+        }
+      }
 
       // Dispatch FCM Push Notification
       if (user.fcmTokens?.length && user.enableNotification) {

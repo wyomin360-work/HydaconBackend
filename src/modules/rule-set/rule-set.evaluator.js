@@ -1,5 +1,10 @@
 const mongoose = require("mongoose");
-const { RuleType, RuleScope, RuleOperator, RuleLogicOperator } = require("../../schemas/rule-set.schema");
+const {
+  RuleType,
+  RuleScope,
+  RuleOperator,
+  RuleLogicOperator,
+} = require("../../schemas/rule-set.schema");
 
 /**
  * Apply temporal scope filters to a MongoDB match query.
@@ -22,10 +27,15 @@ const applyScopeFilter = async (match, scope, session) => {
     startOfWeek.setHours(0, 0, 0, 0);
     match.createdAt = { $gte: startOfWeek };
   } else if (scope === RuleScope.SEASON) {
-    const LoyaltySeason = mongoose.model('LoyaltySeason');
-    const activeSeason = await LoyaltySeason.findOne({ active: true }).session(session);
+    const LoyaltySeason = mongoose.model("LoyaltySeason");
+    const activeSeason = await LoyaltySeason.findOne({ active: true }).session(
+      session,
+    );
     if (activeSeason) {
-      match.createdAt = { $gte: activeSeason.startDate, $lte: activeSeason.endDate };
+      match.createdAt = {
+        $gte: activeSeason.startDate,
+        $lte: activeSeason.endDate,
+      };
     } else {
       match.createdAt = { $gte: new Date(0), $lte: new Date(0) };
     }
@@ -42,11 +52,18 @@ const extractActualValue = async (rule, user, context, session) => {
       if (scope === RuleScope.SEASON) {
         const LoyaltySeason = mongoose.model("LoyaltySeason");
         const UserTierProgress = mongoose.model("UserTierProgress");
-        const activeSeason = await LoyaltySeason.findOne({ active: true }).session(session);
+        const activeSeason = await LoyaltySeason.findOne({
+          active: true,
+        }).session(session);
         if (!activeSeason) return -1;
-        const progress = await UserTierProgress.findOne({ userId: user._id, seasonId: activeSeason._id }).session(session);
+        const progress = await UserTierProgress.findOne({
+          userId: user._id,
+          seasonId: activeSeason._id,
+        }).session(session);
         if (!progress || !progress.currentTierId) return -1;
-        const tier = await Tier.findById(progress.currentTierId).session(session);
+        const tier = await Tier.findById(progress.currentTierId).session(
+          session,
+        );
         return tier ? tier.rank : -1;
       } else {
         if (!user.currentTierId) return -1;
@@ -54,10 +71,10 @@ const extractActualValue = async (rule, user, context, session) => {
         return tier ? tier.rank : -1;
       }
     }
-    
+
     case RuleType.HYDACOINS:
       return user.hydaconCoins || 0;
-      
+
     case RuleType.CASH_BALANCE:
       return user.cashBalance || 0;
 
@@ -67,7 +84,7 @@ const extractActualValue = async (rule, user, context, session) => {
     case RuleType.SCAN_COUNT: {
       const Redeem = mongoose.model("Redeem");
       const match = { userId: user._id };
-      
+
       if (scope === RuleScope.PRODUCT) {
         if (metadata && metadata.targetProduct && metadata.targetProduct._id) {
           match.productId = metadata.targetProduct._id;
@@ -77,13 +94,17 @@ const extractActualValue = async (rule, user, context, session) => {
       } else if (scope === RuleScope.CATEGORY) {
         const Product = mongoose.model("Product");
         if (metadata && (metadata.targetCategory || metadata.targetId)) {
-          const targetCatId = metadata.targetCategory ? metadata.targetCategory._id : metadata.targetId;
-          const productsInCat = await Product.find({ categoryId: targetCatId }).select('_id').session(session);
-          const productIds = productsInCat.map(p => p._id);
+          const targetCatId = metadata.targetCategory
+            ? metadata.targetCategory._id
+            : metadata.targetId;
+          const productsInCat = await Product.find({ categoryId: targetCatId })
+            .select("_id")
+            .session(session);
+          const productIds = productsInCat.map((p) => p._id);
           match.productId = { $in: productIds };
         }
       }
-      
+
       // Apply temporal scope filtering (MONTH/WEEK/SEASON/TOTAL)
       await applyScopeFilter(match, scope, session);
       const count = await Redeem.countDocuments(match).session(session);
@@ -100,28 +121,65 @@ const extractActualValue = async (rule, user, context, session) => {
       return !!user.areaOfOperation;
 
     case RuleType.KYC_COMPLETED:
-      return user.kycStatus === "APPROVED"; 
+      return user.kycStatus === "APPROVED";
 
-    case RuleType.SEASON_POINTS: {
+    case RuleType.SEASON_POINTS:
+    case RuleType.SEASON_TIER:
+    case RuleType.SEASON_RANK: {
       const LoyaltySeason = mongoose.model("LoyaltySeason");
       const UserTierProgress = mongoose.model("UserTierProgress");
 
-      const activeSeason = await LoyaltySeason.findOne({ active: true }).session(session);
+      const activeSeason = await LoyaltySeason.findOne({
+        active: true,
+      }).session(session);
       if (!activeSeason) return -1;
 
       if (!context.seasonProgress) {
         context.seasonProgress = await UserTierProgress.findOne({
           userId: user._id,
-          seasonId: activeSeason._id
+          seasonId: activeSeason._id,
         }).session(session);
       }
       const progress = context.seasonProgress;
 
       if (!progress) return -1;
 
-      return progress.currentPoint || 0;
+      if (type === RuleType.SEASON_POINTS) return progress.currentPoint || 0;
+
+      if (!progress.currentTierId) return -1;
+
+      if (type === RuleType.SEASON_TIER)
+        return progress.currentTierId.toString();
+
+      if (type === RuleType.SEASON_RANK) {
+        const Tier = mongoose.model("Tier");
+        const tier = await Tier.findById(progress.currentTierId).session(
+          session,
+        );
+        return tier ? tier.rank : -1;
+      }
+
+      return -1;
     }
 
+    case RuleType.MAX_REDEMPTIONS_PER_USER: {
+      if (!context.targetId) return 0;
+      const GiftRedemption = mongoose.model("GiftRedemption");
+      const count = await GiftRedemption.countDocuments({
+        userId: user._id,
+        giftId: context.targetId,
+      }).session(session);
+      return count;
+    }
+
+    case RuleType.MAX_GLOBAL_REDEMPTIONS: {
+      if (!context.targetId) return 0;
+      const GiftRedemption = mongoose.model("GiftRedemption");
+      const count = await GiftRedemption.countDocuments({
+        giftId: context.targetId,
+      }).session(session);
+      return count;
+    }
 
     case RuleType.REFERRALS:
       return user.referralsCount || 0;
@@ -151,9 +209,13 @@ const extractActualValue = async (rule, user, context, session) => {
       const Redeem = mongoose.model("Redeem");
       const match = { userId: user._id };
       if (metadata && (metadata.targetCategory || metadata.targetId)) {
-        const targetCatId = metadata.targetCategory ? metadata.targetCategory._id : metadata.targetId;
-        const productsInCat = await Product.find({ categoryId: targetCatId }).select('_id').session(session);
-        const productIds = productsInCat.map(p => p._id);
+        const targetCatId = metadata.targetCategory
+          ? metadata.targetCategory._id
+          : metadata.targetId;
+        const productsInCat = await Product.find({ categoryId: targetCatId })
+          .select("_id")
+          .session(session);
+        const productIds = productsInCat.map((p) => p._id);
         match.productId = { $in: productIds };
       }
       await applyScopeFilter(match, scope, session);
@@ -177,9 +239,14 @@ const extractActualValue = async (rule, user, context, session) => {
       const LoyaltySeason = mongoose.model("LoyaltySeason");
       const UserTierProgress = mongoose.model("UserTierProgress");
       const Tier = mongoose.model("Tier");
-      const activeSeason = await LoyaltySeason.findOne({ active: true }).session(session);
+      const activeSeason = await LoyaltySeason.findOne({
+        active: true,
+      }).session(session);
       if (!activeSeason) return null;
-      const progress = await UserTierProgress.findOne({ userId: user._id, seasonId: activeSeason._id }).session(session);
+      const progress = await UserTierProgress.findOne({
+        userId: user._id,
+        seasonId: activeSeason._id,
+      }).session(session);
       if (!progress) return null;
       const tier = await Tier.findById(progress.currentTierId).session(session);
       return tier ? tier._id : null;
@@ -189,9 +256,14 @@ const extractActualValue = async (rule, user, context, session) => {
       const LoyaltySeason = mongoose.model("LoyaltySeason");
       const UserTierProgress = mongoose.model("UserTierProgress");
       const Tier = mongoose.model("Tier");
-      const activeSeason = await LoyaltySeason.findOne({ active: true }).session(session);
+      const activeSeason = await LoyaltySeason.findOne({
+        active: true,
+      }).session(session);
       if (!activeSeason) return -1;
-      const progress = await UserTierProgress.findOne({ userId: user._id, seasonId: activeSeason._id }).session(session);
+      const progress = await UserTierProgress.findOne({
+        userId: user._id,
+        seasonId: activeSeason._id,
+      }).session(session);
       if (!progress) return -1;
       const tier = await Tier.findById(progress.currentTierId).session(session);
       return tier ? tier.rank : -1;
@@ -205,13 +277,18 @@ const extractActualValue = async (rule, user, context, session) => {
 const applyOperator = (actualValue, operator, expectedValue) => {
   // Normalize expected boolean values sent as strings from the UI
   let parsedExpectedValue = expectedValue;
-  if (typeof parsedExpectedValue === 'string') {
-    if (parsedExpectedValue.toLowerCase() === 'true') parsedExpectedValue = true;
-    else if (parsedExpectedValue.toLowerCase() === 'false') parsedExpectedValue = false;
+  if (typeof parsedExpectedValue === "string") {
+    if (parsedExpectedValue.toLowerCase() === "true")
+      parsedExpectedValue = true;
+    else if (parsedExpectedValue.toLowerCase() === "false")
+      parsedExpectedValue = false;
   }
 
   // Parse numeric expected values when actual is a number
-  if (typeof actualValue === 'number' && typeof parsedExpectedValue === 'string') {
+  if (
+    typeof actualValue === "number" &&
+    typeof parsedExpectedValue === "string"
+  ) {
     const num = Number(parsedExpectedValue);
     if (!isNaN(num)) parsedExpectedValue = num;
   }
@@ -222,25 +299,56 @@ const applyOperator = (actualValue, operator, expectedValue) => {
     case RuleOperator.LTE:
       return actualValue <= parsedExpectedValue;
     case RuleOperator.EQ:
-      if (typeof actualValue === 'string' && typeof parsedExpectedValue === 'string') {
-        return actualValue.trim().toLowerCase() === parsedExpectedValue.trim().toLowerCase();
+      if (
+        typeof actualValue === "string" &&
+        typeof parsedExpectedValue === "string"
+      ) {
+        return (
+          actualValue.trim().toLowerCase() ===
+          parsedExpectedValue.trim().toLowerCase()
+        );
       }
       return actualValue === parsedExpectedValue;
     case RuleOperator.NEQ:
-      if (typeof actualValue === 'string' && typeof parsedExpectedValue === 'string') {
-        return actualValue.trim().toLowerCase() !== parsedExpectedValue.trim().toLowerCase();
+      if (
+        typeof actualValue === "string" &&
+        typeof parsedExpectedValue === "string"
+      ) {
+        return (
+          actualValue.trim().toLowerCase() !==
+          parsedExpectedValue.trim().toLowerCase()
+        );
       }
       return actualValue !== parsedExpectedValue;
     case RuleOperator.IN:
       if (Array.isArray(parsedExpectedValue)) {
-        if (typeof actualValue === 'string') {
-          const matchedString = parsedExpectedValue.some(e => typeof e === 'string' && e.trim().toLowerCase() === actualValue.trim().toLowerCase());
+        if (typeof actualValue === "string") {
+          const matchedString = parsedExpectedValue.some(
+            (e) =>
+              typeof e === "string" &&
+              e.trim().toLowerCase() === actualValue.trim().toLowerCase(),
+          );
           if (matchedString) return true;
-          return parsedExpectedValue.some(e => {
-            if (e && typeof e === 'object') {
-              if (e.state && e.state.trim().toLowerCase() === actualValue.trim().toLowerCase()) return true;
-              if (e.country && e.country.trim().toLowerCase() === actualValue.trim().toLowerCase()) return true;
-              if (e.district && e.district.trim().toLowerCase() === actualValue.trim().toLowerCase()) return true;
+          return parsedExpectedValue.some((e) => {
+            if (e && typeof e === "object") {
+              if (
+                e.state &&
+                e.state.trim().toLowerCase() ===
+                  actualValue.trim().toLowerCase()
+              )
+                return true;
+              if (
+                e.country &&
+                e.country.trim().toLowerCase() ===
+                  actualValue.trim().toLowerCase()
+              )
+                return true;
+              if (
+                e.district &&
+                e.district.trim().toLowerCase() ===
+                  actualValue.trim().toLowerCase()
+              )
+                return true;
             }
             return false;
           });
@@ -250,14 +358,33 @@ const applyOperator = (actualValue, operator, expectedValue) => {
       return false;
     case RuleOperator.NOT_IN:
       if (Array.isArray(parsedExpectedValue)) {
-        if (typeof actualValue === 'string') {
-          const matchedString = parsedExpectedValue.some(e => typeof e === 'string' && e.trim().toLowerCase() === actualValue.trim().toLowerCase());
+        if (typeof actualValue === "string") {
+          const matchedString = parsedExpectedValue.some(
+            (e) =>
+              typeof e === "string" &&
+              e.trim().toLowerCase() === actualValue.trim().toLowerCase(),
+          );
           if (matchedString) return false;
-          const matchedObject = parsedExpectedValue.some(e => {
-            if (e && typeof e === 'object') {
-              if (e.state && e.state.trim().toLowerCase() === actualValue.trim().toLowerCase()) return true;
-              if (e.country && e.country.trim().toLowerCase() === actualValue.trim().toLowerCase()) return true;
-              if (e.district && e.district.trim().toLowerCase() === actualValue.trim().toLowerCase()) return true;
+          const matchedObject = parsedExpectedValue.some((e) => {
+            if (e && typeof e === "object") {
+              if (
+                e.state &&
+                e.state.trim().toLowerCase() ===
+                  actualValue.trim().toLowerCase()
+              )
+                return true;
+              if (
+                e.country &&
+                e.country.trim().toLowerCase() ===
+                  actualValue.trim().toLowerCase()
+              )
+                return true;
+              if (
+                e.district &&
+                e.district.trim().toLowerCase() ===
+                  actualValue.trim().toLowerCase()
+              )
+                return true;
             }
             return false;
           });
@@ -271,17 +398,35 @@ const applyOperator = (actualValue, operator, expectedValue) => {
   }
 };
 
-exports.evaluateRuleSet = async (ruleSet, user, context = {}, session = null, auditMode = true) => {
+exports.evaluateRuleSet = async (
+  ruleSet,
+  user,
+  context = {},
+  session = null,
+  auditMode = true,
+) => {
   if (!ruleSet.active) {
-    return { eligible: false, reasons: ["Rule set is not active"], evaluatedRules: [] };
+    return {
+      eligible: false,
+      reasons: ["Rule set is not active"],
+      evaluatedRules: [],
+    };
   }
 
   const now = new Date();
   if (ruleSet.validFrom && now < ruleSet.validFrom) {
-    return { eligible: false, reasons: ["Rule set is not yet valid"], evaluatedRules: [] };
+    return {
+      eligible: false,
+      reasons: ["Rule set is not yet valid"],
+      evaluatedRules: [],
+    };
   }
   if (ruleSet.validUntil && now > ruleSet.validUntil) {
-    return { eligible: false, reasons: ["Rule set has expired"], evaluatedRules: [] };
+    return {
+      eligible: false,
+      reasons: ["Rule set has expired"],
+      evaluatedRules: [],
+    };
   }
 
   // Empty rule set – always eligible
@@ -298,12 +443,36 @@ exports.evaluateRuleSet = async (ruleSet, user, context = {}, session = null, au
 
   const evaluateSingleRule = async (rule) => {
     try {
-      const actualValue = await extractActualValue(rule, user, context, session);
-      const expectedValue = rule.value; 
-      const satisfied = applyOperator(actualValue, rule.operator, expectedValue);
-      return { type: rule.type, scope: rule.scope, operator: rule.operator, expectedValue, actualValue, satisfied };
+      const actualValue = await extractActualValue(
+        rule,
+        user,
+        context,
+        session,
+      );
+      const expectedValue = rule.value;
+      const satisfied = applyOperator(
+        actualValue,
+        rule.operator,
+        expectedValue,
+      );
+      return {
+        type: rule.type,
+        scope: rule.scope,
+        operator: rule.operator,
+        expectedValue,
+        actualValue,
+        satisfied,
+      };
     } catch (error) {
-      return { type: rule.type, scope: rule.scope, operator: rule.operator, expectedValue: rule.value, actualValue: null, satisfied: false, error: error.message };
+      return {
+        type: rule.type,
+        scope: rule.scope,
+        operator: rule.operator,
+        expectedValue: rule.value,
+        actualValue: null,
+        satisfied: false,
+        error: error.message,
+      };
     }
   };
 

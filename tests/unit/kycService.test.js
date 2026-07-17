@@ -8,6 +8,11 @@ jest.mock("../../src/functions/nodemailer", () => ({
   sendTemplateEmail: jest.fn().mockResolvedValue(true),
 }));
 
+jest.mock("../../src/utils/s3", () => ({
+  checkS3FileExists: jest.fn().mockResolvedValue(true),
+  deleteS3File: jest.fn().mockResolvedValue(true),
+}));
+
 const kycService = require("../../src/modules/kyc/kyc.service");
 const User = require("../../src/schemas/user.schema");
 const fs = require("fs");
@@ -45,54 +50,45 @@ describe("kyc.service unit tests", () => {
   // ─── uploadDocument ──────────────────────────────────────────────────────────
 
   describe("uploadDocument", () => {
-    it("should throw error and clean up original file if document type is invalid", async () => {
-      fs.existsSync.mockReturnValue(true);
-
+    it("should throw error if document type is invalid", async () => {
       await expect(
-        kycService.uploadDocument("userId123", "invalidType", mockFile),
+        kycService.uploadDocument(
+          "userId123",
+          "invalidType",
+          "https://s3.bucket/url.jpg",
+        ),
       ).rejects.toThrow("Invalid document type");
-
-      expect(fs.existsSync).toHaveBeenCalledWith(mockFile.path);
-      expect(fs.unlinkSync).toHaveBeenCalledWith(mockFile.path);
     });
 
-    it("should throw error and clean up original file if mime type is invalid", async () => {
-      mockFile.mimetype = "text/plain";
-      mockFile.originalname = "test.txt";
-      fs.existsSync.mockReturnValue(true);
+    it("should throw error if fileUrl is missing", async () => {
+      await expect(
+        kycService.uploadDocument("userId123", "aadhaar", ""),
+      ).rejects.toThrow("fileUrl is required");
+    });
+
+    it("should throw error if file does not exist on S3", async () => {
+      const { checkS3FileExists } = require("../../src/utils/s3");
+      checkS3FileExists.mockResolvedValueOnce(false);
 
       await expect(
-        kycService.uploadDocument("userId123", "aadhaar", mockFile),
-      ).rejects.toThrow("Invalid file type");
-
-      expect(fs.existsSync).toHaveBeenCalledWith(mockFile.path);
-      expect(fs.unlinkSync).toHaveBeenCalledWith(mockFile.path);
+        kycService.uploadDocument(
+          "userId123",
+          "aadhaar",
+          "https://s3.bucket/nonexistent.jpg",
+        ),
+      ).rejects.toThrow("File not found on S3.");
     });
 
-    it("should throw error and clean up original file if file size exceeds max size", async () => {
-      mockFile.size = 6 * 1024 * 1024; // 6MB
-      fs.existsSync.mockReturnValue(true);
-
-      await expect(
-        kycService.uploadDocument("userId123", "aadhaar", mockFile),
-      ).rejects.toThrow("File size exceeds");
-
-      expect(fs.existsSync).toHaveBeenCalledWith(mockFile.path);
-      expect(fs.unlinkSync).toHaveBeenCalledWith(mockFile.path);
-    });
-
-    it("should clean up original and compressed files if user is not found", async () => {
-      fs.existsSync.mockReturnValue(true);
+    it("should throw error if user is not found", async () => {
       User.findById.mockResolvedValue(null);
 
       await expect(
-        kycService.uploadDocument("userId123", "aadhaar", mockFile),
+        kycService.uploadDocument(
+          "userId123",
+          "aadhaar",
+          "https://s3.bucket/url.jpg",
+        ),
       ).rejects.toThrow("User not found");
-
-      expect(fs.unlinkSync).toHaveBeenCalledWith(mockFile.path);
-      expect(fs.unlinkSync).toHaveBeenCalledWith(
-        expect.stringContaining("test-doc-compressed"),
-      );
     });
 
     it("should upload first document and set status to NOT_STARTED since others are missing", async () => {

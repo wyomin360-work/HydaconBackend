@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const dotenv = require("dotenv");
 dotenv.config();
 
-const GiftRedemption = require("./src/schemas/gift-redemption.schema");
+const GiftRedemption = require("../src/schemas/gift-redemption.schema");
 const MONGODB_URL =
   process.env.MONGODB_URL ||
   "mongodb+srv://josejobiin_db_user:Te3oFj5RbKvMCvl0@hydacon.tlgu5hs.mongodb.net/";

@@ -159,8 +159,8 @@ exports.userList = async (req, res) => {
 
 exports.uploadProfilePhoto = async (req, res, next) => {
   const userId = req?.userId;
-  const file = req?.file;
-  const response = await userService.uploadProfilePhoto(userId, file);
+  const { fileUrl } = req?.body;
+  const response = await userService.uploadProfilePhoto(userId, fileUrl);
   return sendResponse(res, response);
 };
 
@@ -186,7 +186,13 @@ exports.toggleUserStatus = async (req, res, next) => {
 };
 
 exports.deleteUser = async (req, res, next) => {
-  const targetUserId = req?.params?.id;
-  const response = await userService.deleteUser(targetUserId);
+  const userId = req.params?.id;
+  const response = await userService.deleteUser(userId);
+  return sendResponse(res, response);
+};
+
+exports.releaseBan = async (req, res, next) => {
+  const userId = req.params?.id;
+  const response = await userService.releaseBan(userId);
   return sendResponse(res, response);
 };

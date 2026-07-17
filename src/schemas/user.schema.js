@@ -117,6 +117,17 @@ const userSchema = new mongoose.Schema(
 
     failedScanAttempts: { type: Number, default: 0 },
     scanBanUntil: { type: Date, default: null },
+    referralCode: { type: String, unique: true, sparse: true, default: null },
+    referredBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    // Tracks which referral scan milestones have already been rewarded.
+    // Prevents double-crediting if the same scan is processed more than once.
+    referralRewardedMilestones: { type: [Number], default: [] },
+    // Tracks completed transactional referral milestones (e.g. phone transfer, QR payment)
+    completedReferralMilestones: { type: [String], default: [] },
   },
   {
     timestamps: true,
@@ -151,9 +162,34 @@ userSchema.methods.calculateCompletionPercentage = async function () {
   }
 };
 
+function generateReferralCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no ambiguous chars (0/O, 1/I)
+  let code = "HYD";
+  for (let i = 0; i < 5; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
+
 userSchema.pre("save", async function (next) {
   if (this.isModified("password")) {
     this.password = await hashData(this.password);
+  }
+
+  // Auto-generate referral code on first creation
+  if (!this.referralCode) {
+    let code;
+    let isUnique = false;
+    let attempts = 0;
+    while (!isUnique && attempts < 10) {
+      code = generateReferralCode();
+      const existing = await mongoose
+        .model("User")
+        .findOne({ referralCode: code });
+      if (!existing) isUnique = true;
+      attempts++;
+    }
+    this.referralCode = code;
   }
 
   await this.calculateCompletionPercentage();
