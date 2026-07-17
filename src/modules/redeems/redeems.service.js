@@ -15,6 +15,8 @@ const { attachId, formatNotification } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const referralService = require("../referral/referral.service");
 const { REFERRAL_MILESTONES } = require("../../constants/referrals");
+  const loyaltyService = require("../loyalty/loyalty.service");
+  const TierConfiguration = require("../../schemas/tier-configuration.schema");
 
 async function listRedeems(data) {
   const { page = 1, limit = 20 } = data;
@@ -157,8 +159,6 @@ async function createRedeem(redeemData, reqUser = null) {
   // Removed local user object modification for failed attempts, it will be updated atomically below
 
   // 1. Get tier multiplier
-  const loyaltyService = require("../loyalty/loyalty.service");
-  const TierConfiguration = require("../../schemas/tier-configuration.schema");
   const activeSeason = await loyaltyService.resolveActiveSeason();
   let tierMultiplier = 1.0;
   if (activeSeason) {
