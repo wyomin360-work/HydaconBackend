@@ -140,4 +140,39 @@ router.get(
   verification.verifyAdmin,
   handleError(giftController.getAnalytics),
 );
+
+// Scratch Card Configuration
+router.get(
+  giftPaths.scratchCardConfig,
+  verification.verifyAdmin,
+  handleError(giftController.getScratchCardConfig),
+);
+router.patch(
+  giftPaths.scratchCardConfig,
+  verification.verifyAdmin,
+  handleError(giftController.updateScratchCardConfig),
+);
+
+// Scratch Card Rules
+router.get(
+  giftPaths.scratchCardRules,
+  verification.verifyAdmin,
+  handleError(giftController.listScratchCardRules),
+);
+router.post(
+  giftPaths.scratchCardRules,
+  verification.verifyAdmin,
+  handleError(giftController.createScratchCardRule),
+);
+router.patch(
+  giftPaths.scratchCardRuleDetail,
+  verification.verifyAdmin,
+  handleError(giftController.updateScratchCardRule),
+);
+router.delete(
+  giftPaths.scratchCardRuleDetail,
+  verification.verifyAdmin,
+  handleError(giftController.deleteScratchCardRule),
+);
+
 module.exports = router;

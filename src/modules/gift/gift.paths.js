@@ -31,4 +31,9 @@ module.exports = {
 
   // Analytics (Admin)
   adminAnalytics: "/admin/analytics",
+
+  // Scratch Card Configuration (Admin)
+  scratchCardConfig: "/admin/scratch-card-config",
+  scratchCardRules: "/admin/scratch-card-rules",
+  scratchCardRuleDetail: "/admin/scratch-card-rules/:ruleId",
 };

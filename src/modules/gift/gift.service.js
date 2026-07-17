@@ -742,3 +742,326 @@ exports.getAnalytics = async () => {
     return { success: false, message: error.message };
   }
 };
+
+// --- Scratch Card Configuration ---
+
+exports.getScratchCardConfig = async () => {
+  try {
+    const configDoc = await AppConfig.findOne().lean();
+    if (!configDoc) return { success: false, message: "App config not found" };
+
+    const settings = configDoc.scratchCardSettings || {};
+
+    // Populate selectedGiftIds with full gift data if any are set
+    let giftPool = [];
+    if (settings.selectedGiftIds && settings.selectedGiftIds.length > 0) {
+      giftPool = await Gift.find({ _id: { $in: settings.selectedGiftIds } })
+        .select(
+          "_id name image priceInCoins active stockQuantity reservedQuantity",
+        )
+        .lean();
+    }
+
+    // Count all available gifts for context
+    const totalActiveGifts = await Gift.countDocuments({
+      active: true,
+      stockQuantity: { $gt: 0 },
+    });
+
+    return {
+      success: true,
+      data: {
+        ...settings,
+        giftPool,
+        totalActiveGifts,
+        useAllGifts:
+          !settings.selectedGiftIds || settings.selectedGiftIds.length === 0,
+      },
+    };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+exports.updateScratchCardConfig = async (configData) => {
+  try {
+    const {
+      enabled,
+      probability,
+      minBonusPoints,
+      maxBonusPoints,
+      giftProbability,
+      selectedGiftIds,
+    } = configData;
+
+    // Validate probability values
+    if (probability !== undefined && (probability < 0 || probability > 100)) {
+      return {
+        success: false,
+        message: "Probability must be between 0 and 100",
+      };
+    }
+    if (
+      giftProbability !== undefined &&
+      (giftProbability < 0 || giftProbability > 100)
+    ) {
+      return {
+        success: false,
+        message: "Gift probability must be between 0 and 100",
+      };
+    }
+    if (
+      minBonusPoints !== undefined &&
+      maxBonusPoints !== undefined &&
+      minBonusPoints > maxBonusPoints
+    ) {
+      return {
+        success: false,
+        message: "Min bonus points cannot exceed max bonus points",
+      };
+    }
+
+    // If selectedGiftIds provided, verify each gift exists
+    if (selectedGiftIds && selectedGiftIds.length > 0) {
+      const count = await Gift.countDocuments({
+        _id: { $in: selectedGiftIds },
+      });
+      if (count !== selectedGiftIds.length) {
+        return {
+          success: false,
+          message: "One or more selected gift IDs are invalid",
+        };
+      }
+    }
+
+    const update = {};
+    if (enabled !== undefined) update["scratchCardSettings.enabled"] = enabled;
+    if (probability !== undefined)
+      update["scratchCardSettings.probability"] = probability;
+    if (minBonusPoints !== undefined)
+      update["scratchCardSettings.minBonusPoints"] = minBonusPoints;
+    if (maxBonusPoints !== undefined)
+      update["scratchCardSettings.maxBonusPoints"] = maxBonusPoints;
+    if (giftProbability !== undefined)
+      update["scratchCardSettings.giftProbability"] = giftProbability;
+    if (selectedGiftIds !== undefined)
+      update["scratchCardSettings.selectedGiftIds"] = selectedGiftIds;
+
+    const updatedConfig = await AppConfig.findOneAndUpdate(
+      {},
+      { $set: update },
+      { new: true, upsert: false },
+    );
+
+    if (!updatedConfig)
+      return { success: false, message: "App config not found" };
+
+    return {
+      success: true,
+      message: "Scratch card configuration updated successfully",
+      data: updatedConfig.scratchCardSettings,
+    };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+// --- Scratch Card Rules CRUD ---
+
+exports.listScratchCardRules = async () => {
+  try {
+    const rules = await ScratchCardRule.find()
+      .populate("tierId")
+      .populate("giftId")
+      .populate("products")
+      .populate("gifts.giftId")
+      .populate({
+        path: "rewards.giftId",
+        populate: {
+          path: "categoryId",
+        },
+      })
+      .populate("tiers")
+      .sort({ createdAt: -1 })
+      .lean();
+    return { success: true, data: rules };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+exports.createScratchCardRule = async (data) => {
+  try {
+    const {
+      tierId,
+      rewardType,
+      minCoins,
+      maxCoins,
+      giftId,
+      active,
+      productScope,
+      products,
+      gifts,
+      name,
+      description,
+      startDate,
+      endDate,
+      tierScope,
+      tiers,
+      totalScratchLimit,
+      perUserScratchLimit,
+      rewards,
+    } = data;
+
+    const newRule = await ScratchCardRule.create({
+      tierId: tierId || null,
+      rewardType: rewardType || "GIFT",
+      minCoins: rewardType === "POINTS" ? Number(minCoins) : 0,
+      maxCoins: rewardType === "POINTS" ? Number(maxCoins) : 0,
+      giftId: rewardType === "GIFT" ? giftId || null : null,
+      productScope: productScope || "EVERY_PRODUCT",
+      products: products || [],
+      gifts: gifts || [],
+      active: active !== undefined ? active : true,
+      name: name || "",
+      description: description || "",
+      startDate: startDate || null,
+      endDate: endDate || null,
+      tierScope: tierScope || "ALL_TIERS",
+      tiers: tiers || [],
+      totalScratchLimit:
+        totalScratchLimit !== undefined ? Number(totalScratchLimit) : 0,
+      perUserScratchLimit:
+        perUserScratchLimit !== undefined ? Number(perUserScratchLimit) : 0,
+      rewards: rewards || [],
+    });
+
+    // Populate rule references for clean response
+    const populated = await ScratchCardRule.findById(newRule._id)
+      .populate("tierId")
+      .populate("giftId")
+      .populate("products")
+      .populate("gifts.giftId")
+      .populate({
+        path: "rewards.giftId",
+        populate: {
+          path: "categoryId",
+        },
+      })
+      .populate("tiers")
+      .lean();
+
+    return {
+      success: true,
+      message: "Scratch card rule created successfully",
+      data: populated,
+    };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+exports.updateScratchCardRule = async (id, data) => {
+  try {
+    const {
+      tierId,
+      rewardType,
+      minCoins,
+      maxCoins,
+      giftId,
+      active,
+      productScope,
+      products,
+      gifts,
+      name,
+      description,
+      startDate,
+      endDate,
+      tierScope,
+      tiers,
+      totalScratchLimit,
+      perUserScratchLimit,
+      rewards,
+    } = data;
+    const rule = await ScratchCardRule.findById(id);
+    if (!rule)
+      return { success: false, message: "Scratch card rule not found" };
+
+    const finalRewardType =
+      rewardType !== undefined ? rewardType : rule.rewardType;
+
+    if (tierId !== undefined) rule.tierId = tierId || null;
+    if (rewardType !== undefined) rule.rewardType = rewardType;
+    rule.minCoins =
+      finalRewardType === "POINTS"
+        ? minCoins !== undefined
+          ? Number(minCoins)
+          : rule.minCoins
+        : 0;
+    rule.maxCoins =
+      finalRewardType === "POINTS"
+        ? maxCoins !== undefined
+          ? Number(maxCoins)
+          : rule.maxCoins
+        : 0;
+    rule.giftId =
+      finalRewardType === "GIFT"
+        ? giftId !== undefined
+          ? giftId
+          : rule.giftId
+        : null;
+    if (active !== undefined) rule.active = active;
+    if (productScope !== undefined) rule.productScope = productScope;
+    if (products !== undefined) rule.products = products;
+    if (gifts !== undefined) rule.gifts = gifts;
+
+    // Campaign fields
+    if (name !== undefined) rule.name = name;
+    if (description !== undefined) rule.description = description;
+    if (startDate !== undefined) rule.startDate = startDate || null;
+    if (endDate !== undefined) rule.endDate = endDate || null;
+    if (tierScope !== undefined) rule.tierScope = tierScope;
+    if (tiers !== undefined) rule.tiers = tiers;
+    if (totalScratchLimit !== undefined)
+      rule.totalScratchLimit = Number(totalScratchLimit);
+    if (perUserScratchLimit !== undefined)
+      rule.perUserScratchLimit = Number(perUserScratchLimit);
+    if (rewards !== undefined) rule.rewards = rewards;
+
+    await rule.save();
+
+    // Populate rule references for clean response
+    const populated = await ScratchCardRule.findById(rule._id)
+      .populate("tierId")
+      .populate("giftId")
+      .populate("products")
+      .populate("gifts.giftId")
+      .populate({
+        path: "rewards.giftId",
+        populate: {
+          path: "categoryId",
+        },
+      })
+      .populate("tiers")
+      .lean();
+
+    return {
+      success: true,
+      message: "Scratch card rule updated successfully",
+      data: populated,
+    };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+exports.deleteScratchCardRule = async (id) => {
+  try {
+    const rule = await ScratchCardRule.findByIdAndDelete(id);
+    if (!rule)
+      return { success: false, message: "Scratch card rule not found" };
+    return { success: true, message: "Scratch card rule deleted successfully" };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
