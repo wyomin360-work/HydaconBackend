@@ -1,4 +1,5 @@
 const Content = require("../../schemas/content.schema");
+const User = require("../../schemas/user.schema");
 const AppError = require("../../utils/appError");
 const { ALLOWED_PLACEMENTS } = require("./content.constants");
 
@@ -65,7 +66,7 @@ const listContent = async (query = {}) => {
   };
 };
 
-const getHomepageContent = async () => {
+const getHomepageContent = async (userId = null) => {
   const now = new Date();
   
   // Find active content where current date is within start/end dates (or dates are null)
@@ -77,6 +78,15 @@ const getHomepageContent = async () => {
     ]
   }).sort({ priority: -1, sortOrder: 1 });
 
+  // Get viewed popups for the user
+  let viewedIds = [];
+  if (userId) {
+    const user = await User.findById(userId).lean();
+    if (user && user.viewedPopups) {
+      viewedIds = user.viewedPopups.map((id) => id.toString());
+    }
+  }
+
   // Group by placement
   const homepageGroups = {};
   ALLOWED_PLACEMENTS.forEach((p) => {
@@ -84,6 +94,11 @@ const getHomepageContent = async () => {
   });
 
   activeContents.forEach((content) => {
+    // Filter out viewed popups
+    if (viewedIds.includes(content._id.toString())) {
+      return;
+    }
+
     if (content.placements && Array.isArray(content.placements)) {
       content.placements.forEach((placement) => {
         if (homepageGroups[placement]) {
@@ -98,11 +113,22 @@ const getHomepageContent = async () => {
   return homepageGroups;
 };
 
-const getPlacementContent = async (placement) => {
+const getPlacementContent = async (placement, userId = null) => {
   const now = new Date();
+
+  // Get viewed popups for the user
+  let viewedIds = [];
+  if (userId) {
+    const user = await User.findById(userId).lean();
+    if (user && user.viewedPopups) {
+      viewedIds = user.viewedPopups.map((id) => id.toString());
+    }
+  }
+
   const contents = await Content.find({
     active: true,
     placements: placement,
+    _id: { $nin: viewedIds },
     $and: [
       { $or: [{ startDate: null }, { startDate: { $lte: now } }] },
       { $or: [{ endDate: null }, { endDate: { $gte: now } }] }
@@ -110,6 +136,19 @@ const getPlacementContent = async (placement) => {
   }).sort({ priority: -1, sortOrder: 1 });
 
   return contents;
+};
+
+const trackContentView = async (id, userId) => {
+  const content = await Content.findById(id);
+  if (!content) {
+    throw new AppError("Content not found", 404);
+  }
+
+  await User.findByIdAndUpdate(userId, {
+    $addToSet: { viewedPopups: id },
+  });
+
+  return { message: "Content view tracked successfully", viewed: true };
 };
 
 const getContentDetails = async (id) => {
@@ -127,6 +166,7 @@ module.exports = {
   listContent,
   getHomepageContent,
   getPlacementContent,
+  trackContentView,
   getContentDetails,
   ALLOWED_PLACEMENTS
 };

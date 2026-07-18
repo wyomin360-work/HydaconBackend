@@ -117,6 +117,9 @@ const userSchema = new mongoose.Schema(
 
     failedScanAttempts: { type: Number, default: 0 },
     scanBanUntil: { type: Date, default: null },
+
+    // viewedPopups for tracking which popups have been shown in this login session
+    viewedPopups: [{ type: mongoose.Schema.Types.ObjectId, ref: "Content", default: [] }],
   },
   {
     timestamps: true,

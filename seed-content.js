@@ -4,6 +4,76 @@ const Content = require("./src/schemas/content.schema");
 
 const sampleData = [
   {
+    title: "Welcome Back Offer!",
+    subtitle: "Special home promo",
+    description: "Get 20% cashback on your next scans. Limited time popup only.",
+    type: "POPUP",
+    popupType: "MODAL_POPUP",
+    placements: ["HOME_OPENING"],
+    images: {
+      mobile: "https://images.unsplash.com/photo-1572916118970-fb5c8a1cb565?q=80&w=800&auto=format&fit=crop",
+    },
+    action: "OPEN_REWARDS",
+    active: true,
+    priority: 10,
+    sortOrder: 1,
+    dismissible: true,
+    showOnce: false
+  },
+  {
+    title: "Scan Checklist",
+    subtitle: "How to earn maximum points",
+    description: "Make sure to align the QR code inside the frame. Keep scan steady.",
+    type: "POPUP",
+    popupType: "BOTTOM_SHEET",
+    placements: ["SCAN_OPENING"],
+    images: {
+      mobile: "https://images.unsplash.com/photo-1517409095697-d8dcde0a9cf1?q=80&w=800&auto=format&fit=crop",
+    },
+    action: "OPEN_SCAN",
+    active: true,
+    priority: 10,
+    sortOrder: 1,
+    dismissible: true,
+    showOnce: false
+  },
+  {
+    title: "Rewards Festival",
+    subtitle: "Mega redeeming event",
+    description: "Spend your loyalty points on premium gifts during this festival.",
+    type: "POPUP",
+    popupType: "FULLSCREEN",
+    placements: ["REWARDS_OPENING"],
+    images: {
+      mobile: "https://images.unsplash.com/photo-1563986768494-4dee2763ff3f?q=80&w=800&auto=format&fit=crop",
+    },
+    action: "OPEN_INTERNAL_PAGE",
+    actionData: "Route_Loyalty_Details",
+    active: true,
+    priority: 10,
+    sortOrder: 1,
+    dismissible: true,
+    showOnce: false
+  },
+  {
+    title: "Complete Your Profile",
+    subtitle: "Earn bonus points!",
+    description: "Update your profile email and bank details to unlock instant transfers.",
+    type: "POPUP",
+    popupType: "MODAL_POPUP",
+    placements: ["PROFILE_OPENING"],
+    images: {
+      mobile: "https://images.unsplash.com/photo-1581092160562-40aa08e78837?q=80&w=800&auto=format&fit=crop",
+    },
+    action: "OPEN_INTERNAL_PAGE",
+    actionData: "Route_Edit_Profile",
+    active: true,
+    priority: 10,
+    sortOrder: 1,
+    dismissible: true,
+    showOnce: false
+  },
+  {
     title: "Summer Offer",
     subtitle: "Get up to 20% off on premium hydacon products",
     description: "Welcome the summer with massive discounts on our premium range. Limited time offer.",

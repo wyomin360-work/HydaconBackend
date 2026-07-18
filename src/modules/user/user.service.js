@@ -47,6 +47,9 @@ async function generateAndSaveToken(payload) {
   if (!accessToken || !refreshToken)
     return { refreshToken: null, accessToken: null };
 
+  // Clear viewedPopups for user session on login
+  await User.findByIdAndUpdate(payload?.userId, { viewedPopups: [] });
+
   await RefreshToken.deleteMany({ userId: payload?.userId });
 
   await RefreshToken.create({
