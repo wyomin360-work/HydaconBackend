@@ -11,8 +11,36 @@ const validatePlacements = (placements) => {
   }
 };
 
+const hasActivePopupConflict = async (placements, excludeId) => {
+  if (!placements || !Array.isArray(placements) || placements.length === 0) {
+    return false;
+  }
+
+  const filter = {
+    type: "POPUP",
+    active: true,
+    placements: { $in: placements },
+  };
+
+  if (excludeId) {
+    filter._id = { $ne: excludeId };
+  }
+
+  const conflict = await Content.findOne(filter).select("_id placements");
+  return !!conflict;
+};
+
 const createContent = async (data) => {
   validatePlacements(data.placements);
+
+  // right after validatePlacements, before `new Content(data)`
+  if (data.type === "POPUP" && data.active !== false) {
+    const conflict = await hasActivePopupConflict(data.placements);
+    if (conflict) {
+      data.active = false;
+    }
+  }
+
   const content = new Content(data);
   await content.save();
   return content;
@@ -20,13 +48,28 @@ const createContent = async (data) => {
 
 const updateContent = async (id, data) => {
   validatePlacements(data.placements);
-  const content = await Content.findByIdAndUpdate(id, data, { new: true });
-  if (!content) {
+
+  // right after validatePlacements, before findByIdAndUpdate
+  const existing = await Content.findById(id);
+  if (!existing) {
     throw new AppError("Content not found", 404);
   }
+
+  const resolvedType = data.type !== undefined ? data.type : existing.type;
+  const resolvedActive = data.active !== undefined ? data.active : existing.active;
+  const resolvedPlacements =
+    data.placements !== undefined ? data.placements : existing.placements;
+
+  if (resolvedType === "POPUP" && resolvedActive) {
+    const conflict = await hasActivePopupConflict(resolvedPlacements, id);
+    if (conflict) {
+      data.active = false;
+    }
+  }
+
+  const content = await Content.findByIdAndUpdate(id, data, { new: true });
   return content;
 };
-
 const deleteContent = async (id) => {
   const content = await Content.findByIdAndDelete(id);
   if (!content) {

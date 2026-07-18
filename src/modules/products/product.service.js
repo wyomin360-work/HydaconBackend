@@ -9,6 +9,7 @@ const DOCUMENT_POPULATE = [
   { path: "msdsDocument" },
   { path: "brochureDocument" },
   { path: "catalogueDocument" },
+  { path: "categoryId" },
 ];
 
 const normalizeTag = (tag) =>
