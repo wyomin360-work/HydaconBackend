@@ -164,6 +164,7 @@ const getContentDetails = async (id) => {
   return content;
 };
 
+
 module.exports = {
   createContent,
   updateContent,
