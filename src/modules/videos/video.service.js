@@ -137,7 +137,7 @@ const getAnalytics = async (id, days = 30) => {
   };
 };
 
-// Count videos for status tabs
+// Count videos for status tabs and summary metrics
 const countVideos = async () => {
   // Use $ne:true so documents with missing/null/undefined fields are handled correctly
   const total = await Video.countDocuments({ deleted: { $ne: true } });
@@ -149,7 +149,26 @@ const countVideos = async () => {
     active: { $ne: true },
     deleted: { $ne: true },
   });
-  return { total, active, inactive };
+  const featured = await Video.countDocuments({
+    featured: true,
+    deleted: { $ne: true },
+  });
+
+  const aggregation = await Video.aggregate([
+    { $match: { deleted: { $ne: true } } },
+    {
+      $group: {
+        _id: null,
+        totalViews: { $sum: "$views" },
+        totalSaves: { $sum: "$saves" },
+      },
+    },
+  ]);
+
+  const totalViews = aggregation[0]?.totalViews || 0;
+  const totalSaves = aggregation[0]?.totalSaves || 0;
+
+  return { total, active, inactive, featured, totalViews, totalSaves };
 };
 
 const getFeaturedVideos = async () => {
