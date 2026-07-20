@@ -1,7 +1,63 @@
 const videoService = require("./video.service");
 const { sendResponse } = require("../../utils/responseHandlers");
 const { getPaginationParams } = require("../../utils/heplers");
+const ffmpeg = require("fluent-ffmpeg");
+const ffprobeStatic = require("ffprobe-static");
+const axios = require("axios");
 
+ffmpeg.setFfprobePath(ffprobeStatic.path);
+
+const getVideoDuration = (url) => {
+  return new Promise((resolve) => {
+    // If it's a YouTube URL, fetch duration from the page source
+    if (url.includes("youtube.com") || url.includes("youtu.be")) {
+      axios
+        .get(url)
+        .then(({ data }) => {
+          const match = data.match(/"lengthSeconds":"(\d+)"/);
+          if (match && match[1]) {
+            const durationInSeconds = parseInt(match[1], 10);
+            const minutes = Math.floor(durationInSeconds / 60);
+            const seconds = Math.floor(durationInSeconds % 60);
+            return resolve(
+              `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`,
+            );
+          }
+
+          const metaMatch = data.match(/itemprop="duration" content="([^"]+)"/);
+          if (metaMatch && metaMatch[1]) {
+            let durationStr = metaMatch[1];
+            let minutes = 0;
+            let seconds = 0;
+            const minMatch = durationStr.match(/(\d+)M/);
+            if (minMatch) minutes = parseInt(minMatch[1], 10);
+            const secMatch = durationStr.match(/(\d+)S/);
+            if (secMatch) seconds = parseInt(secMatch[1], 10);
+            return resolve(
+              `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`,
+            );
+          }
+          resolve("00:00");
+        })
+        .catch(() => resolve("00:00"));
+      return;
+    }
+
+    // Default to ffprobe for regular video files
+    ffmpeg.ffprobe(url, (err, metadata) => {
+      if (err || !metadata || !metadata.format || !metadata.format.duration) {
+        resolve("00:00"); // fallback
+      } else {
+        const durationInSeconds = metadata.format.duration;
+        const minutes = Math.floor(durationInSeconds / 60);
+        const seconds = Math.floor(durationInSeconds % 60);
+        resolve(
+          `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`,
+        );
+      }
+    });
+  });
+};
 const generateSlug = (title) => {
   return title
     .toLowerCase()
@@ -18,8 +74,10 @@ const createVideo = async (req, res, next) => {
     if (data.categoryId === "") data.categoryId = null;
     if (data.productId === "") data.productId = null;
 
-    // Hardcode duration if not provided by client
-    if (!data.duration) {
+    // Fetch duration dynamically if not provided or hardcoded to "00:00"
+    if (data.videoUrl && (!data.duration || data.duration === "00:00")) {
+      data.duration = await getVideoDuration(data.videoUrl);
+    } else if (!data.duration) {
       data.duration = "00:00";
     }
 
@@ -38,6 +96,11 @@ const updateVideo = async (req, res, next) => {
     // Sanitize empty strings to prevent Mongoose CastError
     if (data.categoryId === "") data.categoryId = null;
     if (data.productId === "") data.productId = null;
+
+    // Update duration dynamically if videoUrl is present and duration is missing or "00:00"
+    if (data.videoUrl && (!data.duration || data.duration === "00:00")) {
+      data.duration = await getVideoDuration(data.videoUrl);
+    }
 
     const video = await videoService.updateVideo(id, data);
     if (!video) {

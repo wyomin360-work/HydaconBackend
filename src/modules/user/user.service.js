@@ -1244,7 +1244,11 @@ async function uploadProfilePhoto(userId, fileUrl) {
     throw new Error("User not found");
   }
 
-  if (user.profilePhoto && user.profilePhoto.startsWith("http") && user.profilePhoto.includes("amazonaws.com")) {
+  if (
+    user.profilePhoto &&
+    user.profilePhoto.startsWith("http") &&
+    user.profilePhoto.includes("amazonaws.com")
+  ) {
     await deleteS3File(user.profilePhoto);
   }
 

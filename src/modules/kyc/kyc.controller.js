@@ -49,7 +49,11 @@ exports.uploadKycDocument = async (req, res) => {
       sendFailResponse("fileUrl is required");
     }
 
-    const result = await kycService.uploadDocument(userId, documentType, fileUrl);
+    const result = await kycService.uploadDocument(
+      userId,
+      documentType,
+      fileUrl,
+    );
     return sendResponse(res, result);
   } catch (error) {
     throw error;

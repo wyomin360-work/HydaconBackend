@@ -1,7 +1,10 @@
 const User = require("../../schemas/user.schema");
 const AppConfig = require("../../schemas/app-config.schema");
 const moment = require("moment");
-const { REFERRAL_MILESTONES, REFERRAL_MILESTONE_DETAILS } = require("../../constants/referrals");
+const {
+  REFERRAL_MILESTONES,
+  REFERRAL_MILESTONE_DETAILS,
+} = require("../../constants/referrals");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const mongoose = require("mongoose");
 const { sendFcmNotifications } = require("../../functions/fcm");
@@ -19,7 +22,9 @@ const { sendFcmNotifications } = require("../../functions/fcm");
 async function getMobileReferralStats(inviterId) {
   const [user, referredUsers] = await Promise.all([
     User.findById(inviterId).select("referralCode").lean(),
-    User.find({ referredBy: inviterId }).select("totalScans kycStatus completedReferralMilestones").lean(),
+    User.find({ referredBy: inviterId })
+      .select("totalScans kycStatus completedReferralMilestones")
+      .lean(),
   ]);
 
   const totalEarnings = referredUsers.reduce((sum, u) => {
@@ -61,7 +66,9 @@ async function getMobileReferralStats(inviterId) {
  */
 async function getMobileReferralList(inviterId) {
   const referredUsers = await User.find({ referredBy: inviterId })
-    .select("name email phone totalScans kycStatus createdAt completedReferralMilestones")
+    .select(
+      "name email phone totalScans kycStatus createdAt completedReferralMilestones",
+    )
     .sort({ createdAt: -1 })
     .lean();
 
@@ -276,16 +283,21 @@ async function completeMilestone(userId, milestone) {
 
   // 5. Send FCM Notifications
 
-
   // Referrer notification
-  const referrerUser = await User.findById(referrerId).select("fcmTokens enableNotification").lean();
-  if (referrerUser && referrerUser.fcmTokens?.length && referrerUser.enableNotification) {
+  const referrerUser = await User.findById(referrerId)
+    .select("fcmTokens enableNotification")
+    .lean();
+  if (
+    referrerUser &&
+    referrerUser.fcmTokens?.length &&
+    referrerUser.enableNotification
+  ) {
     try {
       await sendFcmNotifications(
         referrerUser.fcmTokens,
         "Referral Milestone Completed! 🥳",
-        `Your friend ${user.name || user.phone || 'someone'} completed: "${config.name}". You earned ${points} points!`,
-        { type: "REFERRAL_MILESTONE" }
+        `Your friend ${user.name || user.phone || "someone"} completed: "${config.name}". You earned ${points} points!`,
+        { type: "REFERRAL_MILESTONE" },
       );
     } catch (err) {
       console.error("FCM error for referrer:", err);
@@ -299,7 +311,7 @@ async function completeMilestone(userId, milestone) {
         user.fcmTokens,
         "Milestone Unlocked! 🎉",
         `You successfully completed the milestone: "${config.name}"!`,
-        { type: "REFERRAL_MILESTONE" }
+        { type: "REFERRAL_MILESTONE" },
       );
     } catch (err) {
       console.error("FCM error for referee:", err);
