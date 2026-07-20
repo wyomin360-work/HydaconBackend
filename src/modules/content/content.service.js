@@ -40,7 +40,7 @@ const updateContent = async (id, data) => {
   validatePlacements(data.placements);
   const content = await Content.findByIdAndUpdate(id, data, { new: true });
   if (!content) {
-    throw new ErrorHandler("Content not found", 404);
+    throw new AppError("Content not found", 404);
   }
   return content;
 };
@@ -48,7 +48,7 @@ const updateContent = async (id, data) => {
 const deleteContent = async (id) => {
   const content = await Content.findByIdAndDelete(id);
   if (!content) {
-    throw new ErrorHandler("Content not found", 404);
+    throw new AppError("Content not found", 404);
   }
   return content;
 };
@@ -62,7 +62,14 @@ const listContent = async (query = {}) => {
   if (active !== undefined)
     filter.active = active === "true" || active === true;
 
-  const skip = (parseInt(page) - 1) * parseInt(limit);
+  let queryBuilder = Content.find(filter).sort({ sortOrder: 1, createdAt: -1 });
+
+  if (page && limit) {
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    queryBuilder = queryBuilder.skip(skip).limit(parseInt(limit));
+  } else if (limit) {
+    queryBuilder = queryBuilder.limit(parseInt(limit));
+  }
 
   const [data, total] = await Promise.all([
     Content.find(filter)
@@ -72,7 +79,12 @@ const listContent = async (query = {}) => {
     Content.countDocuments(filter),
   ]);
 
-  return { data, total, page: parseInt(page), limit: parseInt(limit) };
+  return { 
+    data, 
+    total, 
+    page: page ? parseInt(page) : 1, 
+    limit: limit ? parseInt(limit) : total 
+  };
 };
 
 const getHomepageContent = async () => {
@@ -125,7 +137,7 @@ const getPlacementContent = async (placement) => {
 const getContentDetails = async (id) => {
   const content = await Content.findById(id);
   if (!content) {
-    throw new ErrorHandler("Content not found", 404);
+    throw new AppError("Content not found", 404);
   }
   return content;
 };
