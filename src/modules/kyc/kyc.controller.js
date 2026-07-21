@@ -37,11 +37,7 @@ const deleteUploadedFiles = (req) => {
 
 exports.uploadKycDocument = async (req, res) => {
   const userId = req.userId;
-  const { documentType } = req.body;
-  // Support both single file uploads (req.file) and field uploads (req.files)
-  const file =
-    req.file ||
-    (req.files && (req.files["document"]?.[0] || req.files["image"]?.[0]));
+  const { documentType, fileUrl } = req.body;
 
   try {
     if (!documentType) {
@@ -49,15 +45,17 @@ exports.uploadKycDocument = async (req, res) => {
         "documentType is required in the request body (aadhaar, pan, or shopPhoto)",
       );
     }
-    if (!file) {
-      sendFailResponse("Please select a document file to upload");
+    if (!fileUrl) {
+      sendFailResponse("fileUrl is required");
     }
 
-    const result = await kycService.uploadDocument(userId, documentType, file);
+    const result = await kycService.uploadDocument(
+      userId,
+      documentType,
+      fileUrl,
+    );
     return sendResponse(res, result);
   } catch (error) {
-    // Cleanup any uploaded files on failure (Bug 1 fix)
-    deleteUploadedFiles(req);
     throw error;
   }
 };

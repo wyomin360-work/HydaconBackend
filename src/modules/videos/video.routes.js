@@ -8,23 +8,43 @@ const {
   videoUpdateRequestType,
 } = require("../../validations/video.validations");
 const { paginationType } = require("../../validations/global.validations");
-const { verifyAdmin, verifyAdminOrUser, verifyUser } = require("../../middlewares/jwtVerification");
+const {
+  verifyAdmin,
+  verifyAdminOrUser,
+  verifyUser,
+} = require("../../middlewares/jwtVerification");
 
 const router = express.Router();
 
-// Public / User / Admin Routes
+// Public Routes
+router.post(
+  videoPaths.publicList,
+  validateRequest(paginationType),
+  handleError(videoController.listVideos),
+);
+
+router.get(videoPaths.publicDetails, handleError(videoController.getVideo));
+
+router.get(videoPaths.publicMetrics, handleError(videoController.getMetrics));
+
+router.patch(
+  videoPaths.publicMetrics,
+  handleError(videoController.updateMetrics),
+);
+
+// User / Admin Routes
 // Featured videos (Mobile App usually needs this)
 router.get(
   videoPaths.featured,
   verifyAdminOrUser,
-  handleError(videoController.getFeaturedVideos)
+  handleError(videoController.getFeaturedVideos),
 );
 
 // Metrics increment (usually by user/mobile)
 router.get(
   videoPaths.metrics,
   verifyAdminOrUser,
-  handleError(videoController.getMetrics)
+  handleError(videoController.getMetrics),
 );
 
 // Get Video List (used by admin dashboard but could be used by users with different filters if needed, restricting to AdminOrUser for now)
@@ -32,28 +52,28 @@ router.post(
   videoPaths.list,
   verifyAdminOrUser,
   validateRequest(paginationType),
-  handleError(videoController.listVideos)
+  handleError(videoController.listVideos),
 );
 
 // Counts endpoint (admin or user)
 router.get(
   videoPaths.counts,
   verifyAdminOrUser,
-  handleError(videoController.getVideoCounts)
+  handleError(videoController.getVideoCounts),
 );
 
 // Analytics time-series (admin only)
 router.get(
   videoPaths.analytics,
   verifyAdmin,
-  handleError(videoController.getAnalytics)
+  handleError(videoController.getAnalytics),
 );
 
 // Get Single Video Details
 router.get(
   videoPaths.details,
   verifyAdminOrUser,
-  handleError(videoController.getVideo)
+  handleError(videoController.getVideo),
 );
 
 // Admin Only Routes
@@ -61,41 +81,39 @@ router.post(
   videoPaths.create,
   verifyAdmin,
   validateRequest(videoCreateRequestType),
-  handleError(videoController.createVideo)
+  handleError(videoController.createVideo),
 );
 
 router.patch(
   videoPaths.update,
   verifyAdmin,
   validateRequest(videoUpdateRequestType),
-  handleError(videoController.updateVideo)
+  handleError(videoController.updateVideo),
 );
 
 router.delete(
   videoPaths.delete,
   verifyAdmin,
-  handleError(videoController.deleteVideo)
+  handleError(videoController.deleteVideo),
 );
 
 router.patch(
   videoPaths.toggleStatus,
   verifyAdmin,
-  handleError(videoController.toggleStatus)
+  handleError(videoController.toggleStatus),
 );
 
 // Soft Delete and Restore routes (admin only)
 router.patch(
   videoPaths.softDelete,
   verifyAdmin,
-  handleError(videoController.softDeleteVideo)
+  handleError(videoController.softDeleteVideo),
 );
 
 router.patch(
   videoPaths.restore,
   verifyAdmin,
-  handleError(videoController.restoreVideo)
+  handleError(videoController.restoreVideo),
 );
-
-
 
 module.exports = router;

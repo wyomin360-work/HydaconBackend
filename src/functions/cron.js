@@ -201,11 +201,13 @@ function initCronJobs() {
           endDate: { $lt: now, $ne: null },
           active: true,
         },
-        { $set: { active: false } }
+        { $set: { active: false } },
       );
 
       if (result.modifiedCount > 0) {
-        console.log(`Deactivated ${result.modifiedCount} expired content items.`);
+        console.log(
+          `Deactivated ${result.modifiedCount} expired content items.`,
+        );
       }
     } catch (error) {
       console.error("Error in Content Expiration Task:", error);

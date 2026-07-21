@@ -51,7 +51,13 @@ const contentSchema = new mongoose.Schema(
     },
     popupType: {
       type: String,
-      enum: ["FULLSCREEN", "MODAL_POPUP", "BOTTOM_SHEET", "ANNOUNCEMENT_CARD", "BANNER"],
+      enum: [
+        "FULLSCREEN",
+        "MODAL_POPUP",
+        "BOTTOM_SHEET",
+        "ANNOUNCEMENT_CARD",
+        "BANNER",
+      ],
       default: "BANNER",
     },
     audience: { type: mongoose.Schema.Types.Mixed },

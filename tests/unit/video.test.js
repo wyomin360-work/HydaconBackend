@@ -64,16 +64,21 @@ describe("Video Service", () => {
     });
   });
 
-
   // ── updateVideo ──────────────────────────
   describe("updateVideo", () => {
     it("should update and return the video", async () => {
       const updated = makeVideoDoc({ title: "Updated Title" });
       Video.findByIdAndUpdate = jest.fn().mockResolvedValue(updated);
 
-      const result = await videoService.updateVideo("video123", { title: "Updated Title" });
+      const result = await videoService.updateVideo("video123", {
+        title: "Updated Title",
+      });
 
-      expect(Video.findByIdAndUpdate).toHaveBeenCalledWith("video123", { title: "Updated Title" }, { new: true });
+      expect(Video.findByIdAndUpdate).toHaveBeenCalledWith(
+        "video123",
+        { title: "Updated Title" },
+        { new: true },
+      );
       expect(result.title).toBe("Updated Title");
     });
   });
@@ -104,7 +109,9 @@ describe("Video Service", () => {
     it("should return populated video by id", async () => {
       const video = makeVideoDoc();
       const populateChain = { populate: jest.fn().mockReturnThis() };
-      populateChain.populate.mockReturnValueOnce({ populate: jest.fn().mockResolvedValue(video) });
+      populateChain.populate.mockReturnValueOnce({
+        populate: jest.fn().mockResolvedValue(video),
+      });
       Video.findById = jest.fn().mockReturnValue(populateChain);
 
       const result = await videoService.getVideoById("video123");
@@ -123,11 +130,16 @@ describe("Video Service", () => {
         limit: jest.fn().mockReturnThis(),
         populate: jest.fn().mockReturnThis(),
       };
-      populateChain.populate.mockReturnValueOnce(populateChain).mockResolvedValueOnce(videos);
+      populateChain.populate
+        .mockReturnValueOnce(populateChain)
+        .mockResolvedValueOnce(videos);
       Video.find = jest.fn().mockReturnValue(populateChain);
       Video.countDocuments = jest.fn().mockResolvedValue(2);
 
-      const result = await videoService.listVideos({ active: true }, { page: 1, limit: 10 });
+      const result = await videoService.listVideos(
+        { active: true },
+        { page: 1, limit: 10 },
+      );
 
       expect(result).toHaveProperty("items");
       expect(result).toHaveProperty("total");
@@ -154,36 +166,46 @@ describe("Video Service", () => {
     it("should throw if video not found", async () => {
       Video.findById = jest.fn().mockResolvedValue(null);
 
-      await expect(videoService.toggleStatus("nonexistent")).rejects.toThrow("Video not found");
+      await expect(videoService.toggleStatus("nonexistent")).rejects.toThrow(
+        "Video not found",
+      );
     });
   });
 
   // ── updateMetrics ─────────────────────────
   describe("updateMetrics", () => {
-    it.each(["views", "saves", "shares"])("should increment %s by 1", async (metricType) => {
-      const updated = makeVideoDoc({ [metricType]: 11 });
-      Video.findByIdAndUpdate = jest.fn().mockResolvedValue(updated);
-      VideoAnalytics.findOneAndUpdate = jest.fn().mockResolvedValue({});
+    it.each(["views", "saves", "shares"])(
+      "should increment %s by 1",
+      async (metricType) => {
+        const updated = makeVideoDoc({ [metricType]: 11 });
+        Video.findByIdAndUpdate = jest.fn().mockResolvedValue(updated);
+        VideoAnalytics.findOneAndUpdate = jest.fn().mockResolvedValue({});
 
-      const result = await videoService.updateMetrics("video123", metricType);
+        const result = await videoService.updateMetrics("video123", metricType);
 
-      expect(Video.findByIdAndUpdate).toHaveBeenCalledWith(
-        "video123",
-        { $inc: { [metricType]: 1 } },
-        { new: true }
-      );
-      expect(result[metricType]).toBe(11);
-    });
+        expect(Video.findByIdAndUpdate).toHaveBeenCalledWith(
+          "video123",
+          { $inc: { [metricType]: 1 } },
+          { new: true },
+        );
+        expect(result[metricType]).toBe(11);
+      },
+    );
 
     it("should throw on invalid metric type", async () => {
-      await expect(videoService.updateMetrics("video123", "invalid")).rejects.toThrow("Invalid metric type");
+      await expect(
+        videoService.updateMetrics("video123", "invalid"),
+      ).rejects.toThrow("Invalid metric type");
     });
   });
 
   // ── getFeaturedVideos ─────────────────────
   describe("getFeaturedVideos", () => {
     it("should return featured active videos sorted by sortOrder", async () => {
-      const featured = [makeVideoDoc({ featured: true }), makeVideoDoc({ _id: "v2", featured: true })];
+      const featured = [
+        makeVideoDoc({ featured: true }),
+        makeVideoDoc({ _id: "v2", featured: true }),
+      ];
       const chain = {
         sort: jest.fn().mockReturnThis(),
         populate: jest.fn().mockReturnThis(),
@@ -208,10 +230,21 @@ describe("Video Controller", () => {
   describe("createVideo", () => {
     it("should respond 201 with created video", async () => {
       const created = makeVideoDoc();
-      Video.mockImplementation(() => ({ ...created, save: jest.fn().mockResolvedValue(created) }));
-      jest.spyOn(require("../../src/modules/videos/video.service"), "createVideo").mockResolvedValue(created);
+      Video.mockImplementation(() => ({
+        ...created,
+        save: jest.fn().mockResolvedValue(created),
+      }));
+      jest
+        .spyOn(require("../../src/modules/videos/video.service"), "createVideo")
+        .mockResolvedValue(created);
 
-      const req = { body: { title: "Test Video", thumbnailUrl: "https://t.com/t.jpg", videoUrl: "https://v.com/v.mp4" } };
+      const req = {
+        body: {
+          title: "Test Video",
+          thumbnailUrl: "https://t.com/t.jpg",
+          videoUrl: "https://v.com/v.mp4",
+        },
+      };
       const res = mockRes();
 
       await videoController.createVideo(req, res, mockNext);
@@ -224,7 +257,9 @@ describe("Video Controller", () => {
   describe("deleteVideo — hard delete", () => {
     it("should return 200 with deleted video", async () => {
       const deleted = makeVideoDoc();
-      jest.spyOn(require("../../src/modules/videos/video.service"), "deleteVideo").mockResolvedValue(deleted);
+      jest
+        .spyOn(require("../../src/modules/videos/video.service"), "deleteVideo")
+        .mockResolvedValue(deleted);
 
       const req = { params: { id: "video123" } };
       const res = mockRes();
@@ -235,7 +270,9 @@ describe("Video Controller", () => {
     });
 
     it("should return 404 if video not found", async () => {
-      jest.spyOn(require("../../src/modules/videos/video.service"), "deleteVideo").mockResolvedValue(null);
+      jest
+        .spyOn(require("../../src/modules/videos/video.service"), "deleteVideo")
+        .mockResolvedValue(null);
 
       const req = { params: { id: "nonexistent" } };
       const res = mockRes();
@@ -259,7 +296,12 @@ describe("Video Controller", () => {
 
     it("should succeed for valid metric type 'views'", async () => {
       const updated = makeVideoDoc({ views: 11 });
-      jest.spyOn(require("../../src/modules/videos/video.service"), "updateMetrics").mockResolvedValue(updated);
+      jest
+        .spyOn(
+          require("../../src/modules/videos/video.service"),
+          "updateMetrics",
+        )
+        .mockResolvedValue(updated);
 
       const req = { params: { id: "video123" }, body: { metricType: "views" } };
       const res = mockRes();
@@ -273,11 +315,13 @@ describe("Video Controller", () => {
   // ── Schema: publishedDate field name ──────
   describe("Schema field: publishedDate", () => {
     it("video schema should use publishedDate not publishedAt", () => {
-      const schemaPaths = Object.keys(Video.schema ? Video.schema.paths || {} : {});
+      const schemaPaths = Object.keys(
+        Video.schema ? Video.schema.paths || {} : {},
+      );
       // Since schema is mocked, just verify the field constant in the actual source
       const videoSchemaSource = require("fs").readFileSync(
         require("path").join(__dirname, "../../src/schemas/video.schema.js"),
-        "utf8"
+        "utf8",
       );
       expect(videoSchemaSource).toContain("publishedDate");
       expect(videoSchemaSource).not.toContain("publishedAt");

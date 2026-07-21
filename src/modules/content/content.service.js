@@ -12,8 +12,36 @@ const validatePlacements = (placements) => {
   }
 };
 
+const hasActivePopupConflict = async (placements, excludeId) => {
+  if (!placements || !Array.isArray(placements) || placements.length === 0) {
+    return false;
+  }
+
+  const filter = {
+    type: "POPUP",
+    active: true,
+    placements: { $in: placements },
+  };
+
+  if (excludeId) {
+    filter._id = { $ne: excludeId };
+  }
+
+  const conflict = await Content.findOne(filter).select("_id placements");
+  return !!conflict;
+};
+
 const createContent = async (data) => {
   validatePlacements(data.placements);
+
+  // right after validatePlacements, before `new Content(data)`
+  if (data.type === "POPUP" && data.active !== false) {
+    const conflict = await hasActivePopupConflict(data.placements);
+    if (conflict) {
+      data.active = false;
+    }
+  }
+
   const content = new Content(data);
   await content.save();
   return content;
@@ -21,13 +49,28 @@ const createContent = async (data) => {
 
 const updateContent = async (id, data) => {
   validatePlacements(data.placements);
-  const content = await Content.findByIdAndUpdate(id, data, { new: true });
-  if (!content) {
+
+  // right after validatePlacements, before findByIdAndUpdate
+  const existing = await Content.findById(id);
+  if (!existing) {
     throw new AppError("Content not found", 404);
   }
+
+  const resolvedType = data.type !== undefined ? data.type : existing.type;
+  const resolvedActive = data.active !== undefined ? data.active : existing.active;
+  const resolvedPlacements =
+    data.placements !== undefined ? data.placements : existing.placements;
+
+  if (resolvedType === "POPUP" && resolvedActive) {
+    const conflict = await hasActivePopupConflict(resolvedPlacements, id);
+    if (conflict) {
+      data.active = false;
+    }
+  }
+
+  const content = await Content.findByIdAndUpdate(id, data, { new: true });
   return content;
 };
-
 const deleteContent = async (id) => {
   const content = await Content.findByIdAndDelete(id);
   if (!content) {
@@ -42,7 +85,8 @@ const listContent = async (query = {}) => {
   const filter = {};
   if (type) filter.type = type;
   if (placement) filter.placements = placement;
-  if (active !== undefined) filter.active = active === "true" || active === true;
+  if (active !== undefined)
+    filter.active = active === "true" || active === true;
 
   let queryBuilder = Content.find(filter).sort({ sortOrder: 1, createdAt: -1 });
 
@@ -68,14 +112,14 @@ const listContent = async (query = {}) => {
 
 const getHomepageContent = async (userId = null) => {
   const now = new Date();
-  
+
   // Find active content where current date is within start/end dates (or dates are null)
   const activeContents = await Content.find({
     active: true,
     $and: [
       { $or: [{ startDate: null }, { startDate: { $lte: now } }] },
-      { $or: [{ endDate: null }, { endDate: { $gte: now } }] }
-    ]
+      { $or: [{ endDate: null }, { endDate: { $gte: now } }] },
+    ],
   }).sort({ priority: -1, sortOrder: 1 });
 
   // Get viewed popups for the user
@@ -131,8 +175,8 @@ const getPlacementContent = async (placement, userId = null) => {
     placements: placement,
     $and: [
       { $or: [{ startDate: null }, { startDate: { $lte: now } }] },
-      { $or: [{ endDate: null }, { endDate: { $gte: now } }] }
-    ]
+      { $or: [{ endDate: null }, { endDate: { $gte: now } }] },
+    ],
   }).sort({ priority: -1, sortOrder: 1 });
 
   return contents.filter((content) => {
@@ -165,6 +209,7 @@ const getContentDetails = async (id) => {
   return content;
 };
 
+
 module.exports = {
   createContent,
   updateContent,
@@ -174,5 +219,5 @@ module.exports = {
   getPlacementContent,
   trackContentView,
   getContentDetails,
-  ALLOWED_PLACEMENTS
+  ALLOWED_PLACEMENTS,
 };

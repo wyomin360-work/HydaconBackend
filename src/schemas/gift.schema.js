@@ -21,11 +21,36 @@ const giftSchema = new mongoose.Schema(
     stockQuantity: { type: Number, required: true, default: 0 },
     reservedQuantity: { type: Number, required: true, default: 0 },
     image: { type: String },
+    themeColor: { type: String },
     active: { type: Boolean, default: true },
     ruleSetId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "RuleSet",
       required: false,
+    },
+    // --- Voucher-specific fields ---
+    voucherRedemptionType: {
+      type: String,
+      enum: ["code", "file"],
+      required: function () {
+        return this.giftType === "voucher";
+      },
+    },
+    voucherCode: {
+      type: String,
+      required: function () {
+        return (
+          this.giftType === "voucher" && this.voucherRedemptionType === "code"
+        );
+      },
+    },
+    voucherFileUrl: {
+      type: String,
+      required: function () {
+        return (
+          this.giftType === "voucher" && this.voucherRedemptionType === "file"
+        );
+      },
     },
   },
   { timestamps: true },

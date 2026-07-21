@@ -4,7 +4,10 @@ const createContentRequestType = {
     title: { type: "string", minLength: 1 },
     subtitle: { type: "string" },
     description: { type: "string" },
-    type: { type: "string", enum: ["BANNER", "ANNOUNCEMENT", "CAMPAIGN", "POPUP", "INFORMATION_CARD"] },
+    type: {
+      type: "string",
+      enum: ["BANNER", "ANNOUNCEMENT", "CAMPAIGN", "POPUP", "INFORMATION_CARD"],
+    },
     placements: { type: "array", items: { type: "string" } },
     images: {
       type: "object",
@@ -61,7 +64,10 @@ const updateContentRequestType = {
     title: { type: "string", minLength: 1 },
     subtitle: { type: "string" },
     description: { type: "string" },
-    type: { type: "string", enum: ["BANNER", "ANNOUNCEMENT", "CAMPAIGN", "POPUP", "INFORMATION_CARD"] },
+    type: {
+      type: "string",
+      enum: ["BANNER", "ANNOUNCEMENT", "CAMPAIGN", "POPUP", "INFORMATION_CARD"],
+    },
     placements: { type: "array", items: { type: "string" } },
     images: {
       type: "object",

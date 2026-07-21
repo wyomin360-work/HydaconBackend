@@ -3,7 +3,10 @@ const contentPaths = require("./content.paths");
 const verification = require("../../middlewares/jwtVerification");
 const { handleError } = require("../../utils/heplers");
 const validateRequest = require("../../middlewares/validator");
-const { createContentRequestType, updateContentRequestType } = require("../../validations/content.validations");
+const {
+  createContentRequestType,
+  updateContentRequestType,
+} = require("../../validations/content.validations");
 const controller = require("./content.controller");
 
 const router = express.Router();
@@ -12,46 +15,43 @@ const router = express.Router();
 router.get(
   contentPaths.ADMIN_LIST,
   verification.verifyAdmin,
-  handleError(controller.listContentAdmin)
+  handleError(controller.listContentAdmin),
 );
 
 router.post(
   contentPaths.ADMIN_CREATE,
   verification.verifyAdmin,
   validateRequest(createContentRequestType),
-  handleError(controller.createContent)
+  handleError(controller.createContent),
 );
 
 router.patch(
   contentPaths.ADMIN_UPDATE,
   verification.verifyAdmin,
   validateRequest(updateContentRequestType),
-  handleError(controller.updateContent)
+  handleError(controller.updateContent),
 );
 
 router.delete(
   contentPaths.ADMIN_DELETE,
   verification.verifyAdmin,
-  handleError(controller.deleteContent)
+  handleError(controller.deleteContent),
 );
 
 // App Routes (Typically accessed by mobile app)
 router.get(
   contentPaths.APP_HOMEPAGE,
-  // potentially verification.verifyUser if needed, but often homepage content is public or user-specific. 
+  // potentially verification.verifyUser if needed, but often homepage content is public or user-specific.
   // Sticking to public for now unless specified.
-  handleError(controller.getHomepageContent)
+  handleError(controller.getHomepageContent),
 );
 
 router.get(
   contentPaths.APP_PLACEMENT,
-  handleError(controller.getPlacementContent)
+  handleError(controller.getPlacementContent),
 );
 
-router.get(
-  contentPaths.APP_DETAILS,
-  handleError(controller.getContentDetails)
-);
+router.get(contentPaths.APP_DETAILS, handleError(controller.getContentDetails));
 
 router.post(
   contentPaths.APP_TRACK_VIEW,
