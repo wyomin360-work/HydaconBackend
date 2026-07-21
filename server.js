@@ -43,7 +43,6 @@ app.use((req, res, next) => {
 const startServer = async () => {
   try {
     await db.connectDb();
-    await seedMockProducts();
     // await seedDefaultLoyaltyData();
     initCronJobs();
     app.listen(PORT, () => {
