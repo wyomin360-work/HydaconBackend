@@ -38,6 +38,12 @@ router.delete(
   handleError(controller.deleteContent),
 );
 
+router.get(
+  contentPaths.ADMIN_DETAILS,
+  verification.verifyAdmin,
+  handleError(controller.getContentDetails),
+);
+
 // App Routes (Typically accessed by mobile app)
 router.get(
   contentPaths.APP_HOMEPAGE,

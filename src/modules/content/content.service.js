@@ -34,17 +34,31 @@ const hasActivePopupConflict = async (placements, excludeId) => {
 const createContent = async (data) => {
   validatePlacements(data.placements);
 
+  let hadConflict = false;
   // right after validatePlacements, before `new Content(data)`
   if (data.type === "POPUP" && data.active !== false) {
     const conflict = await hasActivePopupConflict(data.placements);
     if (conflict) {
-      data.active = false;
+      if (data.forceActive) {
+        await Content.updateMany(
+          { type: "POPUP", active: true, placements: { $in: data.placements } },
+          { active: false }
+        );
+      } else {
+        data.active = false;
+        hadConflict = true;
+      }
     }
   }
 
   const content = new Content(data);
   await content.save();
-  return content;
+  
+  const result = content.toObject();
+  if (hadConflict) {
+    result.hadConflict = true;
+  }
+  return result;
 };
 
 const updateContent = async (id, data) => {
@@ -56,6 +70,7 @@ const updateContent = async (id, data) => {
     throw new AppError("Content not found", 404);
   }
 
+  let hadConflict = false;
   const resolvedType = data.type !== undefined ? data.type : existing.type;
   const resolvedActive = data.active !== undefined ? data.active : existing.active;
   const resolvedPlacements =
@@ -64,12 +79,25 @@ const updateContent = async (id, data) => {
   if (resolvedType === "POPUP" && resolvedActive) {
     const conflict = await hasActivePopupConflict(resolvedPlacements, id);
     if (conflict) {
-      data.active = false;
+      if (data.forceActive) {
+        await Content.updateMany(
+          { type: "POPUP", active: true, placements: { $in: resolvedPlacements }, _id: { $ne: id } },
+          { active: false }
+        );
+      } else {
+        data.active = false;
+        hadConflict = true;
+      }
     }
   }
 
   const content = await Content.findByIdAndUpdate(id, data, { new: true });
-  return content;
+  
+  const result = content.toObject();
+  if (hadConflict) {
+    result.hadConflict = true;
+  }
+  return result;
 };
 const deleteContent = async (id) => {
   const content = await Content.findByIdAndDelete(id);
