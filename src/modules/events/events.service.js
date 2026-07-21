@@ -74,6 +74,17 @@ async function adminUpdateEvent(eventId, data) {
 }
 
 async function adminDeleteEvent(eventId) {
+  const event = await Event.findById(eventId);
+  if (!event) sendFailResponse("Event not found", 404);
+
+  // Mark all attendee passes as event cancelled if the event is deleted before it starts
+  if (new Date(event.date) > new Date()) {
+    await EventRegistration.updateMany(
+      { eventId },
+      { $set: { attendanceStatus: ATTENDANCE_STATUS.EVENT_CANCELLED } }
+    );
+  }
+
   await Event.findByIdAndDelete(eventId);
   return { message: "Event deleted", data: { deleted: true } };
 }

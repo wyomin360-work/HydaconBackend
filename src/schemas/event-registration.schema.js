@@ -6,6 +6,7 @@ const ATTENDANCE_STATUS = {
   CHECKED_IN: "checked_in",
   ATTENDED: "attended",
   CANCELLED: "cancelled",
+  EVENT_CANCELLED: "event cancelled",
 };
 
 const eventRegistrationSchema = new mongoose.Schema(
