@@ -93,13 +93,17 @@ const updateVideo = async (req, res, next) => {
     const { id } = req.params;
     const data = req.body;
 
-    // Sanitize empty strings to prevent Mongoose CastError
     if (data.categoryId === "") data.categoryId = null;
     if (data.productId === "") data.productId = null;
 
-    // Update duration dynamically if videoUrl is present and duration is missing or "00:00"
-    if (data.videoUrl && (!data.duration || data.duration === "00:00")) {
-      data.duration = await getVideoDuration(data.videoUrl);
+    if (data.videoUrl) {
+      const existing = await videoService.getVideoById(id);
+      const urlChanged = existing && existing.videoUrl !== data.videoUrl;
+
+      // Recompute if URL changed, or duration is missing/placeholder
+      if (urlChanged || !data.duration || data.duration === "00:00") {
+        data.duration = await getVideoDuration(data.videoUrl);
+      }
     }
 
     const video = await videoService.updateVideo(id, data);
