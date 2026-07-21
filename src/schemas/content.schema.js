@@ -45,6 +45,10 @@ const contentSchema = new mongoose.Schema(
     endDate: { type: Date, default: null },
     dismissible: { type: Boolean, default: true },
     showOnce: { type: Boolean, default: false },
+    frequency: {
+      type: String,
+      enum: ["ONCE", "SESSION", "EVERYTIME"],
+    },
     popupType: {
       type: String,
       enum: ["FULLSCREEN", "MODAL_POPUP", "BOTTOM_SHEET", "ANNOUNCEMENT_CARD", "BANNER"],

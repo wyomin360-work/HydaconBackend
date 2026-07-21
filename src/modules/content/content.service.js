@@ -94,8 +94,9 @@ const getHomepageContent = async (userId = null) => {
   });
 
   activeContents.forEach((content) => {
-    // Filter out viewed popups
-    if (viewedIds.includes(content._id.toString())) {
+    // Filter out viewed popups only if frequency is ONCE (or showOnce is true)
+    const isOnce = content.frequency === "ONCE" || content.showOnce;
+    if (isOnce && viewedIds.includes(content._id.toString())) {
       return;
     }
 
@@ -128,14 +129,19 @@ const getPlacementContent = async (placement, userId = null) => {
   const contents = await Content.find({
     active: true,
     placements: placement,
-    _id: { $nin: viewedIds },
     $and: [
       { $or: [{ startDate: null }, { startDate: { $lte: now } }] },
       { $or: [{ endDate: null }, { endDate: { $gte: now } }] }
     ]
   }).sort({ priority: -1, sortOrder: 1 });
 
-  return contents;
+  return contents.filter((content) => {
+    const isOnce = content.frequency === "ONCE" || content.showOnce;
+    if (isOnce && viewedIds.includes(content._id.toString())) {
+      return false;
+    }
+    return true;
+  });
 };
 
 const trackContentView = async (id, userId) => {
