@@ -140,33 +140,87 @@ async function adminDeleteEvent(eventId) {
 }
 
 /**
- * Admin event listing.
+ * Admin event listing with status, type, search, and date-range filters.
+ *
+ * @param {Object} query
+ * @param {string} [query.status] - Filter by event status ('upcoming', 'ongoing', 'completed')
+ * @param {string} [query.type] - Filter by event type ('webinar', 'workshop', 'conference', 'meetup', 'other')
+ * @param {string} [query.search] - Search keyword across title, description, venue, city, state, country
+ * @param {string} [query.startDate] - Start date threshold ($gte)
+ * @param {string} [query.endDate] - End date threshold ($lte)
+ * @param {number} [query.page=1]
+ * @param {number} [query.limit=10]
  */
 async function adminListEvents(query = {}) {
   syncEventStatuses().catch((err) =>
     console.error("syncEventStatuses error:", err),
   );
 
-  const { status } = query;
+  const { status, type, search, startDate, endDate } = query;
   const page = Math.max(1, parseInt(query.page) || 1);
   const limit = Math.max(
     1,
     parseInt(query.limit) || EVENT_CONFIG.DEFAULT_ADMIN_LIMIT,
   );
   const skip = (page - 1) * limit;
+
   const filter = {};
-  if (status) filter.status = status;
+
+  if (status && status !== "all") {
+    filter.status = status;
+  }
+
+  if (type && type !== "all") {
+    filter.type = type;
+  }
+
+  if (search && typeof search === "string" && search.trim()) {
+    const searchRegex = new RegExp(search.trim(), "i");
+    filter.$or = [
+      { title: searchRegex },
+      { description: searchRegex },
+      { venue: searchRegex },
+      { city: searchRegex },
+      { state: searchRegex },
+      { country: searchRegex },
+    ];
+  }
+
+  if (startDate || endDate) {
+    filter.date = {};
+    if (startDate) {
+      const start = new Date(startDate);
+      if (!isNaN(start.getTime())) {
+        filter.date.$gte = start;
+      }
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      if (!isNaN(end.getTime())) {
+        end.setHours(23, 59, 59, 999);
+        filter.date.$lte = end;
+      }
+    }
+    if (Object.keys(filter.date).length === 0) {
+      delete filter.date;
+    }
+  }
+
   const [events, total] = await Promise.all([
     Event.find(filter).sort({ date: 1 }).skip(skip).limit(limit).lean(),
     Event.countDocuments(filter),
   ]);
+
+  const totalPages = Math.ceil(total / limit);
+
   return {
     data: {
       events: attachId(events),
       page,
       limit,
       total,
-      totalPages: Math.ceil(total / limit),
+      totalPages,
+      hasMore: page < totalPages,
     },
   };
 }
