@@ -6,6 +6,7 @@
     "test": "jest",
     "start:dev": "nodemon server.js",
     "start:prod": "nodemon server.js",
+    "seed:events": "node scripts/seed-kerala-events.js",
     "format": "prettier --write ."
   },
   "author": "",

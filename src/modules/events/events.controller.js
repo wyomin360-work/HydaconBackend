@@ -72,6 +72,6 @@ exports.userGetEventPass = async (req, res) => {
 };
 exports.userMyEvents = async (req, res) => {
   const userId = req.user?._id || req.user?.id;
-  const response = await eventsService.userMyEvents(userId);
+  const response = await eventsService.userMyEvents(userId, req.query);
   return sendResponse(res, response);
 };

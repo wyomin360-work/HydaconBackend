@@ -180,11 +180,166 @@ async function userListEvents(query = {}, userId = null) {
   syncEventStatuses().catch((err) =>
     console.error("syncEventStatuses error:", err),
   );
-  const { lat, lng, state, country } = query;
 
-  // My events & registered event IDs (Passes)
-  let myEvents = [];
+  const { tab = "upcoming", lat, lng, page = 1, limit = 10 } = query;
+  const pageNumber = Math.max(1, parseInt(page) || 1);
+  const limitNumber = Math.max(1, parseInt(limit) || 10);
+  const skip = (pageNumber - 1) * limitNumber;
+
+  // Get user's registered event IDs to exclude from main feeds if needed
   let registeredEventIds = [];
+  if (userId) {
+    const userRegistrations = await EventRegistration.find({ userId })
+      .select("eventId")
+      .lean();
+    registeredEventIds = userRegistrations.map((item) => item.eventId);
+  }
+
+  // ── FEATURED SECTION ──
+  if (tab === "featured") {
+    const featuredEvents = await Event.find({
+      active: true,
+      status: { $in: [EVENT_STATUS.UPCOMING, EVENT_STATUS.ONGOING] },
+    })
+      .sort({ isInvitationOnly: -1, date: 1 })
+      .limit(5)
+      .lean();
+
+    return {
+      data: {
+        events: attachId(featuredEvents),
+      },
+    };
+  }
+
+  // ── NEARBY SECTION ──
+  if (tab === "nearby") {
+    const latitude = parseFloat(lat);
+    const longitude = parseFloat(lng);
+    const hasCoordinates = !isNaN(latitude) && !isNaN(longitude);
+
+    if (!hasCoordinates) {
+      const fallbackFilter = { active: true, status: EVENT_STATUS.UPCOMING };
+      if (registeredEventIds.length > 0) {
+        fallbackFilter._id = { $nin: registeredEventIds };
+      }
+      const [events, total] = await Promise.all([
+        Event.find(fallbackFilter).sort({ date: 1 }).skip(skip).limit(limitNumber).lean(),
+        Event.countDocuments(fallbackFilter),
+      ]);
+      const totalPages = Math.ceil(total / limitNumber);
+      return {
+        data: {
+          events: attachId(events),
+          page: pageNumber,
+          limit: limitNumber,
+          total,
+          totalPages,
+          hasMore: pageNumber < totalPages,
+          hasLocationData: false,
+        },
+      };
+    }
+
+    try {
+      const geoFilter = {
+        active: true,
+        status: { $in: [EVENT_STATUS.UPCOMING, EVENT_STATUS.ONGOING] },
+      };
+      if (registeredEventIds.length > 0) {
+        geoFilter._id = { $nin: registeredEventIds };
+      }
+
+      const geoPipeline = [
+        {
+          $geoNear: {
+            near: { type: "Point", coordinates: [longitude, latitude] },
+            distanceField: "distanceMeters",
+            maxDistance: 100000, // 100 km
+            spherical: true,
+            query: geoFilter,
+          },
+        },
+        {
+          $facet: {
+            paginatedResults: [{ $skip: skip }, { $limit: limitNumber }],
+            totalCount: [{ $count: "count" }],
+          },
+        },
+      ];
+
+      const [results] = await Event.aggregate(geoPipeline);
+      const rawEvents = results?.paginatedResults || [];
+      const total = results?.totalCount?.[0]?.count || 0;
+
+      const events = rawEvents.map((event) => ({
+        ...event,
+        isNearby: true,
+        distanceMeters: Math.round(event.distanceMeters),
+      }));
+
+      const totalPages = Math.ceil(total / limitNumber);
+      return {
+        data: {
+          events: attachId(events),
+          page: pageNumber,
+          limit: limitNumber,
+          total,
+          totalPages,
+          hasMore: pageNumber < totalPages,
+          hasLocationData: true,
+        },
+      };
+    } catch (geoError) {
+      console.error("Geo query failed:", geoError.message);
+      return {
+        data: {
+          events: [],
+          page: pageNumber,
+          limit: limitNumber,
+          total: 0,
+          totalPages: 0,
+          hasMore: false,
+          hasLocationData: false,
+        },
+      };
+    }
+  }
+
+  // ── UPCOMING SECTION ──
+  if (tab === "upcoming") {
+    const upcomingFilter = {
+      active: true,
+      status: EVENT_STATUS.UPCOMING,
+    };
+    if (registeredEventIds.length > 0) {
+      upcomingFilter._id = { $nin: registeredEventIds };
+    }
+
+    const [events, total] = await Promise.all([
+      Event.find(upcomingFilter).sort({ date: 1 }).skip(skip).limit(limitNumber).lean(),
+      Event.countDocuments(upcomingFilter),
+    ]);
+
+    const totalPages = Math.ceil(total / limitNumber);
+    return {
+      data: {
+        events: attachId(events),
+        page: pageNumber,
+        limit: limitNumber,
+        total,
+        totalPages,
+        hasMore: pageNumber < totalPages,
+      },
+    };
+  }
+
+  // ── DEFAULT / UNFILTERED OVERVIEW (Legacy compatibility) ──
+  const parsedLat = parseFloat(lat);
+  const parsedLng = parseFloat(lng);
+  const hasCoords = !isNaN(parsedLat) && !isNaN(parsedLng);
+
+  let myEvents = [];
   if (userId) {
     const myRegs = await EventRegistration.find({ userId })
       .populate({ path: "event" })
@@ -193,28 +348,17 @@ async function userListEvents(query = {}, userId = null) {
       .lean();
     const validRegs = myRegs.filter((r) => r.event);
     myEvents = validRegs.map((r) => ({ ...r.event, registration: r }));
-    registeredEventIds = validRegs.map((r) => r.eventId);
   }
 
-  // Upcoming events - always all upcoming events globally (excluding registered)
-  const parsedLat = parseFloat(lat);
-  const parsedLng = parseFloat(lng);
-  const hasCoords = !isNaN(parsedLat) && !isNaN(parsedLng);
-
-  // ── Step 1: Nearby events ──
   let nearby = [];
-  const nearbyIds = [];
-
   if (hasCoords) {
-    // MongoDB $geoNear aggregation: powered entirely by the 2dsphere index on event.location
-    // Returns events within 100 km sorted by distance (closest first), with distanceMeters attached
     try {
       const geoNearPipeline = [
         {
           $geoNear: {
             near: { type: "Point", coordinates: [parsedLng, parsedLat] },
             distanceField: "distanceMeters",
-            maxDistance: 100000, // 100 km radius
+            maxDistance: 100000,
             spherical: true,
             query: {
               active: true,
@@ -233,58 +377,30 @@ async function userListEvents(query = {}, userId = null) {
         isNearby: true,
         distanceMeters: Math.round(ev.distanceMeters),
       }));
-      nearby.forEach((ev) => nearbyIds.push(ev._id));
-    } catch (geoErr) {
-      console.error(
-        "Geo query failed, falling back to location-filtered events:",
-        geoErr.message,
-      );
-    }
+    } catch (geoErr) {}
   }
 
-  // ── Step 2: Upcoming events ──
-  const upcomingFilter = {
-    active: true,
-    status: EVENT_STATUS.UPCOMING,
-  };
-  const excludeIdsForUpcoming = [...registeredEventIds];
-  if (excludeIdsForUpcoming.length > 0) {
-    upcomingFilter._id = { $nin: excludeIdsForUpcoming };
-  }
+  const upcomingFilter = { active: true, status: EVENT_STATUS.UPCOMING };
+  if (registeredEventIds.length > 0) upcomingFilter._id = { $nin: registeredEventIds };
+  const upcoming = await Event.find(upcomingFilter).sort({ date: 1 }).limit(4).lean();
 
-  const upcoming = await Event.find(upcomingFilter)
-    .sort({ date: 1 })
-    .limit(4)
-    .lean();
-
-  // ── Step 3: Active (ongoing & completed) events ──
   const activeFilter = {
     active: true,
     status: { $in: [EVENT_STATUS.ONGOING, EVENT_STATUS.COMPLETED] },
   };
-  const excludeIdsForActive = [...registeredEventIds];
-  if (excludeIdsForActive.length > 0) {
-    activeFilter._id = { $nin: excludeIdsForActive };
-  }
+  if (registeredEventIds.length > 0) activeFilter._id = { $nin: registeredEventIds };
+  const active = await Event.find(activeFilter).sort({ date: 1 }).limit(4).lean();
 
-  const active = await Event.find(activeFilter)
-    .sort({ date: 1 })
-    .limit(4)
-    .lean();
-
-  // If no location coordinates provided, fallback nearby to upcoming
-  if (!hasCoords) {
-    nearby = upcoming;
-  }
+  if (!hasCoords) nearby = upcoming;
 
   return {
     data: {
       active: attachId(active),
       upcoming: attachId(upcoming),
       nearby: attachId(nearby),
-      myEvents: attachId(myEvents), // maintain compatibility
+      myEvents: attachId(myEvents),
       passes: attachId(myEvents),
-      hasLocationData: hasCoords || !!(state || country), // tells the client whether nearby is real or a fallback
+      hasLocationData: hasCoords,
     },
   };
 }
@@ -395,20 +511,47 @@ async function userGetEventPass(registrationId, userId) {
   };
 }
 
-async function userMyEvents(userId) {
-  const regs = await EventRegistration.find({ userId })
-    .populate("event")
-    .sort({ createdAt: -1 })
-    .lean();
-  return {
-    data: {
-      events: regs.map((r) => ({
+async function userMyEvents(userId, query = {}) {
+  const pageNumber = Math.max(1, parseInt(query?.page) || 1);
+  const limitNumber = Math.max(1, parseInt(query?.limit) || 10);
+  const skip = (pageNumber - 1) * limitNumber;
+
+  const [regs, total] = await Promise.all([
+    EventRegistration.find({ userId })
+      .populate("event")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNumber)
+      .lean(),
+    EventRegistration.countDocuments({ userId }),
+  ]);
+
+  const validRegs = regs.filter((r) => r.event);
+  const events = validRegs.map((r) => {
+    const eventData = r.event;
+    const eventId = eventData._id ? eventData._id.toString() : r._id.toString();
+    return {
+      ...eventData,
+      _id: eventId,
+      id: eventId,
+      registration: {
         registrationId: r.registrationId,
         attendanceStatus: r.attendanceStatus,
         isInvited: r.isInvited,
         registeredAt: r.createdAt,
-        event: r.event,
-      })),
+      },
+    };
+  });
+
+  const totalPages = Math.ceil(total / limitNumber);
+  return {
+    data: {
+      events,
+      page: pageNumber,
+      limit: limitNumber,
+      total,
+      totalPages,
+      hasMore: pageNumber < totalPages,
     },
   };
 }
