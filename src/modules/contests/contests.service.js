@@ -5,9 +5,10 @@ const {
 } = require("../../schemas/contest-entry.schema");
 const UserTierProgress = require("../../schemas/user-tier-progress.schema");
 const User = require("../../schemas/user.schema");
-const { attachId } = require("../../utils/heplers");
+const { attachId, formatNotification } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const { sendFcmNotifications } = require("../../functions/fcm");
+const { APP_NOTIFICATIONS } = require("../../constants/notifications");
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -153,14 +154,19 @@ async function adminFinaliseContest(contestId) {
     // Push notification to winner
     const user = entry.user;
     if (user?.fcmTokens?.length && user?.enableNotification && prize) {
-      const msg =
+      const prizeText =
         prize.rewardType === "points"
-          ? `You won ${prize.points} Bonus Points in ${contest.name}! 🏆`
-          : `You won a ${prize.giftName || "prize"} in ${contest.name}! 🏆`;
+          ? `${prize.points} Bonus Points`
+          : `a ${prize.giftName || "prize"}`;
       await sendFcmNotifications(
         user.fcmTokens,
-        `Contest Result: ${contest.name}`,
-        msg,
+        formatNotification(APP_NOTIFICATIONS.contests.contestWon.title, {
+          contestName: contest.name,
+        }),
+        formatNotification(APP_NOTIFICATIONS.contests.contestWon.body, {
+          prizeText,
+          contestName: contest.name,
+        }),
         { type: "CONTEST_WON", contestId: contestId.toString() },
       ).catch(() => {});
     }

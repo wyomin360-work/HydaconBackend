@@ -1,13 +1,6 @@
 const { default: mongoose } = require("mongoose");
 const { v4: uuidv4 } = require("uuid");
-
-const ATTENDANCE_STATUS = {
-  REGISTERED: "registered",
-  CHECKED_IN: "checked_in",
-  ATTENDED: "attended",
-  CANCELLED: "cancelled",
-  EVENT_CANCELLED: "event cancelled",
-};
+const { ATTENDANCE_STATUS } = require("../constants/events");
 
 const eventRegistrationSchema = new mongoose.Schema(
   {

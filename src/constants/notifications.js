@@ -114,6 +114,35 @@ const APP_NOTIFICATIONS = {
       body: "Your {{giftName}} voucher file is ready. Check your email to download it!",
     },
   },
+
+  events: {
+    invitation: {
+      title: "You're invited! 🎉",
+      body: "You have received an invitation to {{eventTitle}}",
+    },
+    registrationConfirmed: {
+      title: "Registration Confirmed! 🎟️",
+      body: "You're registered for {{eventTitle}}",
+    },
+  },
+
+  referral: {
+    referrerMilestone: {
+      title: "Referral Milestone Completed! 🥳",
+      body: 'Your friend {{friendName}} completed: "{{milestoneName}}". You earned {{points}} points!',
+    },
+    refereeMilestone: {
+      title: "Milestone Unlocked! 🎉",
+      body: 'You successfully completed the milestone: "{{milestoneName}}"!',
+    },
+  },
+
+  contests: {
+    contestWon: {
+      title: "Contest Result: {{contestName}}",
+      body: "You won {{prizeText}} in {{contestName}}! 🏆",
+    },
+  },
 };
 
 module.exports = { APP_NOTIFICATIONS };

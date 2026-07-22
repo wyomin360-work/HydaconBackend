@@ -1,21 +1,31 @@
-const { Event, EVENT_STATUS } = require("../../schemas/event.schema");
-const {
-  EventRegistration,
-  ATTENDANCE_STATUS,
-} = require("../../schemas/event-registration.schema");
+const { Event } = require("../../schemas/event.schema");
+const { EventRegistration } = require("../../schemas/event-registration.schema");
 const User = require("../../schemas/user.schema");
-const { attachId } = require("../../utils/heplers");
+const { attachId, formatNotification } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const { sendFcmNotifications } = require("../../functions/fcm");
+const { APP_NOTIFICATIONS } = require("../../constants/notifications");
+const {
+  EVENT_STATUS,
+  ATTENDANCE_STATUS,
+  EVENT_TABS,
+  GEO_TYPES,
+  EVENT_FCM_TYPES,
+  EVENT_MESSAGES,
+  EVENT_ERRORS,
+  EVENT_CONFIG,
+} = require("../../constants/events");
 
-// ─── Status helper ────────────────────────────────────────────────────────────
-// Throttle: only run sync once per minute to avoid blocking every list call
+// ─── Status Helper ────────────────────────────────────────────────────────────
+// Throttle status sync to avoid blocking API calls
 let lastSyncTime = 0;
-const SYNC_INTERVAL_MS = 60 * 1000; // 1 minute
 
+/**
+ * Periodically updates event statuses (UPCOMING, ONGOING, COMPLETED) based on current server time.
+ */
 async function syncEventStatuses() {
   const now = Date.now();
-  if (now - lastSyncTime < SYNC_INTERVAL_MS) return; // skip if ran recently
+  if (now - lastSyncTime < EVENT_CONFIG.SYNC_INTERVAL_MS) return;
   lastSyncTime = now;
   const nowDate = new Date();
   await Event.updateMany(
@@ -36,11 +46,26 @@ async function syncEventStatuses() {
   );
 }
 
-// ─── Admin ────────────────────────────────────────────────────────────────────
+// ─── Admin Operations ─────────────────────────────────────────────────────────
+
+/**
+ * Creates a new event.
+ */
 async function adminCreateEvent(data, adminId) {
   const now = new Date();
+  if (data.date && isNaN(new Date(data.date).getTime())) {
+    sendFailResponse(EVENT_ERRORS.INVALID_START_DATE, 400);
+  }
+  if (data.endDate && isNaN(new Date(data.endDate).getTime())) {
+    sendFailResponse(EVENT_ERRORS.INVALID_END_DATE, 400);
+  }
   const date = data.date ? new Date(data.date) : now;
-  const endDate = data.endDate ? new Date(data.endDate) : now;
+  const endDate = data.endDate ? new Date(data.endDate) : date;
+
+  if (endDate < date) {
+    sendFailResponse(EVENT_ERRORS.END_BEFORE_START, 400);
+  }
+
   let status = EVENT_STATUS.UPCOMING;
   if (now > endDate) {
     status = EVENT_STATUS.COMPLETED;
@@ -48,16 +73,37 @@ async function adminCreateEvent(data, adminId) {
     status = EVENT_STATUS.ONGOING;
   }
 
-  const event = await Event.create({ ...data, status, createdBy: adminId });
-  return { message: "Event created", data: { eventId: event._id } };
+  const event = await Event.create({
+    ...data,
+    date,
+    endDate,
+    status,
+    createdBy: adminId,
+  });
+  return { message: EVENT_MESSAGES.CREATED, data: { eventId: event._id } };
 }
 
+/**
+ * Updates existing event details.
+ */
 async function adminUpdateEvent(eventId, data) {
+  const event = await Event.findById(eventId);
+  if (!event) sendFailResponse(EVENT_ERRORS.EVENT_NOT_FOUND, 404);
+
   if (data.date || data.endDate) {
-    const event = await Event.findById(eventId);
-    if (!event) sendFailResponse("Event not found", 404);
+    if (data.date && isNaN(new Date(data.date).getTime())) {
+      sendFailResponse(EVENT_ERRORS.INVALID_START_DATE, 400);
+    }
+    if (data.endDate && isNaN(new Date(data.endDate).getTime())) {
+      sendFailResponse(EVENT_ERRORS.INVALID_END_DATE, 400);
+    }
     const date = data.date ? new Date(data.date) : event.date;
     const endDate = data.endDate ? new Date(data.endDate) : event.endDate;
+
+    if (endDate < date) {
+      sendFailResponse(EVENT_ERRORS.END_BEFORE_START, 400);
+    }
+
     const now = new Date();
     if (now < date) {
       data.status = EVENT_STATUS.UPCOMING;
@@ -68,34 +114,45 @@ async function adminUpdateEvent(eventId, data) {
     }
   }
 
-  const event = await Event.findByIdAndUpdate(eventId, data, { new: true });
-  if (!event) sendFailResponse("Event not found", 404);
-  return { message: "Event updated", data: { updated: true } };
+  const updatedEvent = await Event.findByIdAndUpdate(eventId, data, {
+    new: true,
+  });
+  if (!updatedEvent) sendFailResponse(EVENT_ERRORS.EVENT_NOT_FOUND, 404);
+  return { message: EVENT_MESSAGES.UPDATED, data: { updated: true } };
 }
 
+/**
+ * Deletes an event.
+ */
 async function adminDeleteEvent(eventId) {
   const event = await Event.findById(eventId);
-  if (!event) sendFailResponse("Event not found", 404);
+  if (!event) sendFailResponse(EVENT_ERRORS.EVENT_NOT_FOUND, 404);
 
-  // Mark all attendee passes as event cancelled if the event is deleted before it starts
   if (new Date(event.date) > new Date()) {
     await EventRegistration.updateMany(
       { eventId },
-      { $set: { attendanceStatus: ATTENDANCE_STATUS.EVENT_CANCELLED } }
+      { $set: { attendanceStatus: ATTENDANCE_STATUS.EVENT_CANCELLED } },
     );
   }
 
   await Event.findByIdAndDelete(eventId);
-  return { message: "Event deleted", data: { deleted: true } };
+  return { message: EVENT_MESSAGES.DELETED, data: { deleted: true } };
 }
 
+/**
+ * Admin event listing.
+ */
 async function adminListEvents(query = {}) {
-  // Fire sync in background — never block the response
   syncEventStatuses().catch((err) =>
     console.error("syncEventStatuses error:", err),
   );
 
-  const { page = 1, limit = 20, status } = query;
+  const { status } = query;
+  const page = Math.max(1, parseInt(query.page) || 1);
+  const limit = Math.max(
+    1,
+    parseInt(query.limit) || EVENT_CONFIG.DEFAULT_ADMIN_LIMIT,
+  );
   const skip = (page - 1) * limit;
   const filter = {};
   if (status) filter.status = status;
@@ -114,9 +171,12 @@ async function adminListEvents(query = {}) {
   };
 }
 
+/**
+ * Admin retrieves full event details with registration list.
+ */
 async function adminGetEventDetails(eventId) {
   const event = await Event.findById(eventId).lean();
-  if (!event) sendFailResponse("Event not found", 404);
+  if (!event) sendFailResponse(EVENT_ERRORS.EVENT_NOT_FOUND, 404);
   const registrations = await EventRegistration.find({ eventId })
     .populate({ path: "userId", select: "name phoneNumber email profileImage" })
     .sort({ createdAt: -1 })
@@ -131,11 +191,14 @@ async function adminGetEventDetails(eventId) {
 }
 
 /**
- * Admin marks a user as invited to an invitation-only event.
+ * Admin invites a user to an invitation-only event.
  */
 async function adminInviteUser(eventId, userId) {
   const event = await Event.findById(eventId);
-  if (!event) sendFailResponse("Event not found", 404);
+  if (!event) sendFailResponse(EVENT_ERRORS.EVENT_NOT_FOUND, 404);
+
+  const user = await User.findById(userId);
+  if (!user) sendFailResponse(EVENT_ERRORS.USER_NOT_FOUND, 404);
 
   const reg = await EventRegistration.findOneAndUpdate(
     { eventId, userId },
@@ -143,50 +206,72 @@ async function adminInviteUser(eventId, userId) {
     { upsert: true, new: true },
   );
 
-  // Push notification to user
-  const user = await User.findById(userId);
   if (user?.fcmTokens?.length && user?.enableNotification) {
     await sendFcmNotifications(
       user.fcmTokens,
-      `You're invited! 🎉`,
-      `You have received an invitation to ${event.title}`,
-      { type: "EVENT_INVITATION", eventId: eventId.toString() },
+      APP_NOTIFICATIONS.events.invitation.title,
+      formatNotification(APP_NOTIFICATIONS.events.invitation.body, {
+        eventTitle: event.title,
+      }),
+      {
+        type: EVENT_FCM_TYPES.EVENT_INVITATION,
+        eventId: eventId.toString(),
+      },
     ).catch(() => {});
   }
   return {
-    message: "User invited",
+    message: EVENT_MESSAGES.USER_INVITED,
     data: { registrationId: reg.registrationId },
   };
 }
 
 /**
- * Admin scans attendee QR → marks check-in.
+ * Admin checks in attendee via QR code scanning.
  */
 async function adminCheckIn(registrationId) {
   const reg = await EventRegistration.findOne({ registrationId });
-  if (!reg) sendFailResponse("Registration not found", 404);
+  if (!reg) sendFailResponse(EVENT_ERRORS.REGISTRATION_NOT_FOUND, 404);
+
+  if (
+    reg.attendanceStatus === ATTENDANCE_STATUS.CANCELLED ||
+    reg.attendanceStatus === ATTENDANCE_STATUS.EVENT_CANCELLED
+  ) {
+    sendFailResponse(EVENT_ERRORS.CANNOT_CHECKIN_CANCELLED, 400);
+  }
+
   reg.attendanceStatus = ATTENDANCE_STATUS.CHECKED_IN;
   reg.checkedInAt = new Date();
   await reg.save();
   return {
-    message: "Checked in",
+    message: EVENT_MESSAGES.CHECKED_IN,
     data: { attendanceStatus: reg.attendanceStatus },
   };
 }
 
-// ─── User ─────────────────────────────────────────────────────────────────────
+// ─── User Operations ──────────────────────────────────────────────────────────
+
+/**
+ * Fetches user event feeds across tabs: featured, nearby, upcoming, or default overview.
+ */
 async function userListEvents(query = {}, userId = null) {
-  // Fire sync in background — never block the response
   syncEventStatuses().catch((err) =>
     console.error("syncEventStatuses error:", err),
   );
 
-  const { tab = "upcoming", lat, lng, page = 1, limit = 10 } = query;
+  const {
+    tab = EVENT_TABS.UPCOMING,
+    lat,
+    lng,
+    page = 1,
+    limit = EVENT_CONFIG.DEFAULT_USER_LIMIT,
+  } = query;
   const pageNumber = Math.max(1, parseInt(page) || 1);
-  const limitNumber = Math.max(1, parseInt(limit) || 10);
+  const limitNumber = Math.max(
+    1,
+    parseInt(limit) || EVENT_CONFIG.DEFAULT_USER_LIMIT,
+  );
   const skip = (pageNumber - 1) * limitNumber;
 
-  // Get user's registered event IDs to exclude from main feeds if needed
   let registeredEventIds = [];
   if (userId) {
     const userRegistrations = await EventRegistration.find({ userId })
@@ -196,13 +281,13 @@ async function userListEvents(query = {}, userId = null) {
   }
 
   // ── FEATURED SECTION ──
-  if (tab === "featured") {
+  if (tab === EVENT_TABS.FEATURED) {
     const featuredEvents = await Event.find({
       active: true,
       status: { $in: [EVENT_STATUS.UPCOMING, EVENT_STATUS.ONGOING] },
     })
       .sort({ isInvitationOnly: -1, date: 1 })
-      .limit(5)
+      .limit(EVENT_CONFIG.FEATURED_LIMIT)
       .lean();
 
     return {
@@ -213,7 +298,7 @@ async function userListEvents(query = {}, userId = null) {
   }
 
   // ── NEARBY SECTION ──
-  if (tab === "nearby") {
+  if (tab === EVENT_TABS.NEARBY) {
     const latitude = parseFloat(lat);
     const longitude = parseFloat(lng);
     const hasCoordinates = !isNaN(latitude) && !isNaN(longitude);
@@ -224,7 +309,11 @@ async function userListEvents(query = {}, userId = null) {
         fallbackFilter._id = { $nin: registeredEventIds };
       }
       const [events, total] = await Promise.all([
-        Event.find(fallbackFilter).sort({ date: 1 }).skip(skip).limit(limitNumber).lean(),
+        Event.find(fallbackFilter)
+          .sort({ date: 1 })
+          .skip(skip)
+          .limit(limitNumber)
+          .lean(),
         Event.countDocuments(fallbackFilter),
       ]);
       const totalPages = Math.ceil(total / limitNumber);
@@ -253,9 +342,9 @@ async function userListEvents(query = {}, userId = null) {
       const geoPipeline = [
         {
           $geoNear: {
-            near: { type: "Point", coordinates: [longitude, latitude] },
+            near: { type: GEO_TYPES.POINT, coordinates: [longitude, latitude] },
             distanceField: "distanceMeters",
-            maxDistance: 100000, // 100 km
+            maxDistance: EVENT_CONFIG.MAX_GEO_DISTANCE_METERS,
             spherical: true,
             query: geoFilter,
           },
@@ -292,14 +381,27 @@ async function userListEvents(query = {}, userId = null) {
       };
     } catch (geoError) {
       console.error("Geo query failed:", geoError.message);
+      const fallbackFilter = { active: true, status: EVENT_STATUS.UPCOMING };
+      if (registeredEventIds.length > 0) {
+        fallbackFilter._id = { $nin: registeredEventIds };
+      }
+      const [events, total] = await Promise.all([
+        Event.find(fallbackFilter)
+          .sort({ date: 1 })
+          .skip(skip)
+          .limit(limitNumber)
+          .lean(),
+        Event.countDocuments(fallbackFilter),
+      ]);
+      const totalPages = Math.ceil(total / limitNumber);
       return {
         data: {
-          events: [],
+          events: attachId(events),
           page: pageNumber,
           limit: limitNumber,
-          total: 0,
-          totalPages: 0,
-          hasMore: false,
+          total,
+          totalPages,
+          hasMore: pageNumber < totalPages,
           hasLocationData: false,
         },
       };
@@ -307,7 +409,7 @@ async function userListEvents(query = {}, userId = null) {
   }
 
   // ── UPCOMING SECTION ──
-  if (tab === "upcoming") {
+  if (tab === EVENT_TABS.UPCOMING) {
     const upcomingFilter = {
       active: true,
       status: EVENT_STATUS.UPCOMING,
@@ -317,7 +419,11 @@ async function userListEvents(query = {}, userId = null) {
     }
 
     const [events, total] = await Promise.all([
-      Event.find(upcomingFilter).sort({ date: 1 }).skip(skip).limit(limitNumber).lean(),
+      Event.find(upcomingFilter)
+        .sort({ date: 1 })
+        .skip(skip)
+        .limit(limitNumber)
+        .lean(),
       Event.countDocuments(upcomingFilter),
     ]);
 
@@ -334,7 +440,7 @@ async function userListEvents(query = {}, userId = null) {
     };
   }
 
-  // ── DEFAULT / UNFILTERED OVERVIEW (Legacy compatibility) ──
+  // ── DEFAULT / UNFILTERED OVERVIEW ──
   const parsedLat = parseFloat(lat);
   const parsedLng = parseFloat(lng);
   const hasCoords = !isNaN(parsedLat) && !isNaN(parsedLng);
@@ -344,10 +450,26 @@ async function userListEvents(query = {}, userId = null) {
     const myRegs = await EventRegistration.find({ userId })
       .populate({ path: "event" })
       .sort({ createdAt: -1 })
-      .limit(4)
+      .limit(EVENT_CONFIG.OVERVIEW_LIMIT)
       .lean();
     const validRegs = myRegs.filter((r) => r.event);
-    myEvents = validRegs.map((r) => ({ ...r.event, registration: r }));
+    myEvents = validRegs.map((r) => {
+      const eventData = r.event;
+      const eventId = eventData._id
+        ? eventData._id.toString()
+        : r._id.toString();
+      return {
+        ...eventData,
+        _id: eventId,
+        id: eventId,
+        registration: {
+          registrationId: r.registrationId,
+          attendanceStatus: r.attendanceStatus,
+          isInvited: r.isInvited,
+          registeredAt: r.createdAt,
+        },
+      };
+    });
   }
 
   let nearby = [];
@@ -356,9 +478,9 @@ async function userListEvents(query = {}, userId = null) {
       const geoNearPipeline = [
         {
           $geoNear: {
-            near: { type: "Point", coordinates: [parsedLng, parsedLat] },
+            near: { type: GEO_TYPES.POINT, coordinates: [parsedLng, parsedLat] },
             distanceField: "distanceMeters",
-            maxDistance: 100000,
+            maxDistance: EVENT_CONFIG.MAX_GEO_DISTANCE_METERS,
             spherical: true,
             query: {
               active: true,
@@ -369,7 +491,7 @@ async function userListEvents(query = {}, userId = null) {
             },
           },
         },
-        { $limit: 4 },
+        { $limit: EVENT_CONFIG.OVERVIEW_LIMIT },
       ];
       const nearbyWithDistance = await Event.aggregate(geoNearPipeline);
       nearby = nearbyWithDistance.map((ev) => ({
@@ -381,15 +503,23 @@ async function userListEvents(query = {}, userId = null) {
   }
 
   const upcomingFilter = { active: true, status: EVENT_STATUS.UPCOMING };
-  if (registeredEventIds.length > 0) upcomingFilter._id = { $nin: registeredEventIds };
-  const upcoming = await Event.find(upcomingFilter).sort({ date: 1 }).limit(4).lean();
+  if (registeredEventIds.length > 0)
+    upcomingFilter._id = { $nin: registeredEventIds };
+  const upcoming = await Event.find(upcomingFilter)
+    .sort({ date: 1 })
+    .limit(EVENT_CONFIG.OVERVIEW_LIMIT)
+    .lean();
 
   const activeFilter = {
     active: true,
     status: { $in: [EVENT_STATUS.ONGOING, EVENT_STATUS.COMPLETED] },
   };
-  if (registeredEventIds.length > 0) activeFilter._id = { $nin: registeredEventIds };
-  const active = await Event.find(activeFilter).sort({ date: 1 }).limit(4).lean();
+  if (registeredEventIds.length > 0)
+    activeFilter._id = { $nin: registeredEventIds };
+  const active = await Event.find(activeFilter)
+    .sort({ date: 1 })
+    .limit(EVENT_CONFIG.OVERVIEW_LIMIT)
+    .lean();
 
   if (!hasCoords) nearby = upcoming;
 
@@ -405,10 +535,15 @@ async function userListEvents(query = {}, userId = null) {
   };
 }
 
+/**
+ * Fetches event details for user view.
+ */
 async function userGetEventDetails(eventId, userId) {
   const event = await Event.findById(eventId).lean();
-  if (!event) sendFailResponse("Event not found", 404);
-  const registrationCount = await EventRegistration.countDocuments({ eventId });
+  if (!event) sendFailResponse(EVENT_ERRORS.EVENT_NOT_FOUND, 404);
+  const registrationCount = await EventRegistration.countDocuments({
+    eventId,
+  });
 
   let userRegistration = null;
   let isEligible = true;
@@ -435,32 +570,46 @@ async function userGetEventDetails(eventId, userId) {
   };
 }
 
+/**
+ * Registers user for an event.
+ */
 async function userRegisterForEvent(eventId, userId) {
+  if (!userId) sendFailResponse(EVENT_ERRORS.USER_ID_REQUIRED, 400);
   const event = await Event.findById(eventId);
-  if (!event) sendFailResponse("Event not found", 404);
-  if (!event.active) sendFailResponse("Event is not active", 400);
+  if (!event) sendFailResponse(EVENT_ERRORS.EVENT_NOT_FOUND, 404);
+  if (!event.active) sendFailResponse(EVENT_ERRORS.EVENT_NOT_ACTIVE, 400);
+  const now = new Date();
+  if (
+    event.status === EVENT_STATUS.COMPLETED ||
+    new Date(event.endDate) < now
+  ) {
+    sendFailResponse(EVENT_ERRORS.EVENT_ALREADY_ENDED, 400);
+  }
   if (
     event.registrationDeadline &&
-    new Date(event.registrationDeadline) < new Date()
+    new Date(event.registrationDeadline) < now
   ) {
-    sendFailResponse("Registration deadline has passed", 400);
+    sendFailResponse(EVENT_ERRORS.REGISTRATION_DEADLINE_PASSED, 400);
   }
 
-  // Invitation-only check
+  const existingReg = await EventRegistration.findOne({ eventId, userId });
+
   if (event.isInvitationOnly) {
-    const existing = await EventRegistration.findOne({ eventId, userId });
-    if (!existing?.isInvited) {
-      sendFailResponse("You are not eligible for this event", 403);
+    if (!existingReg?.isInvited) {
+      sendFailResponse(EVENT_ERRORS.NOT_ELIGIBLE, 403);
     }
   }
 
-  // Capacity check
-  if (event.capacity) {
+  if (
+    event.capacity &&
+    (!existingReg ||
+      existingReg.attendanceStatus !== ATTENDANCE_STATUS.REGISTERED)
+  ) {
     const registrationCount = await EventRegistration.countDocuments({
       eventId,
     });
     if (registrationCount >= event.capacity) {
-      sendFailResponse("Event is at full capacity", 400);
+      sendFailResponse(EVENT_ERRORS.FULL_CAPACITY, 400);
     }
   }
 
@@ -470,19 +619,23 @@ async function userRegisterForEvent(eventId, userId) {
     { upsert: true, new: true, setDefaultsOnInsert: true },
   );
 
-  // Push notification
   const user = await User.findById(userId);
   if (user?.fcmTokens?.length && user?.enableNotification) {
     await sendFcmNotifications(
       user.fcmTokens,
-      "Registration Confirmed! 🎟️",
-      `You're registered for ${event.title}`,
-      { type: "EVENT_REGISTRATION_CONFIRMED", eventId: eventId.toString() },
+      APP_NOTIFICATIONS.events.registrationConfirmed.title,
+      formatNotification(APP_NOTIFICATIONS.events.registrationConfirmed.body, {
+        eventTitle: event.title,
+      }),
+      {
+        type: EVENT_FCM_TYPES.EVENT_REGISTRATION_CONFIRMED,
+        eventId: eventId.toString(),
+      },
     ).catch(() => {});
   }
 
   return {
-    message: "Registered successfully",
+    message: EVENT_MESSAGES.REGISTERED_SUCCESSFULLY,
     data: {
       registrationId: reg.registrationId,
       attendanceStatus: reg.attendanceStatus,
@@ -493,13 +646,17 @@ async function userRegisterForEvent(eventId, userId) {
   };
 }
 
+/**
+ * Fetches event pass details for a registered user.
+ */
 async function userGetEventPass(registrationId, userId) {
+  if (!userId) sendFailResponse(EVENT_ERRORS.UNAUTHORIZED, 401);
   const reg = await EventRegistration.findOne({ registrationId })
     .populate("event")
     .lean();
-  if (!reg) sendFailResponse("Registration not found", 404);
+  if (!reg) sendFailResponse(EVENT_ERRORS.REGISTRATION_NOT_FOUND, 404);
   if (reg.userId.toString() !== userId.toString()) {
-    sendFailResponse("Unauthorized", 403);
+    sendFailResponse(EVENT_ERRORS.UNAUTHORIZED, 403);
   }
   return {
     data: {
@@ -511,9 +668,15 @@ async function userGetEventPass(registrationId, userId) {
   };
 }
 
+/**
+ * Fetches list of registered events for current user with pagination.
+ */
 async function userMyEvents(userId, query = {}) {
   const pageNumber = Math.max(1, parseInt(query?.page) || 1);
-  const limitNumber = Math.max(1, parseInt(query?.limit) || 10);
+  const limitNumber = Math.max(
+    1,
+    parseInt(query?.limit) || EVENT_CONFIG.DEFAULT_USER_LIMIT,
+  );
   const skip = (pageNumber - 1) * limitNumber;
 
   const [regs, total] = await Promise.all([

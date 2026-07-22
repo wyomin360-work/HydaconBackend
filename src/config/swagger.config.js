@@ -10,6 +10,7 @@ const commonDoc = require("../docs/common.doc");
 const rolesDoc = require("../docs/roles.doc");
 const ruleSetDoc = require("../docs/rule-set.doc");
 const videoDoc = require("../docs/video.doc");
+const eventsDoc = require("../docs/events.doc");
 
 const options = {
   definition: {
@@ -34,6 +35,7 @@ const options = {
       ...rolesDoc,
       ...ruleSetDoc,
       ...videoDoc,
+      ...eventsDoc,
     },
   },
   apis: [],

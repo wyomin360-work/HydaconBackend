@@ -6,6 +6,8 @@ const {
   REFERRAL_MILESTONE_DETAILS,
 } = require("../../constants/referrals");
 const { sendFailResponse } = require("../../utils/responseHandlers");
+const { formatNotification } = require("../../utils/heplers");
+const { APP_NOTIFICATIONS } = require("../../constants/notifications");
 const mongoose = require("mongoose");
 const { sendFcmNotifications } = require("../../functions/fcm");
 
@@ -295,8 +297,15 @@ async function completeMilestone(userId, milestone) {
     try {
       await sendFcmNotifications(
         referrerUser.fcmTokens,
-        "Referral Milestone Completed! 🥳",
-        `Your friend ${user.name || user.phone || "someone"} completed: "${config.name}". You earned ${points} points!`,
+        APP_NOTIFICATIONS.referral.referrerMilestone.title,
+        formatNotification(
+          APP_NOTIFICATIONS.referral.referrerMilestone.body,
+          {
+            friendName: user.name || user.phone || "someone",
+            milestoneName: config.name,
+            points: points,
+          },
+        ),
         { type: "REFERRAL_MILESTONE" },
       );
     } catch (err) {
@@ -309,8 +318,13 @@ async function completeMilestone(userId, milestone) {
     try {
       await sendFcmNotifications(
         user.fcmTokens,
-        "Milestone Unlocked! 🎉",
-        `You successfully completed the milestone: "${config.name}"!`,
+        APP_NOTIFICATIONS.referral.refereeMilestone.title,
+        formatNotification(
+          APP_NOTIFICATIONS.referral.refereeMilestone.body,
+          {
+            milestoneName: config.name,
+          },
+        ),
         { type: "REFERRAL_MILESTONE" },
       );
     } catch (err) {

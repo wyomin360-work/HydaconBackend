@@ -1,18 +1,9 @@
 const { default: mongoose } = require("mongoose");
-
-const EVENT_STATUS = {
-  UPCOMING: "upcoming",
-  ONGOING: "ongoing",
-  COMPLETED: "completed",
-};
-
-const EVENT_TYPE = {
-  WEBINAR: "webinar",
-  WORKSHOP: "workshop",
-  CONFERENCE: "conference",
-  MEETUP: "meetup",
-  OTHER: "other",
-};
+const {
+  EVENT_STATUS,
+  EVENT_TYPE,
+  GEO_TYPES,
+} = require("../constants/events");
 
 const eventSchema = new mongoose.Schema(
   {
@@ -22,7 +13,7 @@ const eventSchema = new mongoose.Schema(
     venue: { type: String, required: true },
     // GeoJSON point for nearby-events queries
     location: {
-      type: { type: String, enum: ["Point"], default: "Point" },
+      type: { type: String, enum: [GEO_TYPES.POINT], default: GEO_TYPES.POINT },
       coordinates: { type: [Number], default: [0, 0] }, // [lng, lat]
     },
     city: { type: String },
