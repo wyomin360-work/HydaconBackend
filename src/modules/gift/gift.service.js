@@ -4,7 +4,12 @@ const mongoose = require("mongoose");
 const GiftRedemption = require("../../schemas/gift-redemption.schema");
 const Document = require("../../schemas/document.schema");
 const User = require("../../schemas/user.schema");
-const { GIFT_REDEMPTION_STATUS } = require("../../constants/gift");
+const {
+  GIFT_REDEMPTION_STATUS,
+  SCRATCH_CARD_REWARD_TYPES,
+  SCRATCH_CARD_MESSAGES,
+  SCRATCH_CARD_ERRORS,
+} = require("../../constants/gift");
 const { APP_NOTIFICATIONS } = require("../../constants/notifications");
 const { getPaginationParams, attachId } = require("../../utils/heplers");
 const { RuleSet } = require("../../schemas/rule-set.schema");
@@ -12,6 +17,7 @@ const ruleSetEvaluator = require("../rule-set/rule-set.evaluator");
 const { sendTemplateEmail } = require("../../functions/nodemailer");
 const { sendFcmNotifications } = require("../../functions/fcm");
 const ScratchCardRule = require("../../schemas/scratch-card-rule.schema");
+const AppConfig = require("../../schemas/app-config.schema");
 
 // --- Categories ---
 
@@ -749,7 +755,7 @@ exports.getAnalytics = async () => {
 exports.getScratchCardConfig = async () => {
   try {
     const configDoc = await AppConfig.findOne().lean();
-    if (!configDoc) return { success: false, message: "App config not found" };
+    if (!configDoc) return { success: false, message: SCRATCH_CARD_ERRORS.CONFIG_NOT_FOUND };
 
     const settings = configDoc.scratchCardSettings || {};
 
@@ -799,7 +805,7 @@ exports.updateScratchCardConfig = async (configData) => {
     if (probability !== undefined && (probability < 0 || probability > 100)) {
       return {
         success: false,
-        message: "Probability must be between 0 and 100",
+        message: SCRATCH_CARD_ERRORS.PROBABILITY_RANGE,
       };
     }
     if (
@@ -808,7 +814,7 @@ exports.updateScratchCardConfig = async (configData) => {
     ) {
       return {
         success: false,
-        message: "Gift probability must be between 0 and 100",
+        message: SCRATCH_CARD_ERRORS.GIFT_PROBABILITY_RANGE,
       };
     }
     if (
@@ -818,7 +824,7 @@ exports.updateScratchCardConfig = async (configData) => {
     ) {
       return {
         success: false,
-        message: "Min bonus points cannot exceed max bonus points",
+        message: SCRATCH_CARD_ERRORS.MIN_MAX_INVALID,
       };
     }
 
@@ -830,7 +836,7 @@ exports.updateScratchCardConfig = async (configData) => {
       if (count !== selectedGiftIds.length) {
         return {
           success: false,
-          message: "One or more selected gift IDs are invalid",
+          message: SCRATCH_CARD_ERRORS.INVALID_GIFT_IDS,
         };
       }
     }
@@ -855,11 +861,11 @@ exports.updateScratchCardConfig = async (configData) => {
     );
 
     if (!updatedConfig)
-      return { success: false, message: "App config not found" };
+      return { success: false, message: SCRATCH_CARD_ERRORS.CONFIG_NOT_FOUND };
 
     return {
       success: true,
-      message: "Scratch card configuration updated successfully",
+      message: SCRATCH_CARD_MESSAGES.CONFIG_UPDATED,
       data: updatedConfig.scratchCardSettings,
     };
   } catch (error) {
@@ -916,7 +922,7 @@ exports.createScratchCardRule = async (data) => {
       minCoins: rewardType === "POINTS" ? Number(minCoins) : 0,
       maxCoins: rewardType === "POINTS" ? Number(maxCoins) : 0,
       giftId: rewardType === "GIFT" ? giftId || null : null,
-      ruleSetId,
+      ruleSetId: ruleSetId || null,
       gifts: gifts || [],
       active: active !== undefined ? active : true,
       name: name || "",
@@ -934,6 +940,7 @@ exports.createScratchCardRule = async (data) => {
     const populated = await ScratchCardRule.findById(newRule._id)
       .populate("tierId")
       .populate("giftId")
+      .populate("ruleSetId")
       .populate("gifts.giftId")
       .populate({
         path: "rewards.giftId",
@@ -945,7 +952,7 @@ exports.createScratchCardRule = async (data) => {
 
     return {
       success: true,
-      message: "Scratch card rule created successfully",
+      message: SCRATCH_CARD_MESSAGES.RULE_CREATED,
       data: populated,
     };
   } catch (error) {
@@ -974,7 +981,7 @@ exports.updateScratchCardRule = async (id, data) => {
     } = data;
     const rule = await ScratchCardRule.findById(id);
     if (!rule)
-      return { success: false, message: "Scratch card rule not found" };
+      return { success: false, message: SCRATCH_CARD_ERRORS.RULE_NOT_FOUND };
 
     const finalRewardType =
       rewardType !== undefined ? rewardType : rule.rewardType;
@@ -1012,7 +1019,7 @@ exports.updateScratchCardRule = async (id, data) => {
     if (perUserScratchLimit !== undefined)
       rule.perUserScratchLimit = Number(perUserScratchLimit);
     if (rewards !== undefined) rule.rewards = rewards;
-    if (ruleSetId !== undefined) rule.ruleSetId = ruleSetId;
+    if (ruleSetId !== undefined) rule.ruleSetId = ruleSetId || null;
 
     await rule.save();
 
@@ -1020,6 +1027,7 @@ exports.updateScratchCardRule = async (id, data) => {
     const populated = await ScratchCardRule.findById(rule._id)
       .populate("tierId")
       .populate("giftId")
+      .populate("ruleSetId")
       .populate("gifts.giftId")
       .populate({
         path: "rewards.giftId",
@@ -1031,7 +1039,7 @@ exports.updateScratchCardRule = async (id, data) => {
 
     return {
       success: true,
-      message: "Scratch card rule updated successfully",
+      message: SCRATCH_CARD_MESSAGES.RULE_UPDATED,
       data: populated,
     };
   } catch (error) {
@@ -1043,8 +1051,8 @@ exports.deleteScratchCardRule = async (id) => {
   try {
     const rule = await ScratchCardRule.findByIdAndDelete(id);
     if (!rule)
-      return { success: false, message: "Scratch card rule not found" };
-    return { success: true, message: "Scratch card rule deleted successfully" };
+      return { success: false, message: SCRATCH_CARD_ERRORS.RULE_NOT_FOUND };
+    return { success: true, message: SCRATCH_CARD_MESSAGES.RULE_DELETED };
   } catch (error) {
     return { success: false, message: error.message };
   }

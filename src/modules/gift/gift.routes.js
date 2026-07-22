@@ -8,6 +8,9 @@ const {
   giftUpdateRequestType,
   categoryCreateRequestType,
   categoryUpdateRequestType,
+  scratchCardConfigUpdateRequestType,
+  scratchCardRuleCreateRequestType,
+  scratchCardRuleUpdateRequestType,
 } = require("../../validations/gift.validations");
 const { paginationType } = require("../../validations/global.validations");
 const verification = require("../../middlewares/jwtVerification");
@@ -150,6 +153,7 @@ router.get(
 router.patch(
   giftPaths.scratchCardConfig,
   verification.verifyAdmin,
+  validateRequest(scratchCardConfigUpdateRequestType),
   handleError(giftController.updateScratchCardConfig),
 );
 
@@ -162,11 +166,13 @@ router.get(
 router.post(
   giftPaths.scratchCardRules,
   verification.verifyAdmin,
+  validateRequest(scratchCardRuleCreateRequestType),
   handleError(giftController.createScratchCardRule),
 );
 router.patch(
   giftPaths.scratchCardRuleDetail,
   verification.verifyAdmin,
+  validateRequest(scratchCardRuleUpdateRequestType),
   handleError(giftController.updateScratchCardRule),
 );
 router.delete(

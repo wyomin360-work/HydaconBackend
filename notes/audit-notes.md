@@ -163,3 +163,10 @@ These services use raw string literals instead of a constants file (§4):
 - ✅ `src/validations/events.validations.js` — created AJV schemas for event create/update/invite
 - ✅ `src/docs/events.doc.js` — created Swagger docs for all 12 event endpoints
 - ✅ `guidelines/project-rules.md` — added §4 (hardcoding), §6 (responses), §7 (performance), §8 (testing)
+- ✅ `scratch card` module — fully refactored and compliant:
+  - Added `scratchCardConfigUpdateRequestType`, `scratchCardRuleCreateRequestType`, `scratchCardRuleUpdateRequestType` in `src/validations/gift.validations.js`
+  - Attached `validateRequest` middleware to all scratch card mutation endpoints in `src/modules/gift/gift.routes.js`
+  - Centralized scratch card constants, messages, and errors in `src/constants/gift.js`
+  - Replaced all raw hardcoded message strings in `gift.service.js` with constants
+  - Integrated `RuleSet` eligibility evaluation (`evaluateRuleSet`) for scratch card campaigns in `src/modules/redeems/redeems.service.js`
+  - Created unit test suite `tests/unit/scratch-card.test.js` (all 50 unit tests passing)

@@ -10,6 +10,8 @@ const User = require("../../schemas/user.schema");
 const Gift = require("../../schemas/gift.schema");
 const GiftRedemption = require("../../schemas/gift-redemption.schema");
 const ScratchCardRule = require("../../schemas/scratch-card-rule.schema");
+const { RuleSet } = require("../../schemas/rule-set.schema");
+const ruleSetEvaluator = require("../rule-set/rule-set.evaluator");
 const mongoose = require("mongoose");
 const { attachId, formatNotification } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
@@ -252,7 +254,20 @@ async function createRedeem(redeemData, reqUser = null) {
         if (campaign.endDate && new Date(campaign.endDate) < nowTime) continue;
 
 
-        // const eligibility = await checkEligibility(user, campaign) // add later
+        // B. Check RuleSet Eligibility if ruleSetId is attached to campaign
+        if (campaign.ruleSetId) {
+          const ruleSet = await RuleSet.findById(campaign.ruleSetId);
+          if (ruleSet) {
+            const evaluation = await ruleSetEvaluator.evaluateRuleSet(
+              ruleSet,
+              user,
+              { targetId: campaign._id, productId: actualProductId },
+            );
+            if (!evaluation.eligible) {
+              continue; // User does not meet ruleSet eligibility criteria
+            }
+          }
+        }
 
         // D. Check Scratch Limits
         if (campaign.totalScratchLimit > 0) {
