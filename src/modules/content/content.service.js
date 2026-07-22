@@ -34,17 +34,31 @@ const hasActivePopupConflict = async (placements, excludeId) => {
 const createContent = async (data) => {
   validatePlacements(data.placements);
 
+  let hadConflict = false;
   // right after validatePlacements, before `new Content(data)`
   if (data.type === "POPUP" && data.active !== false) {
     const conflict = await hasActivePopupConflict(data.placements);
     if (conflict) {
-      data.active = false;
+      if (data.forceActive) {
+        await Content.updateMany(
+          { type: "POPUP", active: true, placements: { $in: data.placements } },
+          { active: false }
+        );
+      } else {
+        data.active = false;
+        hadConflict = true;
+      }
     }
   }
 
   const content = new Content(data);
   await content.save();
-  return content;
+  
+  const result = content.toObject();
+  if (hadConflict) {
+    result.hadConflict = true;
+  }
+  return result;
 };
 
 const updateContent = async (id, data) => {

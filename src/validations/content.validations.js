@@ -53,6 +53,7 @@ const createContentRequestType = {
     bodyText: { type: "string" },
     media: { type: "array", items: { type: "string" } },
     maxViews: { type: "number" },
+    forceActive: { type: "boolean" },
   },
   required: ["title", "type"],
   additionalProperties: false,
@@ -118,6 +119,7 @@ const updateContentRequestType = {
     galleryImages: { type: "array" },
     status: { type: "string" },
     maxViews: { type: "number" },
+    forceActive: { type: "boolean" },
   },
   additionalProperties: true,
 };
