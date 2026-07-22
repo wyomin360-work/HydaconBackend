@@ -76,6 +76,58 @@ describe("RuleSet Evaluator", () => {
       expect(result.reasons).toContain("Rule set is not active");
     });
 
+    it("should evaluate USER_ROLE correctly for Mason, Contractor, and BOTH", async () => {
+      const Role = mongoose.model("Role");
+      Role.session.mockResolvedValue({ _id: "roleMason", name: "Mason" });
+
+      const userMason = { ...mockUser, roleId: "roleMason" };
+
+      const ruleSetMason = {
+        active: true,
+        logicOperator: RuleLogicOperator.AND,
+        rules: [
+          { type: RuleType.USER_ROLE, operator: RuleOperator.EQ, value: "MASON" },
+        ],
+      };
+      const resultMason = await ruleSetEvaluator.evaluateRuleSet(
+        ruleSetMason,
+        userMason,
+        {},
+        session,
+      );
+      expect(resultMason.eligible).toBe(true);
+
+      const ruleSetContractor = {
+        active: true,
+        logicOperator: RuleLogicOperator.AND,
+        rules: [
+          { type: RuleType.USER_ROLE, operator: RuleOperator.EQ, value: "CONTRACTOR" },
+        ],
+      };
+      const resultContractor = await ruleSetEvaluator.evaluateRuleSet(
+        ruleSetContractor,
+        userMason,
+        {},
+        session,
+      );
+      expect(resultContractor.eligible).toBe(false);
+
+      const ruleSetBoth = {
+        active: true,
+        logicOperator: RuleLogicOperator.AND,
+        rules: [
+          { type: RuleType.USER_ROLE, operator: RuleOperator.EQ, value: "BOTH" },
+        ],
+      };
+      const resultBoth = await ruleSetEvaluator.evaluateRuleSet(
+        ruleSetBoth,
+        userMason,
+        {},
+        session,
+      );
+      expect(resultBoth.eligible).toBe(true);
+    });
+
     it("should evaluate boolean strings correctly", async () => {
       const ruleSet = {
         active: true,

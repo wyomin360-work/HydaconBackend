@@ -32,6 +32,13 @@ router.patch(
   handleError(controller.updateContent),
 );
 
+router.put(
+  contentPaths.ADMIN_UPDATE,
+  verification.verifyAdmin,
+  validateRequest(updateContentRequestType),
+  handleError(controller.updateContent),
+);
+
 router.delete(
   contentPaths.ADMIN_DELETE,
   verification.verifyAdmin,

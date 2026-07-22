@@ -109,12 +109,17 @@ const updateContentRequestType = {
     frequency: { type: "string", enum: ["ONCE", "SESSION", "EVERYTIME"] },
     popupType: { type: "string", enum: ["FULLSCREEN", "MODAL_POPUP", "BOTTOM_SHEET", "ANNOUNCEMENT_CARD", "BANNER"] },
     audience: { type: "object" },
+    targetAudience: { type: "string" },
+    targetRoles: { type: "array" },
     tags: { type: "array", items: { type: "string" } },
     bodyText: { type: "string" },
     media: { type: "array", items: { type: "string" } },
+    singleImage: { type: "string" },
+    galleryImages: { type: "array" },
+    status: { type: "string" },
     maxViews: { type: "number" },
   },
-  additionalProperties: false,
+  additionalProperties: true,
 };
 
 module.exports = {

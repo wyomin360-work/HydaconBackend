@@ -57,8 +57,12 @@ const ruleSetCreateRequestType = {
       items: ruleSchemaDef,
     },
     tags: { type: "array", items: { type: "string" } },
-    validFrom: { type: "string", format: "date-time" },
-    validUntil: { type: "string", format: "date-time" },
+    validFrom: {
+      oneOf: [{ type: "string", format: "date-time" }, { type: "null" }],
+    },
+    validUntil: {
+      oneOf: [{ type: "string", format: "date-time" }, { type: "null" }],
+    },
   },
   required: ["name", "rules"],
   additionalProperties: true,
@@ -76,8 +80,12 @@ const ruleSetUpdateRequestType = {
       items: ruleSchemaDef,
     },
     tags: { type: "array", items: { type: "string" } },
-    validFrom: { type: "string", format: "date-time" },
-    validUntil: { type: "string", format: "date-time" },
+    validFrom: {
+      oneOf: [{ type: "string", format: "date-time" }, { type: "null" }],
+    },
+    validUntil: {
+      oneOf: [{ type: "string", format: "date-time" }, { type: "null" }],
+    },
   },
   additionalProperties: false,
 };

@@ -47,6 +47,19 @@ const extractActualValue = async (rule, user, context, session) => {
   const { type, scope, metadata } = rule;
 
   switch (type) {
+    case RuleType.USER_ROLE: {
+      if (!user.roleId) return "";
+      const Role = mongoose.model("Role");
+      let roleName = "";
+      if (typeof user.roleId === "object" && user.roleId.name) {
+        roleName = user.roleId.name;
+      } else {
+        const role = await Role.findById(user.roleId).session(session);
+        if (role) roleName = role.name;
+      }
+      return roleName.toUpperCase();
+    }
+
     case RuleType.TIER: {
       const Tier = mongoose.model("Tier");
       if (scope === RuleScope.SEASON) {
@@ -303,6 +316,10 @@ const applyOperator = (actualValue, operator, expectedValue) => {
         typeof actualValue === "string" &&
         typeof parsedExpectedValue === "string"
       ) {
+        const normExpected = parsedExpectedValue.trim().toUpperCase();
+        if (normExpected === "BOTH" || normExpected === "ALL") {
+          return true;
+        }
         return (
           actualValue.trim().toLowerCase() ===
           parsedExpectedValue.trim().toLowerCase()

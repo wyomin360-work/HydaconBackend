@@ -50,27 +50,80 @@ const createContent = async (data) => {
 const updateContent = async (id, data) => {
   validatePlacements(data.placements);
 
-  // right after validatePlacements, before findByIdAndUpdate
   const existing = await Content.findById(id);
   if (!existing) {
     throw new AppError("Content not found", 404);
   }
+
+  // Normalize audience if targetAudience or targetRoles supplied
+  if (data.targetAudience || data.targetRoles) {
+    const role = data.targetAudience || (Array.isArray(data.targetRoles) ? data.targetRoles[0] : data.targetRoles);
+    data.audience = {
+      targetRoles: [role],
+      roles: [role],
+    };
+    delete data.targetAudience;
+    delete data.targetRoles;
+  }
+
+  // Normalize status if string ("active" / "disabled") supplied
+  if (data.status !== undefined) {
+    if (typeof data.status === "string") {
+      data.active = data.status === "active";
+    } else if (typeof data.status === "boolean") {
+      data.active = data.status;
+    }
+    delete data.status;
+  }
+
+  // Normalize singleImage / galleryImages to media array if media not directly provided
+  if (!data.media && (data.singleImage || data.galleryImages)) {
+    const type = data.type || existing.type;
+    const popupType = data.popupType || existing.popupType;
+    if (type === "CAMPAIGN") {
+      data.media = [data.singleImage, ...(data.galleryImages || [])].filter(Boolean);
+    } else if (type === "POPUP" && popupType === "MODAL_POPUP") {
+      data.media = (data.galleryImages || []).filter(Boolean);
+    } else if (data.singleImage) {
+      data.media = [data.singleImage];
+    }
+    delete data.singleImage;
+    delete data.galleryImages;
+  }
+
+  if (data.frequency === "ONCE") {
+    data.showOnce = true;
+  }
+
+  // Remove read-only / metadata properties if present
+  delete data._id;
+  delete data.id;
+  delete data.createdAt;
+  delete data.updatedAt;
+  delete data.__v;
 
   const resolvedType = data.type !== undefined ? data.type : existing.type;
   const resolvedActive = data.active !== undefined ? data.active : existing.active;
   const resolvedPlacements =
     data.placements !== undefined ? data.placements : existing.placements;
 
-  if (resolvedType === "POPUP" && resolvedActive) {
-    const conflict = await hasActivePopupConflict(resolvedPlacements, id);
-    if (conflict) {
-      data.active = false;
-    }
+  if (resolvedType === "POPUP" && resolvedActive && resolvedPlacements && resolvedPlacements.length > 0) {
+    // Deactivate any other existing active popups for overlapping placements
+    await Content.updateMany(
+      {
+        _id: { $ne: id },
+        type: "POPUP",
+        active: true,
+        placements: { $in: resolvedPlacements },
+      },
+      { $set: { active: false } }
+    );
   }
 
-  const content = await Content.findByIdAndUpdate(id, data, { new: true });
+  const content = await Content.findByIdAndUpdate(id, { $set: data }, { new: true, runValidators: true });
   return content;
 };
+
 const deleteContent = async (id) => {
   const content = await Content.findByIdAndDelete(id);
   if (!content) {
@@ -110,17 +163,39 @@ const listContent = async (query = {}) => {
   };
 };
 
-const getHomepageContent = async (userId = null) => {
-  const now = new Date();
+// Helper: Resolve role from database user object
+const getUserRole = async (userId) => {
+  if (!userId) return "ALL";
+  const user = await User.findById(userId).populate("roleId").lean();
+  if (user && user.roleId && user.roleId.name) {
+    return user.roleId.name.toUpperCase().replace(/\s+/g, "_");
+  }
+  return "ALL";
+};
 
-  // Find active content where current date is within start/end dates (or dates are null)
-  const activeContents = await Content.find({
+// Helper: Fetch active role-filtered contents
+const getActiveContentsForRole = async (userRole) => {
+  const now = new Date();
+  return await Content.find({
     active: true,
     $and: [
       { $or: [{ startDate: null }, { startDate: { $lte: now } }] },
       { $or: [{ endDate: null }, { endDate: { $gte: now } }] },
     ],
-  }).sort({ priority: -1, sortOrder: 1 });
+    $or: [
+      { "audience.roles": { $in: [userRole, "ALL"] } },
+      { "audience.roles": [] },
+      { "audience.roles": { $exists: false } },
+      { "audience": null },
+    ],
+  })
+    .sort({ priority: -1, sortOrder: 1 })
+    .lean();
+};
+
+const getHomepageContent = async (userId = null) => {
+  const userRole = await getUserRole(userId);
+  const activeContents = await getActiveContentsForRole(userRole);
 
   // Get viewed popups for the user
   let viewedIds = [];
@@ -159,7 +234,8 @@ const getHomepageContent = async (userId = null) => {
 };
 
 const getPlacementContent = async (placement, userId = null) => {
-  const now = new Date();
+  const userRole = await getUserRole(userId);
+  const activeContents = await getActiveContentsForRole(userRole);
 
   // Get viewed popups for the user
   let viewedIds = [];
@@ -170,21 +246,12 @@ const getPlacementContent = async (placement, userId = null) => {
     }
   }
 
-  const contents = await Content.find({
-    active: true,
-    placements: placement,
-    $and: [
-      { $or: [{ startDate: null }, { startDate: { $lte: now } }] },
-      { $or: [{ endDate: null }, { endDate: { $gte: now } }] },
-    ],
-  }).sort({ priority: -1, sortOrder: 1 });
-
-  return contents.filter((content) => {
+  return activeContents.filter((content) => {
     const isOnce = content.frequency === "ONCE" || content.showOnce;
     if (isOnce && viewedIds.includes(content._id.toString())) {
       return false;
     }
-    return true;
+    return content.placements && content.placements.includes(placement);
   });
 };
 
