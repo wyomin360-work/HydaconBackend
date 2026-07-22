@@ -35,6 +35,11 @@ router.get(
   handleError(controller.adminListEvents),
 );
 router.get(
+  paths.adminSummary,
+  verification.verifyAdmin,
+  handleError(controller.adminGetEventSummary),
+);
+router.get(
   paths.adminDetails,
   verification.verifyAdmin,
   handleError(controller.adminGetEventDetails),

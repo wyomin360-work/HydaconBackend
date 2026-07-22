@@ -719,11 +719,51 @@ async function userMyEvents(userId, query = {}) {
   };
 }
 
+/**
+ * Returns total event counts per status in a single aggregation query.
+ * Industry-standard: MongoDB $facet aggregation for multi-bucket counts.
+ */
+async function adminGetEventSummary() {
+  syncEventStatuses().catch((err) =>
+    console.error("syncEventStatuses error:", err),
+  );
+
+  const [result] = await Event.aggregate([
+    {
+      $facet: {
+        all: [{ $count: "count" }],
+        upcoming: [
+          { $match: { status: EVENT_STATUS.UPCOMING } },
+          { $count: "count" },
+        ],
+        ongoing: [
+          { $match: { status: EVENT_STATUS.ONGOING } },
+          { $count: "count" },
+        ],
+        completed: [
+          { $match: { status: EVENT_STATUS.COMPLETED } },
+          { $count: "count" },
+        ],
+      },
+    },
+  ]);
+
+  return {
+    data: {
+      all: result?.all?.[0]?.count ?? 0,
+      upcoming: result?.upcoming?.[0]?.count ?? 0,
+      ongoing: result?.ongoing?.[0]?.count ?? 0,
+      completed: result?.completed?.[0]?.count ?? 0,
+    },
+  };
+}
+
 module.exports = {
   adminCreateEvent,
   adminUpdateEvent,
   adminDeleteEvent,
   adminListEvents,
+  adminGetEventSummary,
   adminGetEventDetails,
   adminInviteUser,
   adminCheckIn,

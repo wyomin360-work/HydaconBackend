@@ -24,6 +24,10 @@ exports.adminListEvents = async (req, res) => {
   const response = await eventsService.adminListEvents(req.query);
   return sendResponse(res, response);
 };
+exports.adminGetEventSummary = async (req, res) => {
+  const response = await eventsService.adminGetEventSummary();
+  return sendResponse(res, response);
+};
 exports.adminGetEventDetails = async (req, res) => {
   const response = await eventsService.adminGetEventDetails(req.params.eventId);
   return sendResponse(res, response);

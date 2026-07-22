@@ -5,6 +5,7 @@ module.exports = {
   adminUpdate: "/admin/update/:eventId",
   adminDelete: "/admin/delete/:eventId",
   adminList: "/admin/list",
+  adminSummary: "/admin/summary",
   adminDetails: "/admin/details/:eventId",
   adminInviteUser: "/admin/invite/:eventId", // POST { userId }
   adminCheckIn: "/admin/checkin/:registrationId", // mark user as checked_in
