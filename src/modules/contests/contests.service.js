@@ -488,11 +488,46 @@ async function userClaimReward(contestId, userId) {
   };
 }
 
+/**
+ * Returns total contest counts per status in a single aggregation query.
+ */
+async function adminGetContestSummary() {
+  const [result] = await Contest.aggregate([
+    {
+      $facet: {
+        all: [{ $count: "count" }],
+        upcoming: [
+          { $match: { status: CONTEST_STATUS.UPCOMING } },
+          { $count: "count" },
+        ],
+        active: [
+          { $match: { status: CONTEST_STATUS.ACTIVE } },
+          { $count: "count" },
+        ],
+        completed: [
+          { $match: { status: CONTEST_STATUS.COMPLETED } },
+          { $count: "count" },
+        ],
+      },
+    },
+  ]);
+
+  return {
+    data: {
+      all: result?.all?.[0]?.count ?? 0,
+      upcoming: result?.upcoming?.[0]?.count ?? 0,
+      active: result?.active?.[0]?.count ?? 0,
+      completed: result?.completed?.[0]?.count ?? 0,
+    },
+  };
+}
+
 module.exports = {
   adminCreateContest,
   adminUpdateContest,
   adminDeleteContest,
   adminListContests,
+  adminGetContestSummary,
   adminGetContestDetails,
   adminFinaliseContest,
   userListContests,
@@ -502,3 +537,4 @@ module.exports = {
   syncUserContestEntries,
   userClaimReward,
 };
+

@@ -5,6 +5,7 @@ module.exports = {
   adminUpdate: "/admin/update/:contestId",
   adminDelete: "/admin/delete/:contestId",
   adminList: "/admin/list",
+  adminSummary: "/admin/summary",
   adminDetails: "/admin/details/:contestId",
   adminFinalise: "/admin/finalise/:contestId", // triggers reward distribution
   // User

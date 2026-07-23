@@ -26,6 +26,10 @@ exports.adminListContests = async (req, res) => {
   const response = await contestsService.adminListContests(req.query);
   return sendResponse(res, response);
 };
+exports.adminGetContestSummary = async (req, res) => {
+  const response = await contestsService.adminGetContestSummary();
+  return sendResponse(res, response);
+};
 exports.adminGetContestDetails = async (req, res) => {
   const response = await contestsService.adminGetContestDetails(
     req.params.contestId,

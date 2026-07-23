@@ -34,6 +34,11 @@ router.get(
   handleError(controller.adminListContests),
 );
 router.get(
+  paths.adminSummary,
+  verification.verifyAdmin,
+  handleError(controller.adminGetContestSummary),
+);
+router.get(
   paths.adminDetails,
   verification.verifyAdmin,
   handleError(controller.adminGetContestDetails),
