@@ -171,6 +171,10 @@ async function adminFinaliseContest(contestId, adminId) {
     sendFailResponse(CONTEST_ERRORS.CONTEST_NOT_FOUND, 404);
   }
 
+  if (contest.status !== CONTEST_STATUS.ONGOING) {
+    sendFailResponse("Only ongoing contests can be finalised", 400);
+  }
+
   // Mark as completed and deactivate
   contest.status = CONTEST_STATUS.COMPLETED;
   contest.active = false;
