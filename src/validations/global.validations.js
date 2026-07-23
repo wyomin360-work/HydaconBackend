@@ -4,7 +4,7 @@ const paginationType = {
     page: { type: "number", minimum: 1 },
     limit: { type: "number", minimum: 1 },
   },
-  required: ["page", "limit"],
+  additionalProperties: true,
 };
 
 module.exports = { paginationType };

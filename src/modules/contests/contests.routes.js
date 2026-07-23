@@ -48,6 +48,11 @@ router.post(
   verification.verifyAdmin,
   handleError(controller.adminFinaliseContest),
 );
+router.post(
+  paths.adminCancel,
+  verification.verifyAdmin,
+  handleError(controller.adminCancelContest),
+);
 
 // ─── User ─────────────────────────────────────────────────────────────────────
 router.get(

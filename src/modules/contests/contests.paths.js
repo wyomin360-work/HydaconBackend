@@ -8,6 +8,7 @@ module.exports = {
   adminSummary: "/admin/summary",
   adminDetails: "/admin/details/:contestId",
   adminFinalise: "/admin/finalise/:contestId", // triggers reward distribution
+  adminCancel: "/admin/cancel/:contestId",
   // User
   userList: "/user/list",
   userDetails: "/user/details/:contestId",

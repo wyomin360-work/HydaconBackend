@@ -37,8 +37,18 @@ exports.adminGetContestDetails = async (req, res) => {
   return sendResponse(res, response);
 };
 exports.adminFinaliseContest = async (req, res) => {
+  const adminId = req.admin?._id || req.admin?.id || req.user?._id;
   const response = await contestsService.adminFinaliseContest(
     req.params.contestId,
+    adminId,
+  );
+  return sendResponse(res, response);
+};
+exports.adminCancelContest = async (req, res) => {
+  const adminId = req.admin?._id || req.admin?.id || req.user?._id;
+  const response = await contestsService.adminCancelContest(
+    req.params.contestId,
+    adminId,
   );
   return sendResponse(res, response);
 };

@@ -1,6 +1,7 @@
 const { Contest } = require("../../schemas/contest.schema");
 const { ContestEntry } = require("../../schemas/contest-entry.schema");
 const User = require("../../schemas/user.schema");
+const { evaluateRuleSet } = require("../rule-set/rule-set.evaluator");
 const { attachId, formatNotification } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const { sendFcmNotifications } = require("../../functions/fcm");
@@ -9,8 +10,6 @@ const {
   CONTEST_STATUS,
   REWARD_TYPE,
   ENTRY_REWARD_STATUS,
-  PRODUCT_SCOPE,
-  TIER_SCOPE,
   CONTEST_FCM_TYPES,
   CONTEST_MESSAGES,
   CONTEST_ERRORS,
@@ -23,7 +22,7 @@ function resolveContestStatus(contest) {
   const now = new Date();
   if (now < new Date(contest.startDate)) return CONTEST_STATUS.UPCOMING;
   if (now > new Date(contest.endDate)) return CONTEST_STATUS.COMPLETED;
-  return CONTEST_STATUS.ACTIVE;
+  return CONTEST_STATUS.ONGOING;
 }
 
 // ─── Admin ───────────────────────────────────────────────────────────────────
@@ -38,10 +37,8 @@ async function adminCreateContest(data, adminId) {
     endDate,
     region,
     prizes,
-    productScope,
-    products,
-    tierScope,
-    tiers,
+    ruleSetId,
+    active,
   } = data;
   const contest = await Contest.create({
     name,
@@ -52,15 +49,13 @@ async function adminCreateContest(data, adminId) {
     endDate: new Date(endDate),
     region: region || null,
     prizes: prizes || [],
-    productScope: productScope || PRODUCT_SCOPE.EVERY_PRODUCT,
-    products: products || [],
-    tierScope: tierScope || TIER_SCOPE.ALL_TIERS,
-    tiers: tiers || [],
+    ruleSetId: ruleSetId || null,
+    active: active !== undefined ? active : true,
     createdBy: adminId,
     status:
       new Date(startDate) > new Date()
         ? CONTEST_STATUS.UPCOMING
-        : CONTEST_STATUS.ACTIVE,
+        : CONTEST_STATUS.ONGOING,
   });
   return {
     message: CONTEST_MESSAGES.CREATED,
@@ -73,12 +68,40 @@ async function adminUpdateContest(contestId, data) {
   if (!contest) {
     sendFailResponse(CONTEST_ERRORS.CONTEST_NOT_FOUND, 404);
   }
+
+  // A completed or cancelled contest cannot be re-activated
+  if (
+    (contest.status === CONTEST_STATUS.COMPLETED ||
+      contest.status === CONTEST_STATUS.CANCELLED ||
+      new Date() > new Date(contest.endDate)) &&
+    data.active === true
+  ) {
+    sendFailResponse("Completed or cancelled contests cannot be re-activated", 400);
+  }
+
   Object.assign(contest, data);
   if (data.startDate || data.endDate) {
     contest.status = resolveContestStatus(contest);
   }
   await contest.save();
   return { message: CONTEST_MESSAGES.UPDATED, data: { updated: true } };
+}
+
+async function adminCancelContest(contestId, adminId) {
+  const contest = await Contest.findById(contestId);
+  if (!contest) {
+    sendFailResponse(CONTEST_ERRORS.CONTEST_NOT_FOUND, 404);
+  }
+  if (contest.status !== CONTEST_STATUS.UPCOMING) {
+    sendFailResponse("Only upcoming contests can be cancelled", 400);
+  }
+  contest.status = CONTEST_STATUS.CANCELLED;
+  contest.active = false;
+  contest.isCancelled = true;
+  if (adminId) contest.cancelledBy = adminId;
+  contest.cancelledAt = new Date();
+  await contest.save();
+  return { message: "Contest cancelled successfully", data: { cancelled: true } };
 }
 
 async function adminDeleteContest(contestId) {
@@ -95,6 +118,18 @@ async function adminListContests(query = {}) {
   const skip = (page - 1) * limit;
   const filter = {};
   if (query.status) filter.status = query.status;
+
+  if (query.search && query.search.trim()) {
+    filter.name = { $regex: query.search.trim(), $options: "i" };
+  }
+
+  if (query.startDate) {
+    filter.startDate = { $gte: new Date(query.startDate) };
+  }
+
+  if (query.endDate) {
+    filter.endDate = { $lte: new Date(query.endDate) };
+  }
 
   const [contests, total] = await Promise.all([
     Contest.find(filter).sort({ startDate: -1 }).skip(skip).limit(limit).lean(),
@@ -113,8 +148,9 @@ async function adminListContests(query = {}) {
 
 async function adminGetContestDetails(contestId) {
   const contest = await Contest.findById(contestId)
-    .populate("products")
-    .populate("tiers")
+    .populate("ruleSetId")
+    .populate({ path: "finalizedBy", select: "name email" })
+    .populate({ path: "cancelledBy", select: "name email" })
     .lean();
   if (!contest) {
     sendFailResponse(CONTEST_ERRORS.CONTEST_NOT_FOUND, 404);
@@ -127,17 +163,21 @@ async function adminGetContestDetails(contestId) {
 }
 
 /**
- * Finalise a contest: compute ranks, award bonus points (not tier points) and gifts.
+ * Finalise a contest: compute ranks, award bonus points and gifts. Set status to completed, active to false, and record audit fields.
  */
-async function adminFinaliseContest(contestId) {
+async function adminFinaliseContest(contestId, adminId) {
   const contest = await Contest.findById(contestId);
   if (!contest) {
     sendFailResponse(CONTEST_ERRORS.CONTEST_NOT_FOUND, 404);
   }
-  if (contest.status !== CONTEST_STATUS.COMPLETED) {
-    contest.status = CONTEST_STATUS.COMPLETED;
-    await contest.save();
-  }
+
+  // Mark as completed and deactivate
+  contest.status = CONTEST_STATUS.COMPLETED;
+  contest.active = false;
+  contest.isFinalizedManually = true;
+  if (adminId) contest.finalizedBy = adminId;
+  contest.finalizedAt = new Date();
+  await contest.save();
 
   // Fetch all entries ordered by qualificationPoints DESC
   const entries = await ContestEntry.find({ contestId })
@@ -412,25 +452,28 @@ async function syncUserContestEntries(
 ) {
   const now = new Date();
   const activeContests = await Contest.find({
-    status: CONTEST_STATUS.ACTIVE,
+    active: true,
+    status: { $in: [CONTEST_STATUS.ONGOING, CONTEST_STATUS.ACTIVE] },
     startDate: { $lte: now },
     endDate: { $gte: now },
-  }).lean();
+  }).populate("ruleSetId").lean();
+
+  const user = await User.findById(userId).lean();
+  if (!user) return;
 
   for (const contest of activeContests) {
-    // A. Check Tier eligibility
-    if (contest.tierScope === TIER_SCOPE.SELECTED_TIERS) {
-      const tierStrList = (contest.tiers || []).map((t) => String(t));
-      if (!currentTierId || !tierStrList.includes(String(currentTierId))) {
-        continue;
-      }
-    }
-
-    // B. Check Product eligibility
-    if (contest.productScope === PRODUCT_SCOPE.SELECTED_PRODUCTS) {
-      const prodStrList = (contest.products || []).map((p) => String(p));
-      if (!productId || !prodStrList.includes(String(productId))) {
-        continue;
+    if (contest.ruleSetId) {
+      try {
+        const ruleSetObj =
+          typeof contest.ruleSetId === "object"
+            ? contest.ruleSetId
+            : await require("mongoose").model("RuleSet").findById(contest.ruleSetId).lean();
+        if (ruleSetObj) {
+          const isEligible = await evaluateRuleSet(ruleSetObj, user, { productId, currentTierId });
+          if (!isEligible) continue;
+        }
+      } catch (err) {
+        console.error("RuleSet evaluation failed for contest:", contest._id, err);
       }
     }
 
@@ -500,8 +543,12 @@ async function adminGetContestSummary() {
           { $match: { status: CONTEST_STATUS.UPCOMING } },
           { $count: "count" },
         ],
-        active: [
-          { $match: { status: CONTEST_STATUS.ACTIVE } },
+        ongoing: [
+          {
+            $match: {
+              status: { $in: [CONTEST_STATUS.ONGOING, CONTEST_STATUS.ACTIVE] },
+            },
+          },
           { $count: "count" },
         ],
         completed: [
@@ -512,11 +559,14 @@ async function adminGetContestSummary() {
     },
   ]);
 
+  const ongoingCount = result?.ongoing?.[0]?.count ?? 0;
+
   return {
     data: {
       all: result?.all?.[0]?.count ?? 0,
       upcoming: result?.upcoming?.[0]?.count ?? 0,
-      active: result?.active?.[0]?.count ?? 0,
+      ongoing: ongoingCount,
+      active: ongoingCount,
       completed: result?.completed?.[0]?.count ?? 0,
     },
   };
@@ -525,6 +575,7 @@ async function adminGetContestSummary() {
 module.exports = {
   adminCreateContest,
   adminUpdateContest,
+  adminCancelContest,
   adminDeleteContest,
   adminListContests,
   adminGetContestSummary,

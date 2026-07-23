@@ -37,44 +37,35 @@ const contestSchema = new mongoose.Schema(
       enum: Object.values(CONTEST_STATUS),
       default: CONTEST_STATUS.UPCOMING,
     },
-    productScope: {
-      type: String,
-      enum: Object.values(PRODUCT_SCOPE),
-      default: PRODUCT_SCOPE.EVERY_PRODUCT,
+    ruleSetId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "RuleSet",
     },
-    products: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Product",
-      },
-    ],
-    tierScope: {
-      type: String,
-      enum: Object.values(TIER_SCOPE),
-      default: TIER_SCOPE.ALL_TIERS,
-    },
-    tiers: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Tier",
-      },
-    ],
     prizes: {
       type: [prizeSchema],
       default: () => [],
     },
     active: { type: Boolean, default: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "Admin" },
+    isFinalizedManually: { type: Boolean, default: false },
+    finalizedBy: { type: mongoose.Schema.Types.ObjectId, ref: "Admin" },
+    finalizedAt: { type: Date },
+    isCancelled: { type: Boolean, default: false },
+    cancelledBy: { type: mongoose.Schema.Types.ObjectId, ref: "Admin" },
+    cancelledAt: { type: Date },
   },
   { timestamps: true },
 );
 
-// Auto-update status based on dates
+// Auto-update status based on dates (excluding CANCELLED)
 contestSchema.pre("find", function () {
   const now = new Date();
   this.model
     .updateMany(
-      { startDate: { $gt: now }, status: { $ne: CONTEST_STATUS.UPCOMING } },
+      {
+        startDate: { $gt: now },
+        status: { $nin: [CONTEST_STATUS.UPCOMING, CONTEST_STATUS.CANCELLED] },
+      },
       { $set: { status: CONTEST_STATUS.UPCOMING } },
     )
     .exec();
@@ -83,14 +74,23 @@ contestSchema.pre("find", function () {
       {
         startDate: { $lte: now },
         endDate: { $gte: now },
-        status: { $ne: CONTEST_STATUS.ACTIVE },
+        status: {
+          $nin: [
+            CONTEST_STATUS.ONGOING,
+            CONTEST_STATUS.CANCELLED,
+            CONTEST_STATUS.COMPLETED,
+          ],
+        },
       },
-      { $set: { status: CONTEST_STATUS.ACTIVE } },
+      { $set: { status: CONTEST_STATUS.ONGOING } },
     )
     .exec();
   this.model
     .updateMany(
-      { endDate: { $lt: now }, status: { $ne: CONTEST_STATUS.COMPLETED } },
+      {
+        endDate: { $lt: now },
+        status: { $nin: [CONTEST_STATUS.COMPLETED, CONTEST_STATUS.CANCELLED] },
+      },
       { $set: { status: CONTEST_STATUS.COMPLETED } },
     )
     .exec();

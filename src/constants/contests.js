@@ -1,7 +1,9 @@
 const CONTEST_STATUS = {
   UPCOMING: "upcoming",
-  ACTIVE: "active",
+  ONGOING: "ongoing",
+  ACTIVE: "ongoing",
   COMPLETED: "completed",
+  CANCELLED: "cancelled",
 };
 
 const REWARD_TYPE = {
