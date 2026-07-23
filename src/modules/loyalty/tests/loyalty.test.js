@@ -1111,7 +1111,7 @@ describe("Loyalty and Tier Progression Engine", () => {
     let cronModule;
 
     beforeAll(() => {
-      cronModule = require("../../../functions/cron");
+      cronModule = require("../../../cron");
     });
 
     it("should dynamically evaluate new tier configs based on scaled carry-forward points on rollover", async () => {

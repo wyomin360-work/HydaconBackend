@@ -20,6 +20,8 @@ const userService = require("../user/user.service");
 const loyaltyService = require("../loyalty/loyalty.service");
 const TierConfiguration = require("../../schemas/tier-configuration.schema");
 const rewardsService = require("../rewards/rewards.service");
+const cacheService = require("../../utils/cacheService");
+const queueService = require("../../utils/queueService");
 
 async function listRedeems(data) {
   const { page = 1, limit = 20 } = data;
@@ -304,13 +306,19 @@ async function isCampaignEligible(campaign, user, userId, actualProductId) {
 
   // C. Total campaign scratch limit
   if (campaign.totalScratchLimit > 0) {
-    const totalScans = await Redeem.countDocuments({ scratchCardCampaignId: campaign._id });
+    const totalScans = await cacheService.getOrInitialize(
+      `campaign:scans:${campaign._id}`,
+      () => Redeem.countDocuments({ scratchCardCampaignId: campaign._id })
+    );
     if (totalScans >= campaign.totalScratchLimit) return false;
   }
 
   // D. Per-user scratch limit
   if (campaign.perUserScratchLimit > 0) {
-    const userScans = await Redeem.countDocuments({ userId, scratchCardCampaignId: campaign._id });
+    const userScans = await cacheService.getOrInitialize(
+      `campaign:scans:${campaign._id}:user:${userId}`,
+      () => Redeem.countDocuments({ userId, scratchCardCampaignId: campaign._id })
+    );
     if (userScans >= campaign.perUserScratchLimit) return false;
   }
 
@@ -384,10 +392,13 @@ async function selectCampaignReward(campaign, userId) {
     if (chosenGift && chosenGift.active) {
       if (chosenReward.stockLimit > 0) {
         // Per-campaign gift cap: count how many times this gift was already awarded
-        const awardedCount = await Redeem.countDocuments({
-          scratchCardCampaignId: campaign._id,
-          scratchCardGiftId: chosenGift._id,
-        });
+        const awardedCount = await cacheService.getOrInitialize(
+          `campaign:scans:${campaign._id}:gift:${chosenGift._id}`,
+          () => Redeem.countDocuments({
+            scratchCardCampaignId: campaign._id,
+            scratchCardGiftId: chosenGift._id,
+          })
+        );
         rewardType = awardedCount >= chosenReward.stockLimit ? "POINTS" : "GIFT";
       } else {
         // General stock check: stockQuantity minus already-reserved slots
@@ -621,38 +632,7 @@ async function handleScratchCardGiftAward({ userId, redeem, chosenGift, matchedC
 // SECTION 6 — Post-Transaction Actions
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/**
- * Marks the Reward document as redeemed so it cannot be scanned again.
- * Called after the transaction commits — the Redeem record already exists as
- * proof of the scan, so this is safe to do outside the transaction.
- * @param {object} reward - Mongoose Reward document
- * @param {string} userId - Who redeemed it
- */
-async function finalizeReward(reward, userId) {
-  reward.isRedeemed = true;
-  reward.redeemedAt = new Date();
-  reward.redeemedBy = userId;
-  reward.active = false;
-  await reward.save();
-}
 
-/**
- * Sends a push notification to all of the user's registered FCM tokens to confirm
- * the successful scan and show how many points were earned.
- * This is intentionally fire-and-forget — an FCM failure must never block the response.
- * @param {object}      user          - Mongoose User document (needs fcmTokens, enableNotification)
- * @param {number}      weightedPoints
- * @param {string|null} productName
- */
-function sendScanSuccessNotification(user, weightedPoints, productName) {
-  if (!user?.fcmTokens?.length || !user?.enableNotification) return;
-  const rewardNotification = APP_NOTIFICATIONS.rewards;
-  sendFcmNotifications(
-    user.fcmTokens,
-    rewardNotification.qrScanSuccess.title,
-    formatNotification(rewardNotification.qrScanSuccess.body, { coins: weightedPoints, productName }),
-  ).catch(() => { }); // fire-and-forget
-}
 
 /**
  * Syncs the in-memory user object's point totals and scan counters to reflect
@@ -778,31 +758,29 @@ async function createRedeem(redeemData, reqUser = null) {
 
   if (!newRedeem) sendFailResponse("reward redeem failed");
 
-  // 7–12. Post-transaction side-effects (run sequentially after the commit)
-  await finalizeReward(reward, userId);
-  await userService.creditUserScanPoints(userId, weightedPoints);
-  await referralService.handleScanReferralMilestones(userId, user);
-  await loyaltyService.processLoyaltyAndContestsAfterScan(
+  // Increment campaign/gift limits in Redis/Cache
+  if (matchedCampaign) {
+    await cacheService.incr(`campaign:scans:${matchedCampaign._id}`);
+    await cacheService.incr(`campaign:scans:${matchedCampaign._id}:user:${userId}`);
+    if (chosenGift && rewardType === "GIFT") {
+      await cacheService.incr(`campaign:scans:${matchedCampaign._id}:gift:${chosenGift._id}`);
+    }
+  }
+
+  // 7–12. Post-transaction side-effects delegated to queueService
+  await queueService.addJob("process-scan-side-effects", {
     userId,
     weightedPoints,
-    newRedeem._id,
+    redeemId: newRedeem._id,
     actualProductId,
-    user?.currentTierId
-  );
-  sendScanSuccessNotification(user, weightedPoints, product?.name); // fire-and-forget
-
-  if (newRedeem.scratchCardRewardType === "POINTS" && newRedeem.scratchCardBonusPoints > 0) {
-    await rewardsService.awardRewardToUser(
-      userId,
-      { type: "POINTS", amount: newRedeem.scratchCardBonusPoints },
-      {
-        cause: "SCRATCH_CARD",
-        causeId: matchedCampaign ? matchedCampaign._id : null,
-        causeTitle: `Scratch card bonus points from scan of ${product?.name || "product"}`,
-        referenceId: newRedeem._id,
-      }
-    );
-  }
+    rewardId: reward._id,
+    currentTierId: user?.currentTierId,
+    scratchCardRewardType: newRedeem.scratchCardRewardType,
+    scratchCardBonusPoints: newRedeem.scratchCardBonusPoints,
+    scratchCardCampaignId: matchedCampaign ? matchedCampaign._id : null,
+    scratchCardBonusTitle: `Scratch card bonus points from scan of ${product?.name || "product"}`,
+    productName: product?.name || null,
+  });
 
   // 13. Keep in-memory user state in sync (for test-suite assertions)
   syncUserInMemoryState(user, weightedPoints, newRedeem.scratchCardRewardType, newRedeem.scratchCardBonusPoints);

@@ -1,7 +1,7 @@
 require("dotenv").config();
 
 const { isSmsConfigured } = require("./src/functions/sms");
-const { initCronJobs } = require("./src/functions/cron");
+const { initCronJobs } = require("./src/cron");
 
 const {
   seedDefaultLoyaltyData,

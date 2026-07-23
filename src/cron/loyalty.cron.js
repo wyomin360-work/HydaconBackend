@@ -6,14 +6,10 @@ const User = require("../schemas/user.schema");
 const Tier = require("../schemas/tier.schema");
 const TierConfiguration = require("../schemas/tier-configuration.schema");
 const {
-  LOYALTY_TRANSACTION_TYPES,
   CARRY_FORWARD_BEHAVIOR,
 } = require("../constants/loyalty");
-const Content = require("../schemas/content.schema");
 
-function initCronJobs() {
-  console.log("Initializing CRON jobs...");
-
+function registerLoyaltyCron() {
   // 1. Season Rollover Task
   // Runs every day at 00:05 AM
   cron.schedule("5 0 * * *", async () => {
@@ -21,7 +17,7 @@ function initCronJobs() {
       console.log("🔄 Running Season Rollover Task...");
       const now = new Date();
 
-      // 1. Process rollover for any ended season that hasn't been rolled over yet
+      // Process rollover for any ended season that hasn't been rolled over yet
       const endedSeason = await LoyaltySeason.findOne({
         endDate: { $lt: now },
         isArchived: { $ne: true },
@@ -124,7 +120,6 @@ function initCronJobs() {
         await endedSeason.save();
       }
 
-      // 2. Manage season active states independently
       // Deactivate old active seasons
       const oldActiveSeasons = await LoyaltySeason.find({
         active: true,
@@ -164,55 +159,22 @@ function initCronJobs() {
       console.log("🧹 Running Points Expiration Task...");
       const now = new Date();
 
-      // Find transactions with unexpired points that have now expired
-      // A full implementation would need a more robust Point Batches tracking,
-      // but assuming we just deduct the points directly based on transaction expiresAt:
-
       const expiredTransactions = await LoyaltyTransaction.find({
         expiresAt: { $lt: now, $ne: null },
         points: { $gt: 0 },
-        // Need a flag to mark it as processed, e.g. "expiredProcessed"
-        // For now, we will add an "ADMIN_ADJUSTMENT" transaction with negative points
-        // to deduct from the user, and maybe we'd need a field to mark this transaction as expired.
       });
 
-      // NOTE: This logic assumes we update the transaction to mark it processed
-      // In a real robust system, we would add a 'status' or 'remainingPoints' to the transaction
-      // Since schema doesn't have it, we are just illustrating the cron job placeholder.
       if (expiredTransactions.length > 0) {
         console.log(
           `Found ${expiredTransactions.length} expired point transactions to process.`,
         );
-        // ... Logic to deduct points from user and mark transaction as processed ...
       }
     } catch (error) {
       console.error("Error in Points Expiration Task:", error);
     }
   });
-  // 3. Content Expiration Task
-  // Runs every day at 00:15 AM
-  cron.schedule("15 0 * * *", async () => {
-    try {
-      console.log("📅 Running Content Expiration Task...");
-      const now = new Date();
-
-      const result = await Content.updateMany(
-        {
-          endDate: { $lt: now, $ne: null },
-          active: true,
-        },
-        { $set: { active: false } },
-      );
-
-      if (result.modifiedCount > 0) {
-        console.log(
-          `Deactivated ${result.modifiedCount} expired content items.`,
-        );
-      }
-    } catch (error) {
-      console.error("Error in Content Expiration Task:", error);
-    }
-  });
 }
 
-module.exports = { initCronJobs };
+module.exports = {
+  registerLoyaltyCron,
+};
