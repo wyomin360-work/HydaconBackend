@@ -1,11 +1,11 @@
 const mongoose = require("mongoose");
-const ruleSetEvaluator = require("../../src/modules/rule-set/rule-set.evaluator");
+const ruleSetEvaluator = require("../rule-set.evaluator");
 const {
   RuleType,
   RuleScope,
   RuleOperator,
   RuleLogicOperator,
-} = require("../../src/schemas/rule-set.schema");
+} = require("../../../schemas/rule-set.schema");
 
 // Mock mongoose
 jest.mock("mongoose", () => {

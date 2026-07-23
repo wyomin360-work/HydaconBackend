@@ -135,7 +135,13 @@ To ensure uniform API response structures and clean control flow:
 
 ## 8. Unit Testing Requirements
 
-- **Test Placement**: Every feature module must have corresponding unit test suites located in `tests/unit/<feature>.test.js` (service tests) and `tests/unit/<feature>.controller.test.js` (controller tests).
+- **Test Colocation**: To keep modules self-contained, all feature unit test suites **must** be colocated inside their respective feature module directories under a `tests/` subfolder:
+  - Service tests: `src/modules/<feature>/tests/<feature>.test.js`
+  - Controller tests: `src/modules/<feature>/tests/<feature>.controller.test.js`
+- **Other Unit Tests**: Utility and middleware unit tests are colocated under their respective directories:
+  - Middleware tests: `src/middlewares/tests/<middleware>.test.js`
+  - Function tests: `src/functions/tests/<utility>.test.js`
+- **Centralized Integration & Setup**: The root `/tests` directory is reserved strictly for global configurations (e.g. `tests/setup.js`) and cross-module integration or system-wide E2E tests.
 - **Service Tests**: Must cover success flows, boundary conditions, error throwing (`rejects.toThrow`), capacity limits, and eligibility checks using Jest mocks (`jest.mock(...)`) for Mongoose models and third-party functions.
 - **Controller Tests**: Must verify parameter extraction (req.body, req.params, req.query, req.user) and correct delegation to service methods.
 

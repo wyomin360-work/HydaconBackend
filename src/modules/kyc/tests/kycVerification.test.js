@@ -1,9 +1,9 @@
-const { requireVerifiedKyc } = require("../../src/middlewares/kycVerification");
-const User = require("../../src/schemas/user.schema");
+const { requireVerifiedKyc } = require("../../../middlewares/kycVerification");
+const User = require("../../../schemas/user.schema");
 const { KYC_STATUS } = User;
-const AppError = require("../../src/utils/appError");
+const AppError = require("../../../utils/appError");
 
-jest.mock("../../src/schemas/user.schema");
+jest.mock("../../../schemas/user.schema");
 
 describe("requireVerifiedKyc middleware", () => {
   let req, res, next;

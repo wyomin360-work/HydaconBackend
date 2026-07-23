@@ -3,21 +3,21 @@ jest.mock("bcrypt", () => ({
   compare: jest.fn(),
 }));
 
-jest.mock("../../src/functions/nodemailer", () => ({
+jest.mock("../../../functions/nodemailer", () => ({
   sendMail: jest.fn().mockResolvedValue(true),
   sendTemplateEmail: jest.fn().mockResolvedValue(true),
 }));
 
-jest.mock("../../src/utils/s3", () => ({
+jest.mock("../../../utils/s3", () => ({
   checkS3FileExists: jest.fn().mockResolvedValue(true),
   deleteS3File: jest.fn().mockResolvedValue(true),
 }));
 
-const kycService = require("../../src/modules/kyc/kyc.service");
-const User = require("../../src/schemas/user.schema");
+const kycService = require("../kyc.service");
+const User = require("../../../schemas/user.schema");
 const fs = require("fs");
 
-jest.mock("../../src/schemas/user.schema");
+jest.mock("../../../schemas/user.schema");
 
 jest.mock("sharp", () => {
   return jest.fn().mockReturnValue({
@@ -67,7 +67,7 @@ describe("kyc.service unit tests", () => {
     });
 
     it("should throw error if file does not exist on S3", async () => {
-      const { checkS3FileExists } = require("../../src/utils/s3");
+      const { checkS3FileExists } = require("../../../utils/s3");
       checkS3FileExists.mockResolvedValueOnce(false);
 
       await expect(
@@ -413,7 +413,7 @@ describe("kyc.service unit tests", () => {
       };
       User.findById.mockResolvedValue(mockUser);
 
-      const { sendTemplateEmail } = require("../../src/functions/nodemailer");
+      const { sendTemplateEmail } = require("../../../functions/nodemailer");
       sendTemplateEmail.mockClear();
 
       await kycService.reviewKycDocument("userId123", {
@@ -452,7 +452,7 @@ describe("kyc.service unit tests", () => {
       };
       User.findById.mockResolvedValue(mockUser);
 
-      const { sendTemplateEmail } = require("../../src/functions/nodemailer");
+      const { sendTemplateEmail } = require("../../../functions/nodemailer");
       sendTemplateEmail.mockClear();
 
       await kycService.reviewKycDocument("userId123", {
@@ -492,7 +492,7 @@ describe("kyc.service unit tests", () => {
       };
       User.findById.mockResolvedValue(mockUser);
 
-      const { sendTemplateEmail } = require("../../src/functions/nodemailer");
+      const { sendTemplateEmail } = require("../../../functions/nodemailer");
       sendTemplateEmail.mockClear();
 
       await kycService.reviewKycDocument("userId123", {

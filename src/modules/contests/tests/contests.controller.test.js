@@ -1,7 +1,7 @@
-const contestsController = require("../../src/modules/contests/contests.controller");
-const contestsService = require("../../src/modules/contests/contests.service");
+const contestsController = require("../contests.controller");
+const contestsService = require("../contests.service");
 
-jest.mock("../../src/modules/contests/contests.service");
+jest.mock("../contests.service");
 
 const mockRes = () => {
   const res = {};

@@ -1,17 +1,17 @@
-const loyaltyService = require("../../src/modules/loyalty/loyalty.service");
-const loyaltyController = require("../../src/modules/loyalty/loyalty.controller");
-const Tier = require("../../src/schemas/tier.schema");
-const LoyaltySeason = require("../../src/schemas/loyalty-season.schema");
-const TierConfiguration = require("../../src/schemas/tier-configuration.schema");
-const UserTierProgress = require("../../src/schemas/user-tier-progress.schema");
-const LoyaltyTransaction = require("../../src/schemas/loyalty-transaction.schema");
-const User = require("../../src/schemas/user.schema");
-const TierBenefit = require("../../src/schemas/tier-benefit.schema");
+const loyaltyService = require("../loyalty.service");
+const loyaltyController = require("../loyalty.controller");
+const Tier = require("../../../schemas/tier.schema");
+const LoyaltySeason = require("../../../schemas/loyalty-season.schema");
+const TierConfiguration = require("../../../schemas/tier-configuration.schema");
+const UserTierProgress = require("../../../schemas/user-tier-progress.schema");
+const LoyaltyTransaction = require("../../../schemas/loyalty-transaction.schema");
+const User = require("../../../schemas/user.schema");
+const TierBenefit = require("../../../schemas/tier-benefit.schema");
 const {
   LOYALTY_TRANSACTION_TYPES,
   LOYALTY_TRANSACTION_SOURCES,
   CARRY_FORWARD_BEHAVIOR,
-} = require("../../src/constants/loyalty");
+} = require("../../../constants/loyalty");
 
 let scheduleCallback;
 // Mock node-cron
@@ -24,25 +24,25 @@ jest.mock("node-cron", () => ({
 }));
 
 // Mock schemas
-jest.mock("../../src/schemas/tier.schema");
-jest.mock("../../src/schemas/loyalty-season.schema");
-jest.mock("../../src/schemas/tier-benefit.schema");
-jest.mock("../../src/schemas/tier-configuration.schema");
-jest.mock("../../src/schemas/user-tier-progress.schema");
-jest.mock("../../src/schemas/loyalty-transaction.schema");
-jest.mock("../../src/schemas/user.schema");
-jest.mock("../../src/functions/fcm", () => ({
+jest.mock("../../../schemas/tier.schema");
+jest.mock("../../../schemas/loyalty-season.schema");
+jest.mock("../../../schemas/tier-benefit.schema");
+jest.mock("../../../schemas/tier-configuration.schema");
+jest.mock("../../../schemas/user-tier-progress.schema");
+jest.mock("../../../schemas/loyalty-transaction.schema");
+jest.mock("../../../schemas/user.schema");
+jest.mock("../../../functions/fcm", () => ({
   sendFcmNotifications: jest.fn().mockResolvedValue({}),
 }));
-jest.mock("../../src/modules/audit-log/audit-log.service", () => ({
+jest.mock("../../../modules/audit-log/audit-log.service", () => ({
   logAudit: jest.fn().mockResolvedValue({}),
   buildChanges: jest.fn().mockReturnValue([]),
   clearAllAuditLogs: jest.fn().mockResolvedValue({}),
 }));
-jest.mock("../../src/modules/loyalty/loyalty-audit.service", () => ({
+jest.mock("../loyalty-audit.service", () => ({
   createTierConfigHistorySnapshot: jest.fn().mockResolvedValue({}),
 }));
-const loyaltyAuditService = require("../../src/modules/audit-log/audit-log.service");
+const loyaltyAuditService = require("../../../modules/audit-log/audit-log.service");
 
 describe("Loyalty and Tier Progression Engine", () => {
   let mockUser, mockTiers, mockSeason, mockConfigs, mockProgress;
@@ -1111,7 +1111,7 @@ describe("Loyalty and Tier Progression Engine", () => {
     let cronModule;
 
     beforeAll(() => {
-      cronModule = require("../../src/functions/cron");
+      cronModule = require("../../../functions/cron");
     });
 
     it("should dynamically evaluate new tier configs based on scaled carry-forward points on rollover", async () => {

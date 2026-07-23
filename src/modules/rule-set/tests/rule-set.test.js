@@ -1,9 +1,9 @@
-const ruleSetService = require("../../src/modules/rule-set/rule-set.service");
-const { RuleSet } = require("../../src/schemas/rule-set.schema");
+const ruleSetService = require("../rule-set.service");
+const { RuleSet } = require("../../../schemas/rule-set.schema");
 const mongoose = require("mongoose");
-const AppError = require("../../src/utils/appError");
+const AppError = require("../../../utils/appError");
 
-jest.mock("../../src/schemas/rule-set.schema");
+jest.mock("../../../schemas/rule-set.schema");
 
 describe("Rule Set Service Tests", () => {
   let mockRuleSet, mockAdminId;

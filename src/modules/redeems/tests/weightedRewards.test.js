@@ -1,33 +1,33 @@
 const {
   createRedeem,
-} = require("../../src/modules/redeems/redeems.service");
-const User = require("../../src/schemas/user.schema");
-const Role = require("../../src/schemas/role.schema");
-const Product = require("../../src/schemas/product.schema");
-const Reward = require("../../src/schemas/reward.schema");
-const Redeem = require("../../src/schemas/redeem.schema");
+} = require("../redeems.service");
+const User = require("../../../schemas/user.schema");
+const Role = require("../../../schemas/role.schema");
+const Product = require("../../../schemas/product.schema");
+const Reward = require("../../../schemas/reward.schema");
+const Redeem = require("../../../schemas/redeem.schema");
 
 // Mocking the schemas and services
-jest.mock("../../src/schemas/user.schema");
-jest.mock("../../src/schemas/role.schema");
-jest.mock("../../src/schemas/product.schema");
-jest.mock("../../src/schemas/reward.schema");
-jest.mock("../../src/schemas/redeem.schema");
-jest.mock("../../src/schemas/gift.schema");
-jest.mock("../../src/schemas/gift-redemption.schema");
-jest.mock("../../src/schemas/app-config.schema");
-jest.mock("../../src/schemas/tier-configuration.schema");
-jest.mock("../../src/schemas/scratch-card-rule.schema");
-jest.mock("../../src/modules/gift/gift.service", () => ({
+jest.mock("../../../schemas/user.schema");
+jest.mock("../../../schemas/role.schema");
+jest.mock("../../../schemas/product.schema");
+jest.mock("../../../schemas/reward.schema");
+jest.mock("../../../schemas/redeem.schema");
+jest.mock("../../../schemas/gift.schema");
+jest.mock("../../../schemas/gift-redemption.schema");
+jest.mock("../../../schemas/app-config.schema");
+jest.mock("../../../schemas/tier-configuration.schema");
+jest.mock("../../../schemas/scratch-card-rule.schema");
+jest.mock("../../../modules/gift/gift.service", () => ({
   awardPhysicalGiftToUser: jest.fn().mockResolvedValue({ success: true }),
   awardGiftToUser: jest.fn().mockResolvedValue({ success: true, requiresClaim: true }),
 }));
-jest.mock("../../src/schemas/contest-entry.schema", () => ({
+jest.mock("../../../schemas/contest-entry.schema", () => ({
   ContestEntry: {
     findOneAndUpdate: jest.fn().mockResolvedValue(true),
   },
 }));
-jest.mock("../../src/schemas/contest.schema", () => ({
+jest.mock("../../../schemas/contest.schema", () => ({
   Contest: {
     find: jest.fn().mockReturnValue({
       lean: jest.fn().mockResolvedValue([]),
@@ -57,11 +57,11 @@ jest.mock("mongoose", () => {
     }),
   };
 });
-jest.mock("../../src/schemas/app-config.schema");
-jest.mock("../../src/functions/fcm", () => ({
+jest.mock("../../../schemas/app-config.schema");
+jest.mock("../../../functions/fcm", () => ({
   sendFcmNotifications: jest.fn(),
 }));
-jest.mock("../../src/modules/loyalty/loyalty.service", () => ({
+jest.mock("../../../modules/loyalty/loyalty.service", () => ({
   getOrCreateUserProgress: jest.fn().mockResolvedValue({
     seasonId: "season123",
     currentTierId: { _id: "tier123" },
@@ -81,17 +81,17 @@ describe("Weighted Rewards Calculation", () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    const ScratchCardRule = require("../../src/schemas/scratch-card-rule.schema");
+    const ScratchCardRule = require("../../../schemas/scratch-card-rule.schema");
     ScratchCardRule.find.mockReturnValue({
       lean: jest.fn().mockResolvedValue([]),
     });
 
-    const TierConfiguration = require("../../src/schemas/tier-configuration.schema");
+    const TierConfiguration = require("../../../schemas/tier-configuration.schema");
     TierConfiguration.findOne.mockReturnValue({
       lean: jest.fn().mockResolvedValue({ pointMultiplier: 1.0 }),
     });
 
-    const AppConfig = require("../../src/schemas/app-config.schema");
+    const AppConfig = require("../../../schemas/app-config.schema");
     AppConfig.findOne.mockReturnValue({
       lean: jest.fn().mockResolvedValue({
         scratchCardSettings: {
@@ -166,7 +166,7 @@ describe("Weighted Rewards Calculation", () => {
     expect(typeof response.data.cardBg).toBe("string");
     expect(response.data.productName).toBe("Adhesive 20kg");
 
-    const loyaltyService = require("../../src/modules/loyalty/loyalty.service");
+    const loyaltyService = require("../../../modules/loyalty/loyalty.service");
     expect(loyaltyService.addBonusPoints).toHaveBeenCalledWith(
       "user123",
       50,
@@ -228,7 +228,7 @@ describe("Weighted Rewards Calculation", () => {
   });
 
   it("should award 0 bonus points if min and max bonus points are 0 in AppConfig", async () => {
-    const AppConfig = require("../../src/schemas/app-config.schema");
+    const AppConfig = require("../../../schemas/app-config.schema");
     AppConfig.findOne.mockReturnValue({
       lean: jest.fn().mockResolvedValue({
         scratchCardSettings: {
@@ -257,12 +257,12 @@ describe("Weighted Rewards Calculation", () => {
     expect(response.data.totalPointsAwarded).toBe(5);
     expect(response.data.showScratchCard).toBe(true);
 
-    const loyaltyService = require("../../src/modules/loyalty/loyalty.service");
+    const loyaltyService = require("../../../modules/loyalty/loyalty.service");
     expect(loyaltyService.addBonusPoints).not.toHaveBeenCalled();
   });
 
   it("should award a physical gift if rewardType is GIFT", async () => {
-    const Gift = require("../../src/schemas/gift.schema");
+    const Gift = require("../../../schemas/gift.schema");
     Gift.exists.mockResolvedValue(true);
     Gift.countDocuments.mockResolvedValue(1);
     Gift.findById.mockResolvedValue({

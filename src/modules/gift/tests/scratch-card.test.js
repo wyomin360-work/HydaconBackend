@@ -1,56 +1,56 @@
-const giftService = require("../../src/modules/gift/gift.service");
-const redeemsService = require("../../src/modules/redeems/redeems.service");
-const ScratchCardRule = require("../../src/schemas/scratch-card-rule.schema");
-const AppConfig = require("../../src/schemas/app-config.schema");
-const Gift = require("../../src/schemas/gift.schema");
-const GiftRedemption = require("../../src/schemas/gift-redemption.schema");
-const User = require("../../src/schemas/user.schema");
-const Reward = require("../../src/schemas/reward.schema");
-const Product = require("../../src/schemas/product.schema");
-const Redeem = require("../../src/schemas/redeem.schema");
-const { RuleSet } = require("../../src/schemas/rule-set.schema");
-const ruleSetEvaluator = require("../../src/modules/rule-set/rule-set.evaluator");
-const { SCRATCH_CARD_MESSAGES, SCRATCH_CARD_ERRORS } = require("../../src/constants/gift");
+const giftService = require("../gift.service");
+const redeemsService = require("../../../modules/redeems/redeems.service");
+const ScratchCardRule = require("../../../schemas/scratch-card-rule.schema");
+const AppConfig = require("../../../schemas/app-config.schema");
+const Gift = require("../../../schemas/gift.schema");
+const GiftRedemption = require("../../../schemas/gift-redemption.schema");
+const User = require("../../../schemas/user.schema");
+const Reward = require("../../../schemas/reward.schema");
+const Product = require("../../../schemas/product.schema");
+const Redeem = require("../../../schemas/redeem.schema");
+const { RuleSet } = require("../../../schemas/rule-set.schema");
+const ruleSetEvaluator = require("../../../modules/rule-set/rule-set.evaluator");
+const { SCRATCH_CARD_MESSAGES, SCRATCH_CARD_ERRORS } = require("../../../constants/gift");
 
-jest.mock("../../src/schemas/scratch-card-rule.schema");
-jest.mock("../../src/schemas/app-config.schema");
-jest.mock("../../src/schemas/gift.schema");
-jest.mock("../../src/schemas/gift-redemption.schema");
-jest.mock("../../src/schemas/user.schema");
-jest.mock("../../src/schemas/reward.schema");
-jest.mock("../../src/schemas/product.schema");
-jest.mock("../../src/schemas/contest.schema");
-jest.mock("../../src/schemas/redeem.schema", () => ({
+jest.mock("../../../schemas/scratch-card-rule.schema");
+jest.mock("../../../schemas/app-config.schema");
+jest.mock("../../../schemas/gift.schema");
+jest.mock("../../../schemas/gift-redemption.schema");
+jest.mock("../../../schemas/user.schema");
+jest.mock("../../../schemas/reward.schema");
+jest.mock("../../../schemas/product.schema");
+jest.mock("../../../schemas/contest.schema");
+jest.mock("../../../schemas/redeem.schema", () => ({
   create: jest.fn(),
   countDocuments: jest.fn(),
 }));
 
-jest.mock("../../src/schemas/tier-configuration.schema", () => ({
+jest.mock("../../../schemas/tier-configuration.schema", () => ({
   findOne: jest.fn().mockReturnValue({
     lean: jest.fn().mockResolvedValue({ pointMultiplier: 1.0 }),
   }),
 }));
-jest.mock("../../src/functions/fcm", () => ({
+jest.mock("../../../functions/fcm", () => ({
   sendFcmNotifications: jest.fn(),
 }));
-jest.mock("../../src/modules/loyalty/loyalty.service", () => ({
+jest.mock("../../../modules/loyalty/loyalty.service", () => ({
   getOrCreateUserProgress: jest.fn().mockResolvedValue(null),
   processQrScanPoints: jest.fn().mockResolvedValue(true),
   resolveActiveSeason: jest.fn().mockResolvedValue(null),
   addBonusPoints: jest.fn().mockResolvedValue(true),
   processLoyaltyAndContestsAfterScan: jest.fn().mockResolvedValue(null),
 }));
-jest.mock("../../src/modules/referral/referral.service", () => ({
+jest.mock("../../../modules/referral/referral.service", () => ({
   evaluateReferralReward: jest.fn().mockResolvedValue(null),
   completeMilestone: jest.fn().mockResolvedValue(null),
   handleScanReferralMilestones: jest.fn().mockResolvedValue(null),
 }));
-jest.mock("../../src/schemas/rule-set.schema", () => ({
+jest.mock("../../../schemas/rule-set.schema", () => ({
   RuleSet: {
     findById: jest.fn(),
   },
 }));
-jest.mock("../../src/modules/rule-set/rule-set.evaluator", () => ({
+jest.mock("../../../modules/rule-set/rule-set.evaluator", () => ({
   evaluateRuleSet: jest.fn(),
 }));
 
@@ -418,7 +418,7 @@ describe("Scratch Card Unit Tests (Admin Config & User Eligibility / Rewards)", 
       Redeem.countDocuments.mockResolvedValue(0);
 
       // Mock giftService.awardPhysicalGiftToUser via module mock
-      jest.mock("../../src/modules/gift/gift.service", () => ({
+      jest.mock("../gift.service", () => ({
         awardPhysicalGiftToUser: jest.fn().mockResolvedValue({ success: true }),
         awardGiftToUser: jest.fn().mockResolvedValue({ success: true, requiresClaim: true }),
       }), { virtual: true });

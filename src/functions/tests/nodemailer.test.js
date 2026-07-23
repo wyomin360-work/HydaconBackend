@@ -8,7 +8,7 @@ jest.mock("nodemailer", () => ({
   }),
 }));
 
-const { sendTemplateEmail } = require("../../src/functions/nodemailer");
+const { sendTemplateEmail } = require("../nodemailer");
 
 describe("nodemailer sendTemplateEmail helper", () => {
   beforeEach(() => {

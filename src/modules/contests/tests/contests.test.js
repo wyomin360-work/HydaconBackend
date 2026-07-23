@@ -1,19 +1,19 @@
-const contestsService = require("../../src/modules/contests/contests.service");
-const { Contest } = require("../../src/schemas/contest.schema");
-const { ContestEntry } = require("../../src/schemas/contest-entry.schema");
-const User = require("../../src/schemas/user.schema");
+const contestsService = require("../contests.service");
+const { Contest } = require("../../../schemas/contest.schema");
+const { ContestEntry } = require("../../../schemas/contest-entry.schema");
+const User = require("../../../schemas/user.schema");
 const {
   CONTEST_STATUS,
   REWARD_TYPE,
   ENTRY_REWARD_STATUS,
   CONTEST_MESSAGES,
   CONTEST_ERRORS,
-} = require("../../src/constants/contests");
+} = require("../../../constants/contests");
 
-jest.mock("../../src/schemas/contest.schema");
-jest.mock("../../src/schemas/contest-entry.schema");
-jest.mock("../../src/schemas/user.schema");
-jest.mock("../../src/functions/fcm", () => ({
+jest.mock("../../../schemas/contest.schema");
+jest.mock("../../../schemas/contest-entry.schema");
+jest.mock("../../../schemas/user.schema");
+jest.mock("../../../functions/fcm", () => ({
   sendFcmNotifications: jest.fn().mockResolvedValue({ successCount: 1 }),
 }));
 

@@ -1,10 +1,10 @@
 const request = require("supertest");
-const app = require("../../src/app");
-const Product = require("../../src/schemas/product.schema");
-const productService = require("../../src/modules/products/product.service");
+const app = require("../../../app");
+const Product = require("../../../schemas/product.schema");
+const productService = require("../product.service");
 
 // Mock the Product schema model
-jest.mock("../../src/schemas/product.schema");
+jest.mock("../../../schemas/product.schema");
 
 describe("Product Recommendation Engine", () => {
   beforeEach(() => {

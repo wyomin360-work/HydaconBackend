@@ -1,10 +1,10 @@
-const auditLogService = require("../../src/modules/audit-log/audit-log.service");
-const AuditLog = require("../../src/schemas/audit-log.schema");
-const LoyaltyConfigAuditLog = require("../../src/schemas/loyalty-config-audit.schema");
-const { AUDIT_LOG_ACTIONS } = require("../../src/constants/audit-logs");
+const auditLogService = require("../audit-log.service");
+const AuditLog = require("../../../schemas/audit-log.schema");
+const LoyaltyConfigAuditLog = require("../../../schemas/loyalty-config-audit.schema");
+const { AUDIT_LOG_ACTIONS } = require("../../../constants/audit-logs");
 
-jest.mock("../../src/schemas/audit-log.schema");
-jest.mock("../../src/schemas/loyalty-config-audit.schema");
+jest.mock("../../../schemas/audit-log.schema");
+jest.mock("../../../schemas/loyalty-config-audit.schema");
 
 describe("Shared Audit Log Service", () => {
   beforeEach(() => {

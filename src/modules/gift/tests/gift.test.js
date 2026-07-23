@@ -1,34 +1,34 @@
-const giftService = require("../../src/modules/gift/gift.service");
-const giftController = require("../../src/modules/gift/gift.controller");
-const Gift = require("../../src/schemas/gift.schema");
-const GiftCategory = require("../../src/schemas/gift-category.schema");
-const GiftRedemption = require("../../src/schemas/gift-redemption.schema");
-const User = require("../../src/schemas/user.schema");
-const Tier = require("../../src/schemas/tier.schema");
-const Redeem = require("../../src/schemas/redeem.schema");
+const giftService = require("../gift.service");
+const giftController = require("../gift.controller");
+const Gift = require("../../../schemas/gift.schema");
+const GiftCategory = require("../../../schemas/gift-category.schema");
+const GiftRedemption = require("../../../schemas/gift-redemption.schema");
+const User = require("../../../schemas/user.schema");
+const Tier = require("../../../schemas/tier.schema");
+const Redeem = require("../../../schemas/redeem.schema");
 const mongoose = require("mongoose");
 
 // Mock schemas
-jest.mock("../../src/schemas/gift.schema");
-jest.mock("../../src/schemas/gift-category.schema");
-jest.mock("../../src/schemas/gift-redemption.schema");
-jest.mock("../../src/schemas/document.schema");
-jest.mock("../../src/schemas/user.schema");
-jest.mock("../../src/schemas/tier.schema");
-jest.mock("../../src/schemas/redeem.schema");
+jest.mock("../../../schemas/gift.schema");
+jest.mock("../../../schemas/gift-category.schema");
+jest.mock("../../../schemas/gift-redemption.schema");
+jest.mock("../../../schemas/document.schema");
+jest.mock("../../../schemas/user.schema");
+jest.mock("../../../schemas/tier.schema");
+jest.mock("../../../schemas/redeem.schema");
 
 // Mock the RuleSet schema and evaluator used by gift.service
-jest.mock("../../src/schemas/rule-set.schema", () => ({
+jest.mock("../../../schemas/rule-set.schema", () => ({
   RuleSet: {
     findById: jest.fn(),
   },
 }));
-jest.mock("../../src/modules/rule-set/rule-set.evaluator", () => ({
+jest.mock("../../../modules/rule-set/rule-set.evaluator", () => ({
   evaluateRuleSet: jest.fn(),
 }));
 
-const { RuleSet } = require("../../src/schemas/rule-set.schema");
-const ruleSetEvaluator = require("../../src/modules/rule-set/rule-set.evaluator");
+const { RuleSet } = require("../../../schemas/rule-set.schema");
+const ruleSetEvaluator = require("../../../modules/rule-set/rule-set.evaluator");
 
 describe("Gift Service & Rules Engine Tests", () => {
   let mockUser, mockGift, mockTier, mockRedemption;

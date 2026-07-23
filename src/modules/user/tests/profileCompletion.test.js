@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
-const Role = require("../../src/schemas/role.schema");
-const User = require("../../src/schemas/user.schema");
+const Role = require("../../../schemas/role.schema");
+const User = require("../../../schemas/user.schema");
 
 describe("User Profile Completion Percentage Calculation", () => {
   let mockRoleFindById;

@@ -1,17 +1,17 @@
-const eventsService = require("../../src/modules/events/events.service");
-const { Event, EVENT_STATUS } = require("../../src/schemas/event.schema");
+const eventsService = require("../events.service");
+const { Event, EVENT_STATUS } = require("../../../schemas/event.schema");
 const {
   EventRegistration,
   ATTENDANCE_STATUS,
-} = require("../../src/schemas/event-registration.schema");
-const User = require("../../src/schemas/user.schema");
-const { sendFcmNotifications } = require("../../src/functions/fcm");
+} = require("../../../schemas/event-registration.schema");
+const User = require("../../../schemas/user.schema");
+const { sendFcmNotifications } = require("../../../functions/fcm");
 
 // Mock Mongoose schemas and functions
-jest.mock("../../src/schemas/event.schema");
-jest.mock("../../src/schemas/event-registration.schema");
-jest.mock("../../src/schemas/user.schema");
-jest.mock("../../src/functions/fcm", () => ({
+jest.mock("../../../schemas/event.schema");
+jest.mock("../../../schemas/event-registration.schema");
+jest.mock("../../../schemas/user.schema");
+jest.mock("../../../functions/fcm", () => ({
   sendFcmNotifications: jest.fn().mockResolvedValue({ successCount: 1 }),
 }));
 

@@ -1,12 +1,12 @@
-const videoService = require("../../src/modules/videos/video.service");
-const videoController = require("../../src/modules/videos/video.controller");
-const Video = require("../../src/schemas/video.schema");
-const VideoAnalytics = require("../../src/schemas/videoAnalytics.schema");
+const videoService = require("../video.service");
+const videoController = require("../video.controller");
+const Video = require("../../../schemas/video.schema");
+const VideoAnalytics = require("../../../schemas/videoAnalytics.schema");
 
 // Mock the Video schema
-jest.mock("../../src/schemas/video.schema");
+jest.mock("../../../schemas/video.schema");
 // Mock VideoAnalytics so updateMetrics doesn't hit real Mongoose ObjectId casting
-jest.mock("../../src/schemas/videoAnalytics.schema");
+jest.mock("../../../schemas/videoAnalytics.schema");
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -235,7 +235,7 @@ describe("Video Controller", () => {
         save: jest.fn().mockResolvedValue(created),
       }));
       jest
-        .spyOn(require("../../src/modules/videos/video.service"), "createVideo")
+        .spyOn(require("../video.service"), "createVideo")
         .mockResolvedValue(created);
 
       const req = {
@@ -258,7 +258,7 @@ describe("Video Controller", () => {
     it("should return 200 with deleted video", async () => {
       const deleted = makeVideoDoc();
       jest
-        .spyOn(require("../../src/modules/videos/video.service"), "deleteVideo")
+        .spyOn(require("../video.service"), "deleteVideo")
         .mockResolvedValue(deleted);
 
       const req = { params: { id: "video123" } };
@@ -271,7 +271,7 @@ describe("Video Controller", () => {
 
     it("should return 404 if video not found", async () => {
       jest
-        .spyOn(require("../../src/modules/videos/video.service"), "deleteVideo")
+        .spyOn(require("../video.service"), "deleteVideo")
         .mockResolvedValue(null);
 
       const req = { params: { id: "nonexistent" } };
@@ -298,7 +298,7 @@ describe("Video Controller", () => {
       const updated = makeVideoDoc({ views: 11 });
       jest
         .spyOn(
-          require("../../src/modules/videos/video.service"),
+          require("../video.service"),
           "updateMetrics",
         )
         .mockResolvedValue(updated);
@@ -320,7 +320,7 @@ describe("Video Controller", () => {
       );
       // Since schema is mocked, just verify the field constant in the actual source
       const videoSchemaSource = require("fs").readFileSync(
-        require("path").join(__dirname, "../../src/schemas/video.schema.js"),
+        require("path").join(__dirname, "../../../schemas/video.schema.js"),
         "utf8",
       );
       expect(videoSchemaSource).toContain("publishedDate");

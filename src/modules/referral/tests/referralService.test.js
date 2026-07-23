@@ -1,6 +1,6 @@
-jest.mock("../../src/schemas/user.schema");
-jest.mock("../../src/schemas/app-config.schema");
-jest.mock("../../src/utils/responseHandlers", () => ({
+jest.mock("../../../schemas/user.schema");
+jest.mock("../../../schemas/app-config.schema");
+jest.mock("../../../utils/responseHandlers", () => ({
   sendFailResponse: jest.fn((msg, code) => {
     const err = new Error(msg);
     err.statusCode = code || 400;
@@ -8,9 +8,9 @@ jest.mock("../../src/utils/responseHandlers", () => ({
   }),
 }));
 
-const referralService = require("../../src/modules/referral/referral.service");
-const User = require("../../src/schemas/user.schema");
-const AppConfig = require("../../src/schemas/app-config.schema");
+const referralService = require("../referral.service");
+const User = require("../../../schemas/user.schema");
+const AppConfig = require("../../../schemas/app-config.schema");
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

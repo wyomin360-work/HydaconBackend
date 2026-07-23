@@ -1,15 +1,15 @@
-const rateLimiter = require("../../src/middlewares/rateLimiter");
-const RateLimit = require("../../src/schemas/rate-limit.schema");
-const ServiceRequest = require("../../src/schemas/service-request.schema");
-const userService = require("../../src/modules/user/user.service");
-const AppError = require("../../src/utils/appError");
-const { compareHash } = require("../../src/utils/heplers");
+const rateLimiter = require("../rateLimiter");
+const RateLimit = require("../../schemas/rate-limit.schema");
+const ServiceRequest = require("../../schemas/service-request.schema");
+const userService = require("../../modules/user/user.service");
+const AppError = require("../../utils/appError");
+const { compareHash } = require("../../utils/heplers");
 
-jest.mock("../../src/schemas/rate-limit.schema");
-jest.mock("../../src/schemas/service-request.schema");
-jest.mock("../../src/schemas/user.schema");
-jest.mock("../../src/utils/heplers", () => {
-  const original = jest.requireActual("../../src/utils/heplers");
+jest.mock("../../schemas/rate-limit.schema");
+jest.mock("../../schemas/service-request.schema");
+jest.mock("../../schemas/user.schema");
+jest.mock("../../utils/heplers", () => {
+  const original = jest.requireActual("../../utils/heplers");
   return {
     ...original,
     compareHash: jest.fn(),
@@ -148,7 +148,7 @@ describe("Rate Limiter & OTP Abuse Prevention Tests", () => {
       ServiceRequest.findByIdAndDelete.mockResolvedValue(true);
       ServiceRequest.deleteMany.mockResolvedValue(true);
       ServiceRequest.create.mockResolvedValue({ token: "reset_token" });
-      const User = require("../../src/schemas/user.schema");
+      const User = require("../../schemas/user.schema");
       User.findOne.mockResolvedValue(mockUser);
 
       const result = await userService.verifyOtp({
