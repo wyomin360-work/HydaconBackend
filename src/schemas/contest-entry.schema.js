@@ -1,9 +1,5 @@
-const { default: mongoose } = require("mongoose");
-
-const ENTRY_REWARD_STATUS = {
-  PENDING: "pending",
-  CREDITED: "credited",
-};
+const mongoose = require("mongoose");
+const { ENTRY_REWARD_STATUS, REWARD_TYPE } = require("../constants/contests");
 
 /**
  * Tracks each user's participation in a contest.
@@ -27,7 +23,11 @@ const contestEntrySchema = new mongoose.Schema(
     // Calculated rank (1 = winner)
     rank: { type: Number },
     // Prize actually awarded
-    rewardType: { type: String, enum: ["points", "gift", null], default: null },
+    rewardType: {
+      type: String,
+      enum: [...Object.values(REWARD_TYPE), null],
+      default: null,
+    },
     bonusPointsAwarded: { type: Number, default: 0 }, // bonus only — NOT tier points
     giftRedemptionId: {
       type: mongoose.Schema.Types.ObjectId,

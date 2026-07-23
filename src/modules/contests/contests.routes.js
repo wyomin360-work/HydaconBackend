@@ -4,16 +4,23 @@ const paths = require("./contests.paths");
 const controller = require("./contests.controller");
 const { handleError } = require("../../utils/heplers");
 const verification = require("../../middlewares/jwtVerification");
+const validateRequest = require("../../middlewares/validator");
+const {
+  adminCreateContestRequestType,
+  adminUpdateContestRequestType,
+} = require("../../validations/contests.validations");
 
 // ─── Admin ────────────────────────────────────────────────────────────────────
 router.post(
   paths.adminCreate,
   verification.verifyAdmin,
+  validateRequest(adminCreateContestRequestType),
   handleError(controller.adminCreateContest),
 );
 router.patch(
   paths.adminUpdate,
   verification.verifyAdmin,
+  validateRequest(adminUpdateContestRequestType),
   handleError(controller.adminUpdateContest),
 );
 router.delete(

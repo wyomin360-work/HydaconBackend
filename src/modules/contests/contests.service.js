@@ -1,14 +1,21 @@
-const { Contest, CONTEST_STATUS } = require("../../schemas/contest.schema");
-const {
-  ContestEntry,
-  ENTRY_REWARD_STATUS,
-} = require("../../schemas/contest-entry.schema");
-const UserTierProgress = require("../../schemas/user-tier-progress.schema");
+const { Contest } = require("../../schemas/contest.schema");
+const { ContestEntry } = require("../../schemas/contest-entry.schema");
 const User = require("../../schemas/user.schema");
 const { attachId, formatNotification } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const { sendFcmNotifications } = require("../../functions/fcm");
 const { APP_NOTIFICATIONS } = require("../../constants/notifications");
+const {
+  CONTEST_STATUS,
+  REWARD_TYPE,
+  ENTRY_REWARD_STATUS,
+  PRODUCT_SCOPE,
+  TIER_SCOPE,
+  CONTEST_FCM_TYPES,
+  CONTEST_MESSAGES,
+  CONTEST_ERRORS,
+  CONTEST_CONFIG,
+} = require("../../constants/contests");
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -45,9 +52,9 @@ async function adminCreateContest(data, adminId) {
     endDate: new Date(endDate),
     region: region || null,
     prizes: prizes || [],
-    productScope: productScope || "EVERY_PRODUCT",
+    productScope: productScope || PRODUCT_SCOPE.EVERY_PRODUCT,
     products: products || [],
-    tierScope: tierScope || "ALL_TIERS",
+    tierScope: tierScope || TIER_SCOPE.ALL_TIERS,
     tiers: tiers || [],
     createdBy: adminId,
     status:
@@ -55,30 +62,40 @@ async function adminCreateContest(data, adminId) {
         ? CONTEST_STATUS.UPCOMING
         : CONTEST_STATUS.ACTIVE,
   });
-  return { message: "Contest created", data: { contestId: contest._id } };
+  return {
+    message: CONTEST_MESSAGES.CREATED,
+    data: { contestId: contest._id },
+  };
 }
 
 async function adminUpdateContest(contestId, data) {
   const contest = await Contest.findById(contestId);
-  if (!contest) sendFailResponse("Contest not found", 404);
+  if (!contest) {
+    sendFailResponse(CONTEST_ERRORS.CONTEST_NOT_FOUND, 404);
+  }
   Object.assign(contest, data);
   if (data.startDate || data.endDate) {
     contest.status = resolveContestStatus(contest);
   }
   await contest.save();
-  return { message: "Contest updated", data: { updated: true } };
+  return { message: CONTEST_MESSAGES.UPDATED, data: { updated: true } };
 }
 
 async function adminDeleteContest(contestId) {
   await Contest.findByIdAndDelete(contestId);
-  return { message: "Contest deleted", data: { deleted: true } };
+  return { message: CONTEST_MESSAGES.DELETED, data: { deleted: true } };
 }
 
 async function adminListContests(query = {}) {
-  const { page = 1, limit = 20, status } = query;
+  const page = Math.max(1, parseInt(query.page) || CONTEST_CONFIG.DEFAULT_PAGE);
+  const limit = Math.max(
+    1,
+    parseInt(query.limit) || CONTEST_CONFIG.DEFAULT_LIMIT,
+  );
   const skip = (page - 1) * limit;
   const filter = {};
-  if (status) filter.status = status;
+  if (query.status) filter.status = query.status;
+
   const [contests, total] = await Promise.all([
     Contest.find(filter).sort({ startDate: -1 }).skip(skip).limit(limit).lean(),
     Contest.countDocuments(filter),
@@ -99,7 +116,9 @@ async function adminGetContestDetails(contestId) {
     .populate("products")
     .populate("tiers")
     .lean();
-  if (!contest) sendFailResponse("Contest not found", 404);
+  if (!contest) {
+    sendFailResponse(CONTEST_ERRORS.CONTEST_NOT_FOUND, 404);
+  }
   const entries = await ContestEntry.find({ contestId })
     .populate({ path: "user", select: "name profileImage totalPoints" })
     .sort({ qualificationPoints: -1 })
@@ -112,7 +131,9 @@ async function adminGetContestDetails(contestId) {
  */
 async function adminFinaliseContest(contestId) {
   const contest = await Contest.findById(contestId);
-  if (!contest) sendFailResponse("Contest not found", 404);
+  if (!contest) {
+    sendFailResponse(CONTEST_ERRORS.CONTEST_NOT_FOUND, 404);
+  }
   if (contest.status !== CONTEST_STATUS.COMPLETED) {
     contest.status = CONTEST_STATUS.COMPLETED;
     await contest.save();
@@ -130,7 +151,7 @@ async function adminFinaliseContest(contestId) {
     // Find matching prize
     const prize = contest.prizes.find((p) => p.rank === i + 1);
     if (prize) {
-      if (prize.rewardType === "points" && prize.points > 0) {
+      if (prize.rewardType === REWARD_TYPE.POINTS && prize.points > 0) {
         // Award BONUS points only — deliberately NOT calling loyaltyService.processQrScanPoints
         // so these points do NOT affect tier qualification
         const user = await User.findById(entry.userId);
@@ -140,12 +161,10 @@ async function adminFinaliseContest(contestId) {
           await user.save();
         }
         entry.bonusPointsAwarded = prize.points;
-        entry.rewardType = "points";
+        entry.rewardType = REWARD_TYPE.POINTS;
       }
-      // Physical gift: create GiftRedemption programmatically (if gift module supports it)
-      // For now, mark for manual processing
-      if (prize.rewardType === "gift") {
-        entry.rewardType = "gift";
+      if (prize.rewardType === REWARD_TYPE.GIFT) {
+        entry.rewardType = REWARD_TYPE.GIFT;
       }
       entry.rewardStatus = ENTRY_REWARD_STATUS.CREDITED;
     }
@@ -155,7 +174,7 @@ async function adminFinaliseContest(contestId) {
     const user = entry.user;
     if (user?.fcmTokens?.length && user?.enableNotification && prize) {
       const prizeText =
-        prize.rewardType === "points"
+        prize.rewardType === REWARD_TYPE.POINTS
           ? `${prize.points} Bonus Points`
           : `a ${prize.giftName || "prize"}`;
       await sendFcmNotifications(
@@ -167,18 +186,28 @@ async function adminFinaliseContest(contestId) {
           prizeText,
           contestName: contest.name,
         }),
-        { type: "CONTEST_WON", contestId: contestId.toString() },
+        {
+          type: CONTEST_FCM_TYPES.CONTEST_WON,
+          contestId: contestId.toString(),
+        },
       ).catch(() => {});
     }
   }
 
-  return { message: "Contest finalised", data: { ranked: entries.length } };
+  return {
+    message: CONTEST_MESSAGES.FINALISED,
+    data: { ranked: entries.length },
+  };
 }
 
 // ─── User ────────────────────────────────────────────────────────────────────
 
 async function userListContests(query = {}, userId) {
-  const { page = 1, limit = 20, status } = query;
+  const page = Math.max(1, parseInt(query.page) || CONTEST_CONFIG.DEFAULT_PAGE);
+  const limit = Math.max(
+    1,
+    parseInt(query.limit) || CONTEST_CONFIG.DEFAULT_LIMIT,
+  );
   const skip = (page - 1) * limit;
 
   // Sync statuses before returning
@@ -201,7 +230,7 @@ async function userListContests(query = {}, userId) {
   );
 
   const filter = { active: true };
-  if (status) filter.status = status;
+  if (query.status) filter.status = query.status;
 
   const [contests, total] = await Promise.all([
     Contest.find(filter).sort({ startDate: 1 }).skip(skip).limit(limit).lean(),
@@ -241,7 +270,9 @@ async function userGetContestDetails(contestId, userId) {
     .populate("products")
     .populate("tiers")
     .lean();
-  if (!contest) sendFailResponse("Contest not found", 404);
+  if (!contest) {
+    sendFailResponse(CONTEST_ERRORS.CONTEST_NOT_FOUND, 404);
+  }
 
   // All contest entries sorted by qualificationPoints DESC
   const topEntries = await ContestEntry.find({ contestId })
@@ -253,10 +284,6 @@ async function userGetContestDetails(contestId, userId) {
   let userEntry = null;
   let userRank = null;
   if (userId) {
-    const allSortedCount = await ContestEntry.countDocuments({
-      contestId,
-      qualificationPoints: { $gt: 0 },
-    });
     userEntry = await ContestEntry.findOne({ contestId, userId }).lean();
     if (userEntry) {
       userRank =
@@ -278,8 +305,10 @@ async function userGetContestDetails(contestId, userId) {
 }
 
 async function userGetLeaderboard(contestId) {
-  const contest = await Contest.findById(contestId);
-  if (!contest) sendFailResponse("Contest not found", 404);
+  const contest = await Contest.findById(contestId).lean();
+  if (!contest) {
+    sendFailResponse(CONTEST_ERRORS.CONTEST_NOT_FOUND, 404);
+  }
   const entries = await ContestEntry.find({ contestId })
     .populate({ path: "user", select: "name profileImage" })
     .sort({ qualificationPoints: -1 })
@@ -295,7 +324,7 @@ async function generalLeaderboard(userId) {
     .select("name profileImage totalPoints currentTierId")
     .populate("currentTierId", "name colorIdentity badgeUrl")
     .sort({ totalPoints: -1 })
-    .limit(100)
+    .limit(CONTEST_CONFIG.GENERAL_LEADERBOARD_LIMIT)
     .lean();
 
   let userRank = null;
@@ -390,7 +419,7 @@ async function syncUserContestEntries(
 
   for (const contest of activeContests) {
     // A. Check Tier eligibility
-    if (contest.tierScope === "SELECTED_TIERS") {
+    if (contest.tierScope === TIER_SCOPE.SELECTED_TIERS) {
       const tierStrList = (contest.tiers || []).map((t) => String(t));
       if (!currentTierId || !tierStrList.includes(String(currentTierId))) {
         continue;
@@ -398,7 +427,7 @@ async function syncUserContestEntries(
     }
 
     // B. Check Product eligibility
-    if (contest.productScope === "SELECTED_PRODUCTS") {
+    if (contest.productScope === PRODUCT_SCOPE.SELECTED_PRODUCTS) {
       const prodStrList = (contest.products || []).map((p) => String(p));
       if (!productId || !prodStrList.includes(String(productId))) {
         continue;
@@ -416,44 +445,44 @@ async function syncUserContestEntries(
 async function userClaimReward(contestId, userId) {
   const entry = await ContestEntry.findOne({ contestId, userId });
   if (!entry) {
-    sendFailResponse("Contest entry not found", 404);
+    sendFailResponse(CONTEST_ERRORS.ENTRY_NOT_FOUND, 404);
   }
-  const contest = await Contest.findById(contestId);
+  const contest = await Contest.findById(contestId).lean();
   if (!contest) {
-    sendFailResponse("Contest not found", 404);
+    sendFailResponse(CONTEST_ERRORS.CONTEST_NOT_FOUND, 404);
   }
 
   const status = resolveContestStatus(contest);
   if (status !== CONTEST_STATUS.COMPLETED) {
-    sendFailResponse("Contest is not completed yet", 400);
+    sendFailResponse(CONTEST_ERRORS.NOT_COMPLETED, 400);
   }
-  if (entry.rewardStatus === "credited") {
-    sendFailResponse("Reward already claimed", 400);
+  if (entry.rewardStatus === ENTRY_REWARD_STATUS.CREDITED) {
+    sendFailResponse(CONTEST_ERRORS.ALREADY_CLAIMED, 400);
   }
 
   const prize = contest.prizes.find((p) => p.rank === entry.rank);
   if (!prize) {
-    sendFailResponse("No prize won for this rank", 400);
+    sendFailResponse(CONTEST_ERRORS.NO_PRIZE_FOR_RANK, 400);
   }
 
-  if (prize.rewardType === "points") {
+  if (prize.rewardType === REWARD_TYPE.POINTS) {
     const user = await User.findById(userId);
     if (user) {
       user.totalPoints = (user.totalPoints || 0) + (prize.points || 0);
       await user.save();
     }
-    entry.rewardType = "points";
+    entry.rewardType = REWARD_TYPE.POINTS;
     entry.bonusPointsAwarded = prize.points;
-  } else if (prize.rewardType === "gift") {
-    entry.rewardType = "gift";
+  } else if (prize.rewardType === REWARD_TYPE.GIFT) {
+    entry.rewardType = REWARD_TYPE.GIFT;
   }
 
-  entry.rewardStatus = "credited";
+  entry.rewardStatus = ENTRY_REWARD_STATUS.CREDITED;
   await entry.save();
 
   return {
     data: {
-      message: "Reward claimed successfully!",
+      message: CONTEST_MESSAGES.REWARD_CLAIMED,
       userEntry: attachId(entry),
     },
   };

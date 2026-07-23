@@ -11,6 +11,7 @@ const rolesDoc = require("../docs/roles.doc");
 const ruleSetDoc = require("../docs/rule-set.doc");
 const videoDoc = require("../docs/video.doc");
 const eventsDoc = require("../docs/events.doc");
+const contestsDoc = require("../docs/contests.doc");
 
 const options = {
   definition: {
@@ -36,6 +37,7 @@ const options = {
       ...ruleSetDoc,
       ...videoDoc,
       ...eventsDoc,
+      ...contestsDoc,
     },
   },
   apis: [],

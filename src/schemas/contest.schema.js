@@ -1,15 +1,10 @@
-const { default: mongoose } = require("mongoose");
-
-const CONTEST_STATUS = {
-  UPCOMING: "upcoming",
-  ACTIVE: "active",
-  COMPLETED: "completed",
-};
-
-const REWARD_TYPE = {
-  POINTS: "points",
-  GIFT: "gift",
-};
+const mongoose = require("mongoose");
+const {
+  CONTEST_STATUS,
+  REWARD_TYPE,
+  PRODUCT_SCOPE,
+  TIER_SCOPE,
+} = require("../constants/contests");
 
 const prizeSchema = new mongoose.Schema(
   {
@@ -44,8 +39,8 @@ const contestSchema = new mongoose.Schema(
     },
     productScope: {
       type: String,
-      enum: ["EVERY_PRODUCT", "SELECTED_PRODUCTS"],
-      default: "EVERY_PRODUCT",
+      enum: Object.values(PRODUCT_SCOPE),
+      default: PRODUCT_SCOPE.EVERY_PRODUCT,
     },
     products: [
       {
@@ -55,8 +50,8 @@ const contestSchema = new mongoose.Schema(
     ],
     tierScope: {
       type: String,
-      enum: ["ALL_TIERS", "SELECTED_TIERS"],
-      default: "ALL_TIERS",
+      enum: Object.values(TIER_SCOPE),
+      default: TIER_SCOPE.ALL_TIERS,
     },
     tiers: [
       {
@@ -64,7 +59,10 @@ const contestSchema = new mongoose.Schema(
         ref: "Tier",
       },
     ],
-    prizes: [prizeSchema],
+    prizes: {
+      type: [prizeSchema],
+      default: () => [],
+    },
     active: { type: Boolean, default: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "Admin" },
   },
