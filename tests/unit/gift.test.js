@@ -39,6 +39,17 @@ describe("Gift Service & Rules Engine Tests", () => {
     return query;
   };
 
+  // Helper to build a standard mock Mongoose session
+  const buildMockSession = () => ({
+    startTransaction: jest.fn(),
+    commitTransaction: jest.fn(),
+    abortTransaction: jest.fn(),
+    endSession: jest.fn(),
+    withTransaction: jest.fn().mockImplementation(async (callback) => {
+      return await callback();
+    }),
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
 
@@ -61,11 +72,13 @@ describe("Gift Service & Rules Engine Tests", () => {
       _id: "gift123",
       name: "Premium Tool",
       description: "A very nice tool",
+      giftType: "physical",
       priceInCoins: 200,
       stockQuantity: 10,
       reservedQuantity: 2,
       active: true,
       ruleSetId: "ruleSet123",
+      rewardedUsers: [],
       save: jest.fn().mockResolvedValue(true),
     };
 
@@ -127,6 +140,7 @@ describe("Gift Service & Rules Engine Tests", () => {
     });
   });
 
+  // ─────────────────────────────────────────────────────────────────────────
   describe("checkEligibility Rules Engine", () => {
     it("should pass eligibility when all rules are satisfied", async () => {
       const result = await giftService.getGiftEligibility("user123", "gift123");
@@ -162,36 +176,6 @@ describe("Gift Service & Rules Engine Tests", () => {
       expect(result.data.reasons[0]).toContain("Requires Gold membership tier");
     });
 
-    it("should fail when RuleSet evaluator returns not eligible (e.g. scans insufficient)", async () => {
-      ruleSetEvaluator.evaluateRuleSet.mockResolvedValue({
-        eligible: false,
-        reasons: ["Requires at least 5 bag scans this month (Current: 3)"],
-        evaluatedRules: [{ type: "SCAN_COUNT", satisfied: false }],
-      });
-
-      const result = await giftService.getGiftEligibility("user123", "gift123");
-
-      expect(result.success).toBe(true);
-      expect(result.data.eligible).toBe(false);
-      expect(result.data.reasons[0]).toContain("Requires at least 5 bag scans");
-    });
-
-    it("should fail when RuleSet evaluator returns region not matched", async () => {
-      ruleSetEvaluator.evaluateRuleSet.mockResolvedValue({
-        eligible: false,
-        reasons: ["Gift is not available in your region (New York)"],
-        evaluatedRules: [{ type: "REGION", satisfied: false }],
-      });
-
-      const result = await giftService.getGiftEligibility("user123", "gift123");
-
-      expect(result.success).toBe(true);
-      expect(result.data.eligible).toBe(false);
-      expect(result.data.reasons[0]).toContain(
-        "Gift is not available in your region",
-      );
-    });
-
     it("should pass eligibility when gift has no ruleSetId", async () => {
       mockGift.ruleSetId = null; // No ruleset attached
 
@@ -200,32 +184,63 @@ describe("Gift Service & Rules Engine Tests", () => {
       expect(result.success).toBe(true);
       expect(result.data.eligible).toBe(true);
       expect(result.data.reasons.length).toBe(0);
-      // evaluateRuleSet should NOT have been called
       expect(ruleSetEvaluator.evaluateRuleSet).not.toHaveBeenCalled();
+    });
+
+    it("should report isRewardedUser=true if user has a valid pending reward entry", async () => {
+      const futureDate = new Date(Date.now() + 86400000);
+      mockGift.rewardedUsers = [
+        {
+          _id: "entry1",
+          userId: "user123",
+          rewardCause: "SCRATCH_CARD",
+          rewardedAt: new Date(),
+          expiresAt: futureDate,
+        },
+      ];
+
+      Gift.findById.mockImplementation(() => mockQuery(mockGift));
+
+      const result = await giftService.getGiftEligibility("user123", "gift123");
+
+      expect(result.success).toBe(true);
+      expect(result.data.isRewardedUser).toBe(true);
+      // Coins + ruleset checks are waived
+      expect(result.data.eligible).toBe(true);
+      expect(ruleSetEvaluator.evaluateRuleSet).not.toHaveBeenCalled();
+    });
+
+    it("should NOT treat expired rewardedUsers entries as valid", async () => {
+      const pastDate = new Date(Date.now() - 1000); // expired
+      mockGift.rewardedUsers = [
+        {
+          _id: "entry1",
+          userId: "user123",
+          rewardCause: "SCRATCH_CARD",
+          rewardedAt: new Date(),
+          expiresAt: pastDate,
+        },
+      ];
+      mockUser.hydaconCoins = 50; // not enough to buy normally
+
+      Gift.findById.mockImplementation(() => mockQuery(mockGift));
+
+      const result = await giftService.getGiftEligibility("user123", "gift123");
+
+      expect(result.data.isRewardedUser).toBe(false);
+      // Falls back to normal eligibility — should fail (50 < 200 coins)
+      expect(result.data.eligible).toBe(false);
     });
   });
 
-  describe("redeemGift workflow", () => {
-    it("should successfully redeem and deduct user coins and reserve stock inside a transaction", async () => {
-      // Mock session start & commit
-      const mockSession = {
-        startTransaction: jest.fn(),
-        commitTransaction: jest.fn(),
-        abortTransaction: jest.fn(),
-        endSession: jest.fn(),
-        withTransaction: jest.fn().mockImplementation(async (callback) => {
-          return await callback();
-        }),
-      };
+  // ─────────────────────────────────────────────────────────────────────────
+  describe("redeemGift — direct purchase path", () => {
+    it("should deduct user coins and reserve stock inside a transaction", async () => {
+      const mockSession = buildMockSession();
       mongoose.startSession = jest.fn().mockResolvedValue(mockSession);
 
       User.findById.mockImplementation(() => mockQuery(mockUser));
       Gift.findById.mockImplementation(() => mockQuery(mockGift));
-      Tier.findById.mockImplementation((id) => {
-        if (id === "tierSilver") return mockQuery(mockTier);
-        return mockQuery(null);
-      });
-      Redeem.countDocuments.mockImplementation(() => mockQuery(6));
 
       User.findOneAndUpdate = jest.fn().mockResolvedValue(mockUser);
       Gift.findOneAndUpdate = jest.fn().mockResolvedValue(mockGift);
@@ -260,26 +275,16 @@ describe("Gift Service & Rules Engine Tests", () => {
     });
 
     it("should fail redemption if rule set evaluator determines user is not eligible", async () => {
-      // Mock session start & commit
-      const mockSession = {
-        startTransaction: jest.fn(),
-        commitTransaction: jest.fn(),
-        abortTransaction: jest.fn(),
-        endSession: jest.fn(),
-        withTransaction: jest.fn().mockImplementation(async (callback) => {
-          try {
-            await callback();
-          } catch (error) {
-            throw error;
-          }
-        }),
-      };
+      const mockSession = buildMockSession();
+      mockSession.withTransaction.mockImplementation(async (callback) => {
+        try {
+          await callback();
+        } catch (error) {
+          throw error;
+        }
+      });
       mongoose.startSession = jest.fn().mockResolvedValue(mockSession);
 
-      User.findById.mockImplementation(() => mockQuery(mockUser));
-      Gift.findById.mockImplementation(() => mockQuery(mockGift));
-
-      // Mock evaluator to fail
       ruleSetEvaluator.evaluateRuleSet.mockResolvedValueOnce({
         eligible: false,
         reasons: ["Failed custom rule set condition"],
@@ -293,14 +298,315 @@ describe("Gift Service & Rules Engine Tests", () => {
 
       expect(response.success).toBe(false);
       expect(response.message).toContain("Failed custom rule set condition");
-      expect(ruleSetEvaluator.evaluateRuleSet).toHaveBeenCalled();
-
-      // Ensure stock/coins weren't modified and nothing was saved
       expect(mockUser.save).not.toHaveBeenCalled();
       expect(mockGift.save).not.toHaveBeenCalled();
     });
   });
 
+  // ─────────────────────────────────────────────────────────────────────────
+  describe("redeemGift — rewarded-user claim path", () => {
+    const futureDate = new Date(Date.now() + 86400000 * 30);
+    const rewardEntry = {
+      _id: "entry1",
+      userId: "user123",
+      rewardCause: "SCRATCH_CARD",
+      rewardCauseTitle: "Scratch & Win: Summer Campaign",
+      rewardCauseId: "campaign1",
+      redeemId: "redeem1",
+      rewardedAt: new Date(),
+      expiresAt: futureDate,
+    };
+
+    beforeEach(() => {
+      mockGift.rewardedUsers = [rewardEntry];
+      mockUser.hydaconCoins = 0; // User has no coins — but it doesn't matter
+      Gift.findById.mockImplementation(() => mockQuery(mockGift));
+    });
+
+    it("should create a GiftRedemption with coinsUsed=0 and isReward=true (waiving coins and ruleset)", async () => {
+      const mockSession = buildMockSession();
+      mongoose.startSession = jest.fn().mockResolvedValue(mockSession);
+
+      // findOneAndUpdate for the $pull + stock decrement
+      Gift.findOneAndUpdate = jest.fn().mockResolvedValue({
+        ...mockGift,
+        rewardedUsers: [], // entry removed
+        reservedQuantity: 1,
+        stockQuantity: 9,
+      });
+
+      GiftRedemption.prototype.save = jest.fn().mockResolvedValue({
+        _id: "newRedemption1",
+        coinsUsed: 0,
+        isReward: true,
+      });
+
+      const response = await giftService.redeemGift("user123", {
+        giftId: "gift123",
+        shippingAddress: mockRedemption.shippingAddress,
+      });
+
+      expect(response.success).toBe(true);
+      expect(response.message).toContain("Reward claimed successfully");
+
+      // Coins should NOT have been deducted
+      expect(User.findOneAndUpdate).not.toHaveBeenCalled();
+
+      // RuleSet evaluator should NOT have been called
+      expect(ruleSetEvaluator.evaluateRuleSet).not.toHaveBeenCalled();
+
+      // Stock pull + decrement must have been called atomically
+      expect(Gift.findOneAndUpdate).toHaveBeenCalledWith(
+        { _id: "gift123", "rewardedUsers._id": rewardEntry._id },
+        {
+          $pull: { rewardedUsers: { _id: rewardEntry._id } },
+          $inc: { reservedQuantity: -1, stockQuantity: -1 },
+        },
+        { session: mockSession, new: true },
+      );
+
+      // GiftRedemption must have been saved
+      expect(GiftRedemption.prototype.save).toHaveBeenCalled();
+    });
+
+    it("should waive ruleset even if gift has a restrictive RuleSet attached", async () => {
+      // Make ruleset FAIL — but user should still succeed because they're rewarded
+      ruleSetEvaluator.evaluateRuleSet.mockResolvedValue({
+        eligible: false,
+        reasons: ["Requires Gold tier"],
+        evaluatedRules: [],
+      });
+
+      const mockSession = buildMockSession();
+      mongoose.startSession = jest.fn().mockResolvedValue(mockSession);
+      Gift.findOneAndUpdate = jest.fn().mockResolvedValue({ ...mockGift, rewardedUsers: [] });
+      GiftRedemption.prototype.save = jest.fn().mockResolvedValue({ _id: "r1", coinsUsed: 0 });
+
+      const response = await giftService.redeemGift("user123", {
+        giftId: "gift123",
+        shippingAddress: mockRedemption.shippingAddress,
+      });
+
+      expect(response.success).toBe(true);
+      // evaluateRuleSet should NOT have been called
+      expect(ruleSetEvaluator.evaluateRuleSet).not.toHaveBeenCalled();
+    });
+
+    it("should fail if reward entry is no longer in rewardedUsers (already claimed)", async () => {
+      mockGift.rewardedUsers = []; // Entry already removed
+      Gift.findById.mockImplementation(() => mockQuery(mockGift));
+
+      const mockSession = buildMockSession();
+      mockSession.withTransaction.mockImplementation(async (callback) => {
+        try { await callback(); } catch (e) { throw e; }
+      });
+      mongoose.startSession = jest.fn().mockResolvedValue(mockSession);
+
+      // findOneAndUpdate returns null = entry not found
+      Gift.findOneAndUpdate = jest.fn().mockResolvedValue(null);
+
+      // This user is NOT in rewardedUsers, so it falls to direct purchase
+      // Direct purchase: user has 0 coins → should fail coin check
+      const response = await giftService.redeemGift("user123", {
+        giftId: "gift123",
+        shippingAddress: mockRedemption.shippingAddress,
+      });
+
+      expect(response.success).toBe(false);
+    });
+
+    it("should fail if shippingAddress is missing even for rewarded users", async () => {
+      const mockSession = buildMockSession();
+      mockSession.withTransaction.mockImplementation(async (callback) => {
+        try { await callback(); } catch (e) { throw e; }
+      });
+      mongoose.startSession = jest.fn().mockResolvedValue(mockSession);
+
+      const response = await giftService.redeemGift("user123", {
+        giftId: "gift123",
+        // shippingAddress intentionally omitted
+      });
+
+      expect(response.success).toBe(false);
+      expect(response.message).toContain("Shipping address is required");
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  describe("awardPhysicalGiftToUser", () => {
+    beforeEach(() => {
+      mockGift.rewardedUsers = [];
+    });
+
+    it("should add user to rewardedUsers and reserve stock atomically", async () => {
+      const mockSession = buildMockSession();
+
+      const updatedGift = {
+        ...mockGift,
+        rewardedUsers: [{ userId: "user123", rewardCause: "SCRATCH_CARD" }],
+        reservedQuantity: mockGift.reservedQuantity + 1,
+      };
+      Gift.findOneAndUpdate = jest.fn().mockResolvedValue(updatedGift);
+
+      const causeData = {
+        rewardCause: "SCRATCH_CARD",
+        rewardCauseId: "campaign1",
+        rewardCauseTitle: "Scratch & Win",
+        redeemId: "redeem1",
+        expiresAt: new Date(Date.now() + 86400000 * 30),
+      };
+
+      const result = await giftService.awardPhysicalGiftToUser(
+        "user123",
+        mockGift,
+        causeData,
+        mockSession,
+      );
+
+      expect(result.success).toBe(true);
+      expect(Gift.findOneAndUpdate).toHaveBeenCalledWith(
+        {
+          _id: mockGift._id,
+          $expr: { $gt: ["$stockQuantity", "$reservedQuantity"] },
+        },
+        expect.objectContaining({
+          $push: expect.objectContaining({ rewardedUsers: expect.any(Object) }),
+          $inc: { reservedQuantity: 1 },
+        }),
+        { session: mockSession, new: true },
+      );
+    });
+
+    it("should return success=false when gift is out of stock", async () => {
+      const mockSession = buildMockSession();
+      Gift.findOneAndUpdate = jest.fn().mockResolvedValue(null); // No stock
+
+      const result = await giftService.awardPhysicalGiftToUser(
+        "user123",
+        mockGift,
+        { rewardCause: "SCRATCH_CARD" },
+        mockSession,
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain("out of stock");
+    });
+
+    it("should prevent duplicate pending rewards for the same user + gift", async () => {
+      const mockSession = buildMockSession();
+      // User already has an unclaimed entry
+      mockGift.rewardedUsers = [
+        {
+          userId: "user123",
+          rewardCause: "SCRATCH_CARD",
+          rewardedAt: new Date(),
+          expiresAt: new Date(Date.now() + 86400000),
+        },
+      ];
+
+      const result = await giftService.awardPhysicalGiftToUser(
+        "user123",
+        mockGift,
+        { rewardCause: "SCRATCH_CARD" },
+        mockSession,
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.duplicate).toBe(true);
+      expect(Gift.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
+    it("should allow awarding if previous entry is expired", async () => {
+      const mockSession = buildMockSession();
+      mockGift.rewardedUsers = [
+        {
+          userId: "user123",
+          rewardCause: "SCRATCH_CARD",
+          rewardedAt: new Date(),
+          expiresAt: new Date(Date.now() - 1000), // expired
+        },
+      ];
+
+      Gift.findOneAndUpdate = jest.fn().mockResolvedValue({
+        ...mockGift,
+        rewardedUsers: [{ userId: "user123", rewardCause: "SCRATCH_CARD" }],
+      });
+
+      const result = await giftService.awardPhysicalGiftToUser(
+        "user123",
+        mockGift,
+        { rewardCause: "SCRATCH_CARD" },
+        mockSession,
+      );
+
+      expect(result.success).toBe(true);
+      expect(Gift.findOneAndUpdate).toHaveBeenCalled();
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  describe("getUserRewardedGifts", () => {
+    it("should return gifts with valid pending reward entries for the user", async () => {
+      const futureDate = new Date(Date.now() + 86400000);
+      const mockGiftWithReward = {
+        _id: "gift999",
+        name: "Mystery Box",
+        giftType: "physical",
+        image: null,
+        themeColor: null,
+        description: "A mystery",
+        categoryId: { _id: "cat1", name: "Tools" },
+        rewardedUsers: [
+          {
+            userId: "user123",
+            rewardCause: "SCRATCH_CARD",
+            rewardedAt: new Date(),
+            expiresAt: futureDate,
+          },
+        ],
+      };
+
+      Gift.find.mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockResolvedValue([mockGiftWithReward]),
+      });
+
+      const result = await giftService.getUserRewardedGifts("user123");
+
+      expect(result.success).toBe(true);
+      expect(result.data.length).toBe(1);
+      expect(result.data[0].gift._id).toBe("gift999");
+      expect(result.data[0].rewardEntry.rewardCause).toBe("SCRATCH_CARD");
+    });
+
+    it("should exclude expired reward entries", async () => {
+      const pastDate = new Date(Date.now() - 1000); // expired
+      const mockGiftExpired = {
+        _id: "giftExpired",
+        name: "Expired Prize",
+        giftType: "physical",
+        rewardedUsers: [
+          {
+            userId: "user123",
+            rewardCause: "SCRATCH_CARD",
+            expiresAt: pastDate,
+          },
+        ],
+      };
+
+      Gift.find.mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockResolvedValue([mockGiftExpired]),
+      });
+
+      const result = await giftService.getUserRewardedGifts("user123");
+
+      expect(result.success).toBe(true);
+      expect(result.data.length).toBe(0); // Expired entry filtered out
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
   describe("getUserRedemptionDetails ownership validation", () => {
     it("should return redemption details if user is the owner", async () => {
       const response = await giftService.getUserRedemptionDetails(
@@ -321,6 +627,7 @@ describe("Gift Service & Rules Engine Tests", () => {
     });
   });
 
+  // ─────────────────────────────────────────────────────────────────────────
   describe("adminUpdateRedemption validation and terminal states", () => {
     it("should fail validation if status is not valid", async () => {
       const response = await giftService.adminUpdateRedemption(
@@ -332,15 +639,7 @@ describe("Gift Service & Rules Engine Tests", () => {
     });
 
     it("should throw error if attempting to change status from Cancelled", async () => {
-      const mockSession = {
-        startTransaction: jest.fn(),
-        commitTransaction: jest.fn(),
-        abortTransaction: jest.fn(),
-        endSession: jest.fn(),
-        withTransaction: jest.fn().mockImplementation(async (callback) => {
-          return await callback();
-        }),
-      };
+      const mockSession = buildMockSession();
       mongoose.startSession = jest.fn().mockResolvedValue(mockSession);
 
       const mockCancelledRedemption = {

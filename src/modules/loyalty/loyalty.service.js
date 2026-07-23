@@ -279,43 +279,58 @@ async function processQrScanPoints(userId, points, referenceId) {
 /**
  * Awards campaign points affecting ONLY redeemable balance (no tier impact).
  */
-async function addBonusPoints(userId, points, description, referenceId = null) {
-  const user = await User.findById(userId);
-  if (!user) sendFailResponse("User not found");
+async function addBonusPoints(userId, points, description, referenceId = null, options = {}, session = null) {
+  const userQuery = User.findById(userId);
+  const user = await (userQuery.session ? userQuery.session(session) : userQuery);
+  if (!user) return sendFailResponse("User not found");
 
   const activeSeason = await resolveActiveSeason();
+  const source = options.source || LOYALTY_TRANSACTION_SOURCES.CAMPAIGN_BONUS;
+  const skipLifetimePoints = options.skipLifetimePoints || false;
+  const skipQpSync = options.skipQpSync || false;
 
   // 1. Log transaction
-  await LoyaltyTransaction.create({
+  const transactionData = {
     userId,
     seasonId: activeSeason?._id || null,
     points,
     type: LOYALTY_TRANSACTION_TYPES.REDEEMABLE,
-    source: LOYALTY_TRANSACTION_SOURCES.CAMPAIGN_BONUS,
+    source,
     description: description || "Bonus points reward",
     referenceId,
-  });
+  };
+  await LoyaltyTransaction.create(
+    session ? [transactionData] : transactionData,
+    ...(session ? [{ session }] : [])
+  );
 
   // 2. Add to user totalPoints atomically using $inc
+  const userUpdate = {
+    totalPoints: points,
+  };
+  if (!skipLifetimePoints) {
+    userUpdate.lifetimePoints = points;
+  }
+
   const updatedUser = await User.findByIdAndUpdate(
     userId,
     {
-      $inc: { totalPoints: points, lifetimePoints: points },
+      $inc: userUpdate,
     },
-    { new: true },
+    { new: true, session },
   );
 
   // 3. Sync QP to ensure UserTierProgress.currentPoint >= updatedUser.totalPoints
-  if (activeSeason) {
+  if (activeSeason && !skipQpSync) {
     const progress = await getOrCreateUserProgress(userId);
     if (progress && progress.currentPoint < updatedUser.totalPoints) {
-      // Use atomic max update or direct set to sync the points
       await UserTierProgress.findOneAndUpdate(
         { userId, seasonId: activeSeason._id },
         {
           $max: { currentPoint: updatedUser.totalPoints },
           $set: { lastEvaluatedAt: new Date() },
         },
+        ...(session ? [{ session }] : [])
       );
 
       // Evaluate dynamic upgrades after modifying progress points
@@ -1657,6 +1672,32 @@ async function getSeasonById(seasonId) {
   return season;
 }
 
+/**
+ * Processes loyalty QR scan points and synchronizes user contest entries in the background.
+ *
+ * @param {string} userId
+ * @param {number} weightedPoints
+ * @param {string} redeemId
+ * @param {string} actualProductId
+ * @param {string|null} fallbackTierId
+ * @returns {Promise<object>} The updated user tier progress document
+ */
+async function processLoyaltyAndContestsAfterScan(userId, weightedPoints, redeemId, actualProductId, fallbackTierId = null) {
+  const updatedProgress = await processQrScanPoints(userId, weightedPoints, redeemId);
+
+  const userTierId =
+    updatedProgress?.currentTierId?._id ||
+    updatedProgress?.currentTierId ||
+    fallbackTierId;
+
+  const contestsService = require("../contests/contests.service"); // lazy — avoids circular dep
+  contestsService
+    .syncUserContestEntries(userId, weightedPoints, actualProductId, userTierId)
+    .catch(() => { }); // Non-blocking
+
+  return updatedProgress;
+}
+
 module.exports = {
   seedDefaultLoyaltyData,
   getOrCreateUserProgress,
@@ -1684,4 +1725,5 @@ module.exports = {
   archiveTierConfiguration,
   getSeasonById,
   validateTierRange,
+  processLoyaltyAndContestsAfterScan,
 };

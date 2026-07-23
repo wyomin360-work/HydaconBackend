@@ -107,6 +107,12 @@ router.get(
   verification.verifyUser,
   handleError(giftController.getUserRedemptionDetails),
 );
+router.get(
+  giftPaths.userRewardedGifts,
+  verification.verifyUser,
+  handleError(giftController.getUserRewardedGifts),
+);
+
 
 // Redemptions
 router.post(

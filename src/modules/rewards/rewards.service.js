@@ -340,6 +340,73 @@ async function deleteAllReward() {
   return { message: "all rewards deleted", data: { rewardsDeleted: true } };
 }
 
+/**
+ * Awards a reward (either POINTS, COINS, or GIFT) to a user globally.
+ * Uses lazy requiring of other services to prevent circular dependencies.
+ * 
+ * @param {string} userId
+ * @param {object} rewardDetails - { type: "POINTS"|"GIFT", amount: number, giftId: string }
+ * @param {object} sourceDetails - { cause: string, causeId: string, causeTitle: string, referenceId: string }
+ * @param {ClientSession} session - Optional MongoDB session
+ * @returns {Promise<object>} Award result { success: boolean, ... }
+ */
+async function awardRewardToUser(userId, rewardDetails, sourceDetails, session = null) {
+  const { type, amount, giftId } = rewardDetails;
+  const { cause, causeId, causeTitle, referenceId } = sourceDetails;
+
+  if (type === "GIFT") {
+    const Gift = require("../../schemas/gift.schema");
+    const giftService = require("../gift/gift.service");
+
+    let giftQuery = Gift.findById(giftId);
+    if (giftQuery && session && typeof giftQuery.session === "function") {
+      giftQuery = giftQuery.session(session);
+    }
+    const gift = await giftQuery;
+    if (!gift) {
+      return { success: false, message: "Gift not found" };
+    }
+
+    const causeData = {
+      rewardCause: cause,
+      rewardCauseId: causeId,
+      rewardCauseTitle: causeTitle,
+      redeemId: referenceId,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30-day default claim window
+    };
+
+    return giftService.awardGiftToUser(userId, gift, causeData, session);
+  }
+
+  if (type === "POINTS") {
+    const loyaltyService = require("../loyalty/loyalty.service");
+    const { LOYALTY_TRANSACTION_SOURCES } = require("../../constants/loyalty");
+
+    let loyaltySource = LOYALTY_TRANSACTION_SOURCES.CAMPAIGN_BONUS;
+    if (cause === "SCRATCH_CARD") {
+      loyaltySource = LOYALTY_TRANSACTION_SOURCES.SCRATCH_CARD_BONUS;
+    }
+
+    const options = {
+      skipQpSync: true, // Bonus points do not contribute to tier upgrades
+      skipLifetimePoints: true,
+      source: loyaltySource,
+    };
+    await loyaltyService.addBonusPoints(
+      userId,
+      amount,
+      causeTitle || "Campaign bonus points",
+      referenceId,
+      options,
+      ...(session ? [session] : [])
+    );
+
+    return { success: true, pointsAwarded: amount };
+  }
+
+  return { success: false, message: "Unsupported reward type" };
+}
+
 module.exports = {
   listRewards,
   listRewardsGroupedByDate,
@@ -348,4 +415,5 @@ module.exports = {
   updateReward,
   deleteReward,
   deleteAllReward,
+  awardRewardToUser,
 };

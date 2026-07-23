@@ -1,15 +1,34 @@
-const { createRedeem } = require("../../src/modules/redeems/redeems.service");
-const { releaseBan } = require("../../src/modules/user/user.service");
-const User = require("../../src/schemas/user.schema");
-const Reward = require("../../src/schemas/reward.schema");
-const Product = require("../../src/schemas/product.schema");
-const AppConfig = require("../../src/schemas/app-config.schema");
-
 // Mocking dependencies
+jest.mock("mongoose", () => {
+  const actualMongoose = jest.requireActual("mongoose");
+  return {
+    ...actualMongoose,
+    startSession: jest.fn().mockResolvedValue({
+      startTransaction: jest.fn(),
+      commitTransaction: jest.fn(),
+      abortTransaction: jest.fn(),
+      endSession: jest.fn(),
+      withTransaction: jest.fn().mockImplementation(async (callback) => {
+        await callback();
+      }),
+    }),
+  };
+});
 jest.mock("../../src/schemas/user.schema");
 jest.mock("../../src/schemas/reward.schema");
 jest.mock("../../src/schemas/product.schema");
 jest.mock("../../src/schemas/app-config.schema");
+jest.mock("../../src/schemas/gift.schema", () => ({
+  exists: jest.fn().mockResolvedValue(false),
+  countDocuments: jest.fn().mockResolvedValue(0),
+}));
+jest.mock("../../src/schemas/gift-redemption.schema");
+jest.mock("../../src/schemas/scratch-card-rule.schema", () => ({
+  find: jest.fn().mockReturnValue({
+    lean: jest.fn().mockResolvedValue([]),
+  }),
+}));
+jest.mock("../../src/schemas/rule-set.schema");
 jest.mock("../../src/schemas/redeem.schema", () => {
   return {
     create: jest.fn().mockResolvedValue({ _id: "redeem123" }),
@@ -21,13 +40,26 @@ jest.mock("../../src/schemas/tier-configuration.schema", () => ({
   }),
 }));
 jest.mock("../../src/functions/fcm", () => ({
-  sendFcmNotifications: jest.fn(),
+  sendFcmNotifications: jest.fn().mockResolvedValue(true),
 }));
 jest.mock("../../src/modules/loyalty/loyalty.service", () => ({
   getOrCreateUserProgress: jest.fn().mockResolvedValue(null),
   processQrScanPoints: jest.fn().mockResolvedValue(true),
   resolveActiveSeason: jest.fn().mockResolvedValue(null),
+  addBonusPoints: jest.fn().mockResolvedValue(true),
+  processLoyaltyAndContestsAfterScan: jest.fn().mockResolvedValue(null),
 }));
+jest.mock("../../src/modules/contests/contests.service", () => ({
+  syncUserContestEntries: jest.fn().mockResolvedValue(true),
+}));
+
+const { createRedeem } = require("../../src/modules/redeems/redeems.service");
+const { releaseBan } = require("../../src/modules/user/user.service");
+const User = require("../../src/schemas/user.schema");
+const Reward = require("../../src/schemas/reward.schema");
+const Product = require("../../src/schemas/product.schema");
+const AppConfig = require("../../src/schemas/app-config.schema");
+const Gift = require("../../src/schemas/gift.schema");
 
 describe("Redeem Security & Ban Logic", () => {
   let mockUser, mockConfig;
@@ -118,6 +150,7 @@ describe("Redeem Security & Ban Logic", () => {
         expect.objectContaining({
           $set: { failedScanAttempts: 0, scanBanUntil: null },
         }),
+        expect.any(Object),
       );
     });
   });

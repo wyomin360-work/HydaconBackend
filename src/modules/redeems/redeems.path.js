@@ -4,5 +4,4 @@ module.exports = {
   create: "/create",
   delete: "/delete/:redeemId",
   details: "/details/:redeemId",
-  claimGift: "/claim-gift/:redeemId",
 };

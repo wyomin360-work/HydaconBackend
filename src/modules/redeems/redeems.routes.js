@@ -8,7 +8,6 @@ const {
   listRedeemsRequestType,
   createRedeemRequestType,
   redeemIdRequestType,
-  claimGiftRequestType,
 } = require("../../validations/redeems.validations");
 
 const router = express.Router();
@@ -31,13 +30,6 @@ router.post(
   verification.verifyUser,
   validateRequest(createRedeemRequestType),
   handleError(redeemsController.createRedeem),
-);
-
-router.post(
-  redeemsPath.claimGift,
-  verification.verifyUser,
-  validateRequest(claimGiftRequestType),
-  handleError(redeemsController.claimGift),
 );
 
 router.delete(

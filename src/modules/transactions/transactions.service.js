@@ -14,6 +14,7 @@ const { attachId, formatNotification } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const { sendFcmNotifications } = require("../../functions/fcm");
 const { LOYALTY_TRANSACTION_TYPES } = require("../../constants/loyalty");
+const LoyaltyTransaction = require("../../schemas/loyalty-transaction.schema");
 
 // ----------------------
 // Transaction List
@@ -152,7 +153,6 @@ async function createTransaction(data, userId) {
     // Beginner(0) or Bronze(1)
     let lifetimePoints = user.lifetimePoints || 0;
     if (lifetimePoints < 1000) {
-      const LoyaltyTransaction = require("../../schemas/loyalty-transaction.schema");
       const result = await LoyaltyTransaction.aggregate([
         {
           $match: {

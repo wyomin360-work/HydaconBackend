@@ -25,9 +25,3 @@ exports.deleteRedeem = async (req, res) => {
   return sendResponse(res, response);
 };
 
-exports.claimGift = async (req, res) => {
-  const redeemId = req.params?.redeemId;
-  const claimData = req.body;
-  const response = await redeemService.claimGift(redeemId, claimData, req.user);
-  return sendResponse(res, response);
-};

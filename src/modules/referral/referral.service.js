@@ -341,6 +341,33 @@ async function completeMilestone(userId, milestone) {
   };
 }
 
+/**
+ * Processes referral milestones triggered by a QR scan (e.g. FIRST_SCAN, DAILY_SCAN).
+ * Updates lastScanDate on the user and evaluates milestone rewards.
+ * 
+ * @param {string} userId
+ * @param {object} user - The user document before this scan was completed
+ */
+async function handleScanReferralMilestones(userId, user) {
+  try {
+    // 1. First scan milestone
+    await completeMilestone(userId, REFERRAL_MILESTONES.FIRST_SCAN);
+
+    // 2. Daily scan milestone check
+    const todayStr = new Date().toDateString();
+    const lastScanStr = user.lastScanDate ? new Date(user.lastScanDate).toDateString() : "";
+    if (todayStr !== lastScanStr) {
+      await User.findByIdAndUpdate(userId, { $set: { lastScanDate: new Date() } });
+      await completeMilestone(userId, REFERRAL_MILESTONES.DAILY_SCAN);
+    }
+
+    // 3. Evaluate referral rewards based on new total scan count
+    await evaluateReferralReward(userId, (user.totalScans || 0) + 1);
+  } catch (err) {
+    console.error("[Referral] Error processing scan milestones:", err);
+  }
+}
+
 module.exports = {
   getMobileReferralStats,
   getMobileReferralList,
@@ -348,4 +375,5 @@ module.exports = {
   sendReminderByUserId,
   evaluateReferralReward,
   completeMilestone,
+  handleScanReferralMilestones,
 };

@@ -224,7 +224,27 @@ exports.deleteGift = async (giftId) => {
 
 // --- Redemptions ---
 
-const checkEligibility = async (user, gift, session = null) => {
+/**
+ * Evaluates whether a user is eligible to redeem a gift.
+ *
+ * If `isRewardedUser` is true the user has already been granted this gift
+ * (e.g. via a scratch card win) and is only providing a shipping address now.
+ * In that case ALL coin balance and RuleSet checks are waived — the gift is free.
+ */
+const checkEligibility = async (user, gift, session = null, isRewardedUser = false) => {
+  // --- Rewarded-user fast path: waive everything ---
+  if (isRewardedUser) {
+    return {
+      eligible: true,
+      isRewardedUser: true,
+      reasons: [],
+      rules: {
+        coins: { required: 0, current: user.hydaconCoins || 0, satisfied: true },
+        dynamic: [],
+      },
+    };
+  }
+
   const rules = {
     coins: {
       required: gift.priceInCoins,
@@ -273,8 +293,16 @@ exports.getGiftEligibility = async (userId, giftId) => {
     if (!user) return { success: false, message: "User not found" };
     if (!gift) return { success: false, message: "Gift not found" };
 
-    const eligibility = await checkEligibility(user, gift);
-    return { success: true, data: eligibility };
+    // Surface whether this user already has a pending reward for this gift
+    const now = new Date();
+    const rewardEntry = (gift.rewardedUsers || []).find(
+      (e) =>
+        String(e.userId) === String(userId) &&
+        (!e.expiresAt || e.expiresAt > now),
+    );
+
+    const eligibility = await checkEligibility(user, gift, null, !!rewardEntry);
+    return { success: true, data: { ...eligibility, isRewardedUser: !!rewardEntry } };
   } catch (error) {
     return { success: false, message: error.message };
   }
@@ -369,16 +397,14 @@ const sendVoucherNotifications = async (user, gift, redemption) => {
 exports.redeemGift = async (userId, data) => {
   const { giftId, shippingAddress } = data;
   if (!giftId)
-    return {
-      success: false,
-      message: "Gift ID is required",
-    };
+    return { success: false, message: "Gift ID is required" };
 
   const session = await mongoose.startSession();
   try {
     let result;
     let userForNotification;
     let giftForNotification;
+    let wasRewardedUser = false;
 
     await session.withTransaction(async () => {
       const user = await User.findById(userId).session(session);
@@ -386,6 +412,22 @@ exports.redeemGift = async (userId, data) => {
 
       if (!user) throw new Error("User not found");
       if (!gift || !gift.active) throw new Error("Gift not available");
+
+      // ── Rewarded-user detection ──────────────────────────────────────────
+      // Check whether this user has a pending reward entry on this gift
+      // (placed there by awardPhysicalGiftToUser at scratch card / contest time).
+      const now = new Date();
+      const rewardEntryIndex = (gift.rewardedUsers || []).findIndex(
+        (e) =>
+          String(e.userId) === String(userId) &&
+          (!e.expiresAt || e.expiresAt > now),
+      );
+      const rewardEntry =
+        rewardEntryIndex !== -1 ? gift.rewardedUsers[rewardEntryIndex] : null;
+      wasRewardedUser = !!rewardEntry;
+      // ────────────────────────────────────────────────────────────────────
+
+      // Shipping address is always required for physical gifts
       if (gift.giftType === "physical" && !shippingAddress) {
         throw new Error("Shipping address is required for physical gifts");
       }
@@ -409,11 +451,58 @@ exports.redeemGift = async (userId, data) => {
         }
       }
 
-      const eligibility = await checkEligibility(user, gift, session);
+      // Evaluate eligibility — waives coins + ruleset for rewarded users
+      const eligibility = await checkEligibility(user, gift, session, wasRewardedUser);
       if (!eligibility.eligible) {
         throw new Error(eligibility.reasons.join(", "));
       }
 
+      // ── REWARDED-USER CLAIM PATH ─────────────────────────────────────────
+      // Stock was already reserved when awardPhysicalGiftToUser() was called.
+      // We just need to:
+      //   1. Pull the user's entry from rewardedUsers
+      //   2. Decrement reservedQuantity (stock is consumed)
+      //   3. Create GiftRedemption with isReward=true, coinsUsed=0
+      if (wasRewardedUser) {
+        // Atomically pull the specific rewardedUsers entry and adjust stock
+        const updatedGift = await Gift.findOneAndUpdate(
+          { _id: giftId, "rewardedUsers._id": rewardEntry._id },
+          {
+            $pull: { rewardedUsers: { _id: rewardEntry._id } },
+            $inc: { reservedQuantity: -1, stockQuantity: -1 },
+          },
+          { session, new: true },
+        );
+
+        if (!updatedGift) {
+          throw new Error(
+            "Your reward entry was not found. It may have expired or already been claimed.",
+          );
+        }
+
+        const redemptionData = {
+          userId,
+          giftId,
+          coinsUsed: 0,
+          giftType: gift.giftType,
+          isReward: true,
+          rewardCause: rewardEntry.rewardCause,
+          rewardCauseId: rewardEntry.rewardCauseId || null,
+          rewardCauseTitle: rewardEntry.rewardCauseTitle || null,
+          shippingAddress,
+          status: GIFT_REDEMPTION_STATUS.PROCESSING,
+        };
+
+        const redemption = new GiftRedemption(redemptionData);
+        await redemption.save({ session });
+        result = redemption;
+        userForNotification = user;
+        giftForNotification = gift;
+        return;
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
+      // ── DIRECT PURCHASE PATH ─────────────────────────────────────────────
       const availableStock = gift.stockQuantity - gift.reservedQuantity;
       if (availableStock <= 0) throw new Error("Gift is out of stock");
 
@@ -476,6 +565,7 @@ exports.redeemGift = async (userId, data) => {
       result = redemption;
       userForNotification = user;
       giftForNotification = gift;
+      // ─────────────────────────────────────────────────────────────────────
     });
 
     // After transaction: fire email + push for vouchers (non-blocking)
@@ -491,13 +581,184 @@ exports.redeemGift = async (userId, data) => {
 
     return {
       success: true,
-      message: "Gift redeemed successfully",
+      message: wasRewardedUser
+        ? "Reward claimed successfully! Your gift will be shipped to the provided address."
+        : "Gift redeemed successfully",
       data: result,
     };
   } catch (error) {
     return { success: false, message: error.message };
   } finally {
     await session.endSession();
+  }
+};
+
+/**
+ * Awards a physical gift to a user by adding them to the gift's rewardedUsers array
+ * and reserving stock. Should be called inside an existing MongoDB session/transaction
+ * (e.g. from createRedeem in redeems.service.js).
+ *
+ * Returns { success: true } or { success: false, message }.
+ * Does NOT create a GiftRedemption record — that happens when the user claims.
+ *
+ * @param {string|ObjectId} userId
+ * @param {object} gift  - Mongoose Gift document
+ * @param {{ rewardCause, rewardCauseId, rewardCauseTitle, redeemId, expiresAt }} causeData
+ * @param {ClientSession} session - Mongoose session (must be active)
+ */
+exports.awardPhysicalGiftToUser = async (userId, gift, causeData, session) => {
+  try {
+    const { rewardCause, rewardCauseId, rewardCauseTitle, redeemId, expiresAt } = causeData;
+
+    // Prevent duplicate pending rewards: a user should only have one
+    // unclaimed entry per gift at a time.
+    const now = new Date();
+    const alreadyRewarded = (gift.rewardedUsers || []).some(
+      (e) =>
+        String(e.userId) === String(userId) &&
+        (!e.expiresAt || e.expiresAt > now),
+    );
+
+    if (alreadyRewarded) {
+      return {
+        success: false,
+        message: "User already has a pending unclaimed reward for this gift.",
+        duplicate: true,
+      };
+    }
+
+    // Atomically check stock AND push the rewarded-user entry + reserve stock
+    const updatedGift = await Gift.findOneAndUpdate(
+      {
+        _id: gift._id,
+        $expr: { $gt: ["$stockQuantity", "$reservedQuantity"] },
+      },
+      {
+        $push: {
+          rewardedUsers: {
+            userId,
+            rewardCause,
+            rewardCauseId: rewardCauseId || null,
+            rewardCauseTitle: rewardCauseTitle || null,
+            redeemId: redeemId || null,
+            rewardedAt: now,
+            expiresAt: expiresAt || null,
+          },
+        },
+        $inc: { reservedQuantity: 1 },
+      },
+      { session, new: true },
+    );
+
+    if (!updatedGift) {
+      return { success: false, message: "Gift is out of stock and cannot be awarded." };
+    }
+
+    return { success: true, data: updatedGift };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+/**
+ * Awards a gift (either voucher or physical) to a user from a scratch card, event, etc.
+ * For physical: reserves stock and adds user to rewardedUsers array.
+ * For voucher: creates and saves a GiftRedemption document immediately.
+ * 
+ * @param {string} userId
+ * @param {object} gift - The Gift document
+ * @param {object} causeData - { rewardCause, rewardCauseId, rewardCauseTitle, redeemId, expiresAt }
+ * @param {ClientSession} session - Optional MongoDB session
+ * @returns {Promise<object>} Award result { success: boolean, requiresClaim: boolean, giftRedemptionId?, duplicate?, message? }
+ */
+exports.awardGiftToUser = async (userId, gift, causeData, session = null) => {
+  try {
+    const isVoucher = gift.giftType === "voucher";
+
+    if (isVoucher) {
+      // Vouchers: auto-deliver immediately — create GiftRedemption now
+      const giftRedemption = new GiftRedemption({
+        userId,
+        giftId: gift._id,
+        coinsUsed: 0,
+        giftType: gift.giftType,
+        status: GIFT_REDEMPTION_STATUS.DELIVERED,
+        isReward: true,
+        rewardCause: causeData.rewardCause,
+        rewardCauseId: causeData.rewardCauseId || null,
+        rewardCauseTitle: causeData.rewardCauseTitle || null,
+        voucherCode: gift.voucherCode || undefined,
+        voucherFileUrl: gift.voucherFileUrl || undefined,
+        voucherSent: true,
+      });
+      await giftRedemption.save({ session });
+      return {
+        success: true,
+        requiresClaim: false,
+        giftRedemptionId: giftRedemption._id,
+      };
+    } else {
+      // Physical gifts: defer — add user to rewardedUsers array and reserve stock
+      const awardResult = await exports.awardPhysicalGiftToUser(
+        userId,
+        gift,
+        causeData,
+        session,
+      );
+      return {
+        success: awardResult.success,
+        requiresClaim: true,
+        duplicate: awardResult.duplicate,
+        message: awardResult.message,
+      };
+    }
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+/**
+ * Returns the list of physical gifts that have a pending reward entry for the given user.
+ * Used by the app to show the user their pending "claim your gift" notifications.
+ */
+exports.getUserRewardedGifts = async (userId) => {
+  try {
+    const now = new Date();
+
+    // Find all gifts where rewardedUsers contains an active (non-expired) entry for this user
+    const gifts = await Gift.find({
+      "rewardedUsers.userId": userId,
+    })
+      .populate("categoryId", "name")
+      .lean();
+
+    // Filter and reshape: return only the user's own entry from each gift
+    const results = gifts
+      .map((gift) => {
+        const entry = (gift.rewardedUsers || []).find(
+          (e) =>
+            String(e.userId) === String(userId) &&
+            (!e.expiresAt || new Date(e.expiresAt) > now),
+        );
+        if (!entry) return null;
+        return {
+          gift: {
+            _id: gift._id,
+            name: gift.name,
+            description: gift.description,
+            image: gift.image,
+            themeColor: gift.themeColor,
+            giftType: gift.giftType,
+            categoryId: gift.categoryId,
+          },
+          rewardEntry: entry,
+        };
+      })
+      .filter(Boolean);
+
+    return { success: true, data: results };
+  } catch (error) {
+    return { success: false, message: error.message };
   }
 };
 

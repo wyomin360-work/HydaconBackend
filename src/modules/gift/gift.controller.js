@@ -122,6 +122,13 @@ exports.getUserRedemptionDetails = async (req, res) => {
   return sendResponse(res, response);
 };
 
+exports.getUserRewardedGifts = async (req, res) => {
+  const userId = req.userId;
+  const response = await giftService.getUserRewardedGifts(userId);
+  return sendResponse(res, response);
+};
+
+
 // Scratch Card Configuration
 exports.getScratchCardConfig = async (req, res) => {
   const response = await giftService.getScratchCardConfig();

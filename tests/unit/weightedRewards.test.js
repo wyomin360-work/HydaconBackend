@@ -1,6 +1,5 @@
 const {
   createRedeem,
-  claimGift,
 } = require("../../src/modules/redeems/redeems.service");
 const User = require("../../src/schemas/user.schema");
 const Role = require("../../src/schemas/role.schema");
@@ -19,6 +18,10 @@ jest.mock("../../src/schemas/gift-redemption.schema");
 jest.mock("../../src/schemas/app-config.schema");
 jest.mock("../../src/schemas/tier-configuration.schema");
 jest.mock("../../src/schemas/scratch-card-rule.schema");
+jest.mock("../../src/modules/gift/gift.service", () => ({
+  awardPhysicalGiftToUser: jest.fn().mockResolvedValue({ success: true }),
+  awardGiftToUser: jest.fn().mockResolvedValue({ success: true, requiresClaim: true }),
+}));
 jest.mock("../../src/schemas/contest-entry.schema", () => ({
   ContestEntry: {
     findOneAndUpdate: jest.fn().mockResolvedValue(true),
@@ -69,6 +72,7 @@ jest.mock("../../src/modules/loyalty/loyalty.service", () => ({
     message: "Bonus points successfully added",
     points: 50,
   }),
+  processLoyaltyAndContestsAfterScan: jest.fn().mockResolvedValue(null),
 }));
 
 describe("Weighted Rewards Calculation", () => {
@@ -196,6 +200,7 @@ describe("Weighted Rewards Calculation", () => {
       expect.objectContaining({
         $inc: expect.objectContaining({ totalPoints: 10, lifetimePoints: 10 }),
       }),
+      expect.any(Object),
     );
   });
 
@@ -218,6 +223,7 @@ describe("Weighted Rewards Calculation", () => {
       expect.objectContaining({
         $inc: expect.objectContaining({ totalPoints: 5, lifetimePoints: 5 }),
       }),
+      expect.any(Object),
     );
   });
 
@@ -259,11 +265,20 @@ describe("Weighted Rewards Calculation", () => {
     const Gift = require("../../src/schemas/gift.schema");
     Gift.exists.mockResolvedValue(true);
     Gift.countDocuments.mockResolvedValue(1);
+    Gift.findById.mockResolvedValue({
+      _id: "gift123",
+      name: "Hydacon T-Shirt",
+      image: "tshirt.png",
+      active: true,
+      giftType: "physical",
+    });
     Gift.findOne.mockReturnValue({
       skip: jest.fn().mockResolvedValue({
         _id: "gift123",
         name: "Hydacon T-Shirt",
         image: "tshirt.png",
+        active: true,
+        giftType: "physical",
       }),
     });
 
@@ -286,65 +301,10 @@ describe("Weighted Rewards Calculation", () => {
       id: "gift123",
       name: "Hydacon T-Shirt",
       image: "tshirt.png",
+      giftType: "physical",
+      requiresClaim: true,
     });
     expect(response.data.bonusPoints).toBe(0);
     expect(response.data.totalPointsAwarded).toBe(5);
-  });
-
-  it("should claim a physical gift successfully", async () => {
-    const Gift = require("../../src/schemas/gift.schema");
-    const GiftRedemption = require("../../src/schemas/gift-redemption.schema");
-
-    const mockRedeem = {
-      _id: "redeem123",
-      userId: "user123",
-      scratchCardRewardType: "GIFT",
-      scratchCardGiftId: "gift123",
-      scratchCardGiftClaimed: false,
-      save: jest.fn().mockResolvedValue(true),
-    };
-
-    const mockGift = {
-      _id: "gift123",
-      name: "Hydacon T-Shirt",
-      image: "tshirt.png",
-      stockQuantity: 10,
-      reservedQuantity: 2,
-      active: true,
-      save: jest.fn().mockResolvedValue(true),
-    };
-
-    const mockRedemption = {
-      _id: "redemption123",
-      status: "PROCESSING",
-    };
-
-    Redeem.findById.mockResolvedValue(mockRedeem);
-    Gift.findById.mockReturnValue({
-      session: jest.fn().mockResolvedValue(mockGift),
-    });
-    // For the initial active check
-    Gift.findById.mockImplementationOnce(() => Promise.resolve(mockGift));
-
-    GiftRedemption.prototype.save = jest.fn().mockResolvedValue(mockRedemption);
-
-    const claimData = {
-      shippingAddress: {
-        addressLine1: "123 Main St",
-        city: "Mumbai",
-        state: "Maharashtra",
-        pincode: "400001",
-      },
-    };
-
-    const response = await claimGift("redeem123", claimData, {
-      _id: "user123",
-    });
-
-    expect(response.message).toBe("Gift claimed successfully");
-    expect(mockRedeem.scratchCardGiftClaimed).toBe(true);
-    expect(mockGift.reservedQuantity).toBe(3);
-    expect(mockRedeem.save).toHaveBeenCalled();
-    expect(mockGift.save).toHaveBeenCalled();
   });
 });
