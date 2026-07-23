@@ -13,6 +13,7 @@ const { logAudit, buildChanges } = require("../audit-log/audit-log.service");
 const { createTierConfigHistorySnapshot } = require("./loyalty-audit.service");
 const referralService = require("../referral/referral.service");
 const { REFERRAL_MILESTONES } = require("../../constants/referrals");
+const contestsService = require("../contests/contests.service");
 
 async function logConfigurationAudit(payload) {
   return logAudit(payload.action, payload);
@@ -1690,7 +1691,6 @@ async function processLoyaltyAndContestsAfterScan(userId, weightedPoints, redeem
     updatedProgress?.currentTierId ||
     fallbackTierId;
 
-  const contestsService = require("../contests/contests.service"); // lazy — avoids circular dep
   contestsService
     .syncUserContestEntries(userId, weightedPoints, actualProductId, userTierId)
     .catch(() => { }); // Non-blocking

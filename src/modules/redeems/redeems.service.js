@@ -579,9 +579,6 @@ async function persistRedeemRecord(payload, session) {
  */
 async function handleScratchCardGiftAward({ userId, redeem, chosenGift, matchedCampaign }, session) {
   if (!chosenGift || redeem.scratchCardRewardType !== "GIFT") return;
-
-  const rewardsService = require("../rewards/rewards.service");
-
   const rewardDetails = {
     type: "GIFT",
     giftId: chosenGift._id,
@@ -795,7 +792,6 @@ async function createRedeem(redeemData, reqUser = null) {
   sendScanSuccessNotification(user, weightedPoints, product?.name); // fire-and-forget
 
   if (newRedeem.scratchCardRewardType === "POINTS" && newRedeem.scratchCardBonusPoints > 0) {
-    const rewardsService = require("../rewards/rewards.service"); // lazy
     await rewardsService.awardRewardToUser(
       userId,
       { type: "POINTS", amount: newRedeem.scratchCardBonusPoints },

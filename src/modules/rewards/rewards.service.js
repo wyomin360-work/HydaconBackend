@@ -1,6 +1,10 @@
 const mongoose = require("mongoose");
 const Product = require("../../schemas/product.schema");
 const Reward = require("../../schemas/reward.schema");
+const Gift = require("../../schemas/gift.schema");
+const giftService = require("../gift/gift.service");
+const loyaltyService = require("../loyalty/loyalty.service");
+const { LOYALTY_TRANSACTION_SOURCES } = require("../../constants/loyalty");
 const { randomHex, attachId } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 
@@ -355,9 +359,6 @@ async function awardRewardToUser(userId, rewardDetails, sourceDetails, session =
   const { cause, causeId, causeTitle, referenceId } = sourceDetails;
 
   if (type === "GIFT") {
-    const Gift = require("../../schemas/gift.schema");
-    const giftService = require("../gift/gift.service");
-
     let giftQuery = Gift.findById(giftId);
     if (giftQuery && session && typeof giftQuery.session === "function") {
       giftQuery = giftQuery.session(session);
@@ -379,9 +380,6 @@ async function awardRewardToUser(userId, rewardDetails, sourceDetails, session =
   }
 
   if (type === "POINTS") {
-    const loyaltyService = require("../loyalty/loyalty.service");
-    const { LOYALTY_TRANSACTION_SOURCES } = require("../../constants/loyalty");
-
     let loyaltySource = LOYALTY_TRANSACTION_SOURCES.CAMPAIGN_BONUS;
     if (cause === "SCRATCH_CARD") {
       loyaltySource = LOYALTY_TRANSACTION_SOURCES.SCRATCH_CARD_BONUS;

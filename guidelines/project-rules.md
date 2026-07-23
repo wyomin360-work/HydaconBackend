@@ -138,3 +138,18 @@ To ensure uniform API response structures and clean control flow:
 - **Test Placement**: Every feature module must have corresponding unit test suites located in `tests/unit/<feature>.test.js` (service tests) and `tests/unit/<feature>.controller.test.js` (controller tests).
 - **Service Tests**: Must cover success flows, boundary conditions, error throwing (`rejects.toThrow`), capacity limits, and eligibility checks using Jest mocks (`jest.mock(...)`) for Mongoose models and third-party functions.
 - **Controller Tests**: Must verify parameter extraction (req.body, req.params, req.query, req.user) and correct delegation to service methods.
+
+---
+
+## 9. Organized & Unified Imports
+
+To maintain readability and prevent node application startup crashes:
+
+- **Top-Level Imports**: All `require(...)` statements must be placed cleanly at the top of the file. Do not use inline `require(...)` statements inside functions or conditional blocks.
+- **Dependency Hierarchy**: Organize imports logically:
+  1. Node native modules (e.g., `path`, `fs`).
+  2. Third-party dependencies (e.g., `mongoose`, `express`).
+  3. Constants, schemas, and helper utilities.
+  4. Relative service dependencies.
+- **Acyclic Architecture**: Keep feature modules decoupled. Ensure dependencies between modules are strictly unidirectional to completely avoid circular import loops.
+
