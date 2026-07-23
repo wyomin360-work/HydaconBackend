@@ -36,8 +36,8 @@ const deleteContent = async (id) => {
 };
 
 const listContent = async (query = {}) => {
-  const { page, limit, type, placement, active } = query;
-  
+  const { page = 1, limit = 10, type, placement, active } = query;
+
   const filter = {};
   if (type) filter.type = type;
   if (placement) filter.placements = placement;
