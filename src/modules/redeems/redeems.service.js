@@ -488,7 +488,7 @@ async function resolveGlobalConfigReward() {
 async function resolveScratchCardReward({ userId, user, actualProductId, activeSeason, redeemData }) {
   try {
     // Path 1: Unit-test override
-    if (redeemData.testRewardType) return resolveTestReward(redeemData);
+    if (redeemData.testRewardType && process.env.NODE_ENV === "test") return resolveTestReward(redeemData);
 
     // Resolve the user's current tier ID (needed for legacy fallback)
     let userTierId = null;
