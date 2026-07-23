@@ -1,6 +1,9 @@
 const { Contest } = require("../../schemas/contest.schema");
 const { ContestEntry } = require("../../schemas/contest-entry.schema");
 const User = require("../../schemas/user.schema");
+const Gift = require("../../schemas/gift.schema");
+const GiftRedemption = require("../../schemas/gift-redemption.schema");
+const { GIFT_REDEMPTION_STATUS, REWARD_CAUSE } = require("../../constants/gift");
 const { evaluateRuleSet } = require("../rule-set/rule-set.evaluator");
 const { attachId, formatNotification } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
@@ -209,6 +212,31 @@ async function adminFinaliseContest(contestId, adminId) {
       }
       if (prize.rewardType === REWARD_TYPE.GIFT) {
         entry.rewardType = REWARD_TYPE.GIFT;
+        if (prize.giftId && !entry.giftRedemptionId) {
+          const gift = await Gift.findById(prize.giftId);
+          if (gift) {
+            const isVoucher = gift.giftType === "voucher";
+            const giftRedemption = await GiftRedemption.create({
+              userId: entry.userId,
+              giftId: gift._id,
+              coinsUsed: 0,
+              giftType: gift.giftType,
+              status: isVoucher
+                ? GIFT_REDEMPTION_STATUS.DELIVERED
+                : GIFT_REDEMPTION_STATUS.PROCESSING,
+              isReward: true,
+              rewardCause: REWARD_CAUSE.CONTEST,
+              rewardCauseId: contest._id,
+              rewardCauseTitle: `Contest Win: ${contest.name} (Rank #${entry.rank})`,
+              ...(isVoucher && {
+                voucherCode: gift.voucherCode || undefined,
+                voucherFileUrl: gift.voucherFileUrl || undefined,
+                voucherSent: true,
+              }),
+            });
+            entry.giftRedemptionId = giftRedemption._id;
+          }
+        }
       }
       entry.rewardStatus = ENTRY_REWARD_STATUS.CREDITED;
     }
@@ -522,6 +550,31 @@ async function userClaimReward(contestId, userId) {
     entry.bonusPointsAwarded = prize.points;
   } else if (prize.rewardType === REWARD_TYPE.GIFT) {
     entry.rewardType = REWARD_TYPE.GIFT;
+    if (prize.giftId && !entry.giftRedemptionId) {
+      const gift = await Gift.findById(prize.giftId);
+      if (gift) {
+        const isVoucher = gift.giftType === "voucher";
+        const giftRedemption = await GiftRedemption.create({
+          userId,
+          giftId: gift._id,
+          coinsUsed: 0,
+          giftType: gift.giftType,
+          status: isVoucher
+            ? GIFT_REDEMPTION_STATUS.DELIVERED
+            : GIFT_REDEMPTION_STATUS.PROCESSING,
+          isReward: true,
+          rewardCause: REWARD_CAUSE.CONTEST,
+          rewardCauseId: contest._id,
+          rewardCauseTitle: `Contest Win: ${contest.name} (Rank #${entry.rank})`,
+          ...(isVoucher && {
+            voucherCode: gift.voucherCode || undefined,
+            voucherFileUrl: gift.voucherFileUrl || undefined,
+            voucherSent: true,
+          }),
+        });
+        entry.giftRedemptionId = giftRedemption._id;
+      }
+    }
   }
 
   entry.rewardStatus = ENTRY_REWARD_STATUS.CREDITED;

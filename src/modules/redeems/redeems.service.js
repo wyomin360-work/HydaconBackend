@@ -9,6 +9,7 @@ const Reward = require("../../schemas/reward.schema");
 const User = require("../../schemas/user.schema");
 const Gift = require("../../schemas/gift.schema");
 const GiftRedemption = require("../../schemas/gift-redemption.schema");
+const { GIFT_REDEMPTION_STATUS, REWARD_CAUSE } = require("../../constants/gift");
 const ScratchCardRule = require("../../schemas/scratch-card-rule.schema");
 const { RuleSet } = require("../../schemas/rule-set.schema");
 const ruleSetEvaluator = require("../rule-set/rule-set.evaluator");
@@ -461,6 +462,37 @@ async function createRedeem(redeemData, reqUser = null) {
     scratchCardCampaignId: matchedCampaign ? matchedCampaign._id : null,
   });
   if (!newRedeem) sendFailResponse("reward redeem failed");
+
+  // If scratch card awarded a GIFT, programmatically create GiftRedemption record
+  if (rewardType === "GIFT" && chosenGift) {
+    try {
+      const isVoucher = chosenGift.giftType === "voucher";
+      const giftRedemption = await GiftRedemption.create({
+        userId,
+        giftId: chosenGift._id,
+        coinsUsed: 0,
+        giftType: chosenGift.giftType,
+        status: isVoucher
+          ? GIFT_REDEMPTION_STATUS.DELIVERED
+          : GIFT_REDEMPTION_STATUS.PROCESSING,
+        isReward: true,
+        rewardCause: REWARD_CAUSE.SCRATCH_CARD,
+        rewardCauseId: matchedCampaign ? matchedCampaign._id : null,
+        rewardCauseTitle: matchedCampaign
+          ? `Scratch & Win: ${matchedCampaign.name}`
+          : "Scratch Card Win",
+        ...(isVoucher && {
+          voucherCode: chosenGift.voucherCode || undefined,
+          voucherFileUrl: chosenGift.voucherFileUrl || undefined,
+          voucherSent: true,
+        }),
+      });
+      newRedeem.scratchCardGiftRedemptionId = giftRedemption._id;
+      await newRedeem.save();
+    } catch (err) {
+      console.error("Error creating GiftRedemption for scratch card win:", err.message);
+    }
+  }
 
   // update reward status
   reward.isRedeemed = true;

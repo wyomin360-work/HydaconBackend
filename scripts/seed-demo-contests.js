@@ -5,6 +5,8 @@ const { ContestEntry, ENTRY_REWARD_STATUS } = require("../src/schemas/contest-en
 const User = require("../src/schemas/user.schema");
 const Gift = require("../src/schemas/gift.schema");
 const GiftCategory = require("../src/schemas/gift-category.schema");
+const GiftRedemption = require("../src/schemas/gift-redemption.schema");
+const { GIFT_REDEMPTION_STATUS, REWARD_CAUSE } = require("../src/constants/gift");
 const {
   CONTEST_STATUS,
   REWARD_TYPE,
@@ -466,13 +468,45 @@ async function seedDemoContests() {
         const rank = i + 1;
         const matchingPrize = contest.prizes.find((p) => p.rank === rank);
 
+        let giftRedemptionId = undefined;
+        if (
+          matchingPrize &&
+          matchingPrize.rewardType === REWARD_TYPE.GIFT &&
+          matchingPrize.giftId &&
+          contest.status === CONTEST_STATUS.COMPLETED
+        ) {
+          const gift = await Gift.findById(matchingPrize.giftId);
+          if (gift) {
+            const isVoucher = gift.giftType === "voucher";
+            const giftRedemption = await GiftRedemption.create({
+              userId: user._id,
+              giftId: gift._id,
+              coinsUsed: 0,
+              giftType: gift.giftType,
+              status: isVoucher
+                ? GIFT_REDEMPTION_STATUS.DELIVERED
+                : GIFT_REDEMPTION_STATUS.PROCESSING,
+              isReward: true,
+              rewardCause: REWARD_CAUSE.CONTEST,
+              rewardCauseId: contest._id,
+              rewardCauseTitle: `Contest Win: ${contest.name} (Rank #${rank})`,
+              ...(isVoucher && {
+                voucherCode: gift.voucherCode || undefined,
+                voucherFileUrl: gift.voucherFileUrl || undefined,
+                voucherSent: true,
+              }),
+            });
+            giftRedemptionId = giftRedemption._id;
+          }
+        }
+
         await ContestEntry.create({
           contestId: contest._id,
           userId: user._id,
           qualificationPoints,
           rank: contest.status === CONTEST_STATUS.COMPLETED ? rank : undefined,
           rewardType: matchingPrize ? matchingPrize.rewardType : null,
-          giftRedemptionId: matchingPrize && matchingPrize.giftId ? matchingPrize.giftId : undefined,
+          giftRedemptionId,
           bonusPointsAwarded: matchingPrize && matchingPrize.rewardType === REWARD_TYPE.POINTS ? matchingPrize.points : 0,
           rewardStatus: contest.status === CONTEST_STATUS.COMPLETED ? ENTRY_REWARD_STATUS.CREDITED : ENTRY_REWARD_STATUS.PENDING,
         });

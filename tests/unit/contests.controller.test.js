@@ -102,7 +102,7 @@ describe("Contests Controller Unit Tests", () => {
 
       await contestsController.adminFinaliseContest(req, res);
 
-      expect(contestsService.adminFinaliseContest).toHaveBeenCalledWith("c1");
+      expect(contestsService.adminFinaliseContest).toHaveBeenCalledWith("c1", undefined);
       expect(res.status).toHaveBeenCalledWith(200);
     });
   });

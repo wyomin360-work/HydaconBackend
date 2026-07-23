@@ -6,6 +6,7 @@ const Document = require("../../schemas/document.schema");
 const User = require("../../schemas/user.schema");
 const {
   GIFT_REDEMPTION_STATUS,
+  REWARD_CAUSE,
   SCRATCH_CARD_REWARD_TYPES,
   SCRATCH_CARD_MESSAGES,
   SCRATCH_CARD_ERRORS,
@@ -448,6 +449,10 @@ exports.redeemGift = async (userId, data) => {
         giftId,
         coinsUsed: gift.priceInCoins,
         giftType: gift.giftType,
+        isReward: false,
+        rewardCause: REWARD_CAUSE.DIRECT_PURCHASE,
+        rewardCauseId: null,
+        rewardCauseTitle: null,
         ...(gift.giftType === "physical" && { shippingAddress }),
         // For vouchers: auto-deliver and snapshot voucher details
         ...(isVoucher && {
