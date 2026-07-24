@@ -8,7 +8,7 @@ const sampleData = [
     subtitle: "Special home promo",
     description: "Get 20% cashback on your next scans. Limited time popup only.",
     type: "POPUP",
-    popupType: "MODAL_POPUP",
+    popupType: "FULLSCREEN",
     placements: ["HOME_OPENING"],
     images: {
       mobile: "https://images.unsplash.com/photo-1572916118970-fb5c8a1cb565?q=80&w=800&auto=format&fit=crop",
@@ -60,7 +60,7 @@ const sampleData = [
     subtitle: "Earn bonus points!",
     description: "Update your profile email and bank details to unlock instant transfers.",
     type: "POPUP",
-    popupType: "MODAL_POPUP",
+    popupType: "FULLSCREEN",
     placements: ["PROFILE_OPENING"],
     images: {
       mobile: "https://images.unsplash.com/photo-1581092160562-40aa08e78837?q=80&w=800&auto=format&fit=crop",

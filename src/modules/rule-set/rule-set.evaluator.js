@@ -62,6 +62,7 @@ const extractActualValue = async (rule, user, context, session) => {
 
     case RuleType.TIER: {
       const Tier = mongoose.model("Tier");
+      let tierObj = null;
       if (scope === RuleScope.SEASON) {
         const LoyaltySeason = mongoose.model("LoyaltySeason");
         const UserTierProgress = mongoose.model("UserTierProgress");
@@ -73,16 +74,23 @@ const extractActualValue = async (rule, user, context, session) => {
           userId: user._id,
           seasonId: activeSeason._id,
         }).session(session);
-        if (!progress || !progress.currentTierId) return -1;
-        const tier = await Tier.findById(progress.currentTierId).session(
-          session,
-        );
-        return tier ? tier.rank : -1;
+        if (progress && progress.currentTierId) {
+          tierObj = await Tier.findById(progress.currentTierId).session(session);
+        }
       } else {
-        if (!user.currentTierId) return -1;
-        const tier = await Tier.findById(user.currentTierId).session(session);
-        return tier ? tier.rank : -1;
+        if (user.currentTierId) {
+          tierObj = await Tier.findById(user.currentTierId).session(session);
+        }
       }
+
+      if (!tierObj) return -1;
+
+      const expectedValue = rule.value;
+      const isObjectId = typeof expectedValue === "string" && /^[0-9a-fA-F]{24}$/.test(expectedValue);
+      if (isObjectId) {
+        return tierObj._id.toString();
+      }
+      return tierObj.rank;
     }
 
     case RuleType.HYDACOINS:

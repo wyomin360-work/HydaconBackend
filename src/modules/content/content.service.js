@@ -2,6 +2,8 @@ const Content = require("../../schemas/content.schema");
 const User = require("../../schemas/user.schema");
 const AppError = require("../../utils/appError");
 const { ALLOWED_PLACEMENTS } = require("./content.constants");
+const { RuleSet } = require("../../schemas/rule-set.schema");
+const ruleSetEvaluator = require("../rule-set/rule-set.evaluator");
 
 const validatePlacements = (placements) => {
   if (!placements || !Array.isArray(placements)) return;
@@ -51,6 +53,32 @@ const createContent = async (data) => {
     }
   }
 
+  if (data.type !== "POPUP") {
+    data.popupType = null;
+  }
+
+  // Sync images object from media array
+  if (data.media) {
+    const primaryImage = data.media[0] || "";
+    if (data.type === "ANNOUNCEMENT") {
+      data.images = {
+        icon: primaryImage,
+        mobile: "",
+        tablet: "",
+        web: "",
+        thumbnail: "",
+      };
+    } else {
+      data.images = {
+        mobile: primaryImage,
+        web: primaryImage,
+        thumbnail: primaryImage,
+        tablet: primaryImage,
+        icon: "",
+      };
+    }
+  }
+
   const content = new Content(data);
   await content.save();
   
@@ -69,16 +97,6 @@ const updateContent = async (id, data) => {
     throw new AppError("Content not found", 404);
   }
 
-  // Normalize audience if targetAudience or targetRoles supplied
-  if (data.targetAudience || data.targetRoles) {
-    const role = data.targetAudience || (Array.isArray(data.targetRoles) ? data.targetRoles[0] : data.targetRoles);
-    data.audience = {
-      targetRoles: [role],
-      roles: [role],
-    };
-    delete data.targetAudience;
-    delete data.targetRoles;
-  }
 
   // Normalize status if string ("active" / "disabled") supplied
   if (data.status !== undefined) {
@@ -93,11 +111,8 @@ const updateContent = async (id, data) => {
   // Normalize singleImage / galleryImages to media array if media not directly provided
   if (!data.media && (data.singleImage || data.galleryImages)) {
     const type = data.type || existing.type;
-    const popupType = data.popupType || existing.popupType;
     if (type === "CAMPAIGN") {
       data.media = [data.singleImage, ...(data.galleryImages || [])].filter(Boolean);
-    } else if (type === "POPUP" && popupType === "MODAL_POPUP") {
-      data.media = (data.galleryImages || []).filter(Boolean);
     } else if (data.singleImage) {
       data.media = [data.singleImage];
     }
@@ -117,6 +132,9 @@ const updateContent = async (id, data) => {
   delete data.__v;
 
   const resolvedType = data.type !== undefined ? data.type : existing.type;
+  if (resolvedType !== "POPUP") {
+    data.popupType = null;
+  }
   const resolvedActive = data.active !== undefined ? data.active : existing.active;
   const resolvedPlacements =
     data.placements !== undefined ? data.placements : existing.placements;
@@ -132,6 +150,28 @@ const updateContent = async (id, data) => {
       },
       { $set: { active: false } }
     );
+  }
+
+  // Sync images object from media array if media is updated
+  if (data.media) {
+    const primaryImage = data.media[0] || "";
+    if (resolvedType === "ANNOUNCEMENT") {
+      data.images = {
+        icon: primaryImage,
+        mobile: "",
+        tablet: "",
+        web: "",
+        thumbnail: "",
+      };
+    } else {
+      data.images = {
+        mobile: primaryImage,
+        web: primaryImage,
+        thumbnail: primaryImage,
+        tablet: primaryImage,
+        icon: "",
+      };
+    }
   }
 
   const content = await Content.findByIdAndUpdate(id, { $set: data }, { new: true, runValidators: true });
@@ -155,7 +195,7 @@ const listContent = async (query = {}) => {
   if (active !== undefined)
     filter.active = active === "true" || active === true;
 
-  let queryBuilder = Content.find(filter).sort({ sortOrder: 1, createdAt: -1 });
+  let queryBuilder = Content.find(filter).populate("ruleSetId", "name").sort({ sortOrder: 1, createdAt: -1 });
 
   if (page && limit) {
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -177,18 +217,38 @@ const listContent = async (query = {}) => {
   };
 };
 
-// Helper: Resolve role from database user object
-const getUserRole = async (userId) => {
-  if (!userId) return "ALL";
-  const user = await User.findById(userId).populate("roleId").lean();
-  if (user && user.roleId && user.roleId.name) {
-    return user.roleId.name.toUpperCase().replace(/\s+/g, "_");
+
+const filterContentsByRuleSet = async (contents, user) => {
+  if (!user) {
+    return contents.filter((c) => !c.ruleSetId);
   }
-  return "ALL";
+  const filtered = [];
+  for (const content of contents) {
+    if (!content.ruleSetId) {
+      filtered.push(content);
+      continue;
+    }
+    try {
+      const ruleSet = await RuleSet.findById(content.ruleSetId);
+      if (ruleSet) {
+        const evaluation = await ruleSetEvaluator.evaluateRuleSet(
+          ruleSet,
+          user,
+          { targetId: content._id }
+        );
+        if (evaluation.eligible) {
+          filtered.push(content);
+        }
+      }
+    } catch (err) {
+      console.error(`Error evaluating ruleset for content ${content._id}:`, err.message);
+    }
+  }
+  return filtered;
 };
 
-// Helper: Fetch active role-filtered contents
-const getActiveContentsForRole = async (userRole) => {
+// Helper: Fetch active contents
+const getActiveContents = async () => {
   const now = new Date();
   return await Content.find({
     active: true,
@@ -196,20 +256,22 @@ const getActiveContentsForRole = async (userRole) => {
       { $or: [{ startDate: null }, { startDate: { $lte: now } }] },
       { $or: [{ endDate: null }, { endDate: { $gte: now } }] },
     ],
-    $or: [
-      { "audience.roles": { $in: [userRole, "ALL"] } },
-      { "audience.roles": [] },
-      { "audience.roles": { $exists: false } },
-      { "audience": null },
-    ],
   })
     .sort({ priority: -1, sortOrder: 1 })
     .lean();
 };
 
 const getHomepageContent = async (userId = null) => {
-  const userRole = await getUserRole(userId);
-  const activeContents = await getActiveContentsForRole(userRole);
+  let activeContents = await getActiveContents();
+
+  if (userId) {
+    const user = await User.findById(userId);
+    if (user) {
+      activeContents = await filterContentsByRuleSet(activeContents, user);
+    }
+  } else {
+    activeContents = await filterContentsByRuleSet(activeContents, null);
+  }
 
   // Get viewed popups for the user
   let viewedIds = [];
@@ -248,8 +310,16 @@ const getHomepageContent = async (userId = null) => {
 };
 
 const getPlacementContent = async (placement, userId = null) => {
-  const userRole = await getUserRole(userId);
-  const activeContents = await getActiveContentsForRole(userRole);
+  let activeContents = await getActiveContents();
+
+  if (userId) {
+    const user = await User.findById(userId);
+    if (user) {
+      activeContents = await filterContentsByRuleSet(activeContents, user);
+    }
+  } else {
+    activeContents = await filterContentsByRuleSet(activeContents, null);
+  }
 
   // Get viewed popups for the user
   let viewedIds = [];
@@ -283,7 +353,7 @@ const trackContentView = async (id, userId) => {
 };
 
 const getContentDetails = async (id) => {
-  const content = await Content.findById(id);
+  const content = await Content.findById(id).populate("ruleSetId", "name");
   if (!content) {
     throw new AppError("Content not found", 404);
   }
