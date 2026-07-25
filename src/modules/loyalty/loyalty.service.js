@@ -280,9 +280,18 @@ async function processQrScanPoints(userId, points, referenceId) {
 /**
  * Awards campaign points affecting ONLY redeemable balance (no tier impact).
  */
-async function addBonusPoints(userId, points, description, referenceId = null, options = {}, session = null) {
+async function addBonusPoints(
+  userId,
+  points,
+  description,
+  referenceId = null,
+  options = {},
+  session = null,
+) {
   const userQuery = User.findById(userId);
-  const user = await (userQuery.session ? userQuery.session(session) : userQuery);
+  const user = await (userQuery.session
+    ? userQuery.session(session)
+    : userQuery);
   if (!user) return sendFailResponse("User not found");
 
   const activeSeason = await resolveActiveSeason();
@@ -302,7 +311,7 @@ async function addBonusPoints(userId, points, description, referenceId = null, o
   };
   await LoyaltyTransaction.create(
     session ? [transactionData] : transactionData,
-    ...(session ? [{ session }] : [])
+    ...(session ? [{ session }] : []),
   );
 
   // 2. Add to user totalPoints atomically using $inc
@@ -331,7 +340,7 @@ async function addBonusPoints(userId, points, description, referenceId = null, o
           $max: { currentPoint: updatedUser.totalPoints },
           $set: { lastEvaluatedAt: new Date() },
         },
-        ...(session ? [{ session }] : [])
+        ...(session ? [{ session }] : []),
       );
 
       // Evaluate dynamic upgrades after modifying progress points
@@ -1683,8 +1692,18 @@ async function getSeasonById(seasonId) {
  * @param {string|null} fallbackTierId
  * @returns {Promise<object>} The updated user tier progress document
  */
-async function processLoyaltyAndContestsAfterScan(userId, weightedPoints, redeemId, actualProductId, fallbackTierId = null) {
-  const updatedProgress = await processQrScanPoints(userId, weightedPoints, redeemId);
+async function processLoyaltyAndContestsAfterScan(
+  userId,
+  weightedPoints,
+  redeemId,
+  actualProductId,
+  fallbackTierId = null,
+) {
+  const updatedProgress = await processQrScanPoints(
+    userId,
+    weightedPoints,
+    redeemId,
+  );
 
   const userTierId =
     updatedProgress?.currentTierId?._id ||
@@ -1693,7 +1712,7 @@ async function processLoyaltyAndContestsAfterScan(userId, weightedPoints, redeem
 
   contestsService
     .syncUserContestEntries(userId, weightedPoints, actualProductId, userTierId)
-    .catch(() => { }); // Non-blocking
+    .catch(() => {}); // Non-blocking
 
   return updatedProgress;
 }

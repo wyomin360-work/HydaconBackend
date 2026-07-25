@@ -24,4 +24,3 @@ exports.deleteRedeem = async (req, res) => {
   const response = await redeemService.deleteRedeem(redeemId);
   return sendResponse(res, response);
 };
-

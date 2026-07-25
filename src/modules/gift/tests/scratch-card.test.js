@@ -10,7 +10,10 @@ const Product = require("../../../schemas/product.schema");
 const Redeem = require("../../../schemas/redeem.schema");
 const { RuleSet } = require("../../../schemas/rule-set.schema");
 const ruleSetEvaluator = require("../../../modules/rule-set/rule-set.evaluator");
-const { SCRATCH_CARD_MESSAGES, SCRATCH_CARD_ERRORS } = require("../../../constants/gift");
+const {
+  SCRATCH_CARD_MESSAGES,
+  SCRATCH_CARD_ERRORS,
+} = require("../../../constants/gift");
 
 jest.mock("../../../schemas/scratch-card-rule.schema");
 jest.mock("../../../schemas/app-config.schema");
@@ -76,7 +79,9 @@ describe("Scratch Card Unit Tests (Admin Config & User Eligibility / Rewards)", 
 
       Gift.find.mockReturnValue({
         select: jest.fn().mockReturnValue({
-          lean: jest.fn().mockResolvedValue([{ _id: "gift1", name: "Special Gift" }]),
+          lean: jest
+            .fn()
+            .mockResolvedValue([{ _id: "gift1", name: "Special Gift" }]),
         }),
       });
 
@@ -148,7 +153,9 @@ describe("Scratch Card Unit Tests (Admin Config & User Eligibility / Rewards)", 
       const result = await giftService.createScratchCardRule({
         name: "Test Campaign",
         ruleSetId: "ruleset123",
-        rewards: [{ rewardType: "COIN", minCoins: 10, maxCoins: 50, probability: 100 }],
+        rewards: [
+          { rewardType: "COIN", minCoins: 10, maxCoins: 50, probability: 100 },
+        ],
       });
 
       expect(result.success).toBe(true);
@@ -249,7 +256,9 @@ describe("Scratch Card Unit Tests (Admin Config & User Eligibility / Rewards)", 
         commitTransaction: jest.fn(),
         abortTransaction: jest.fn(),
         endSession: jest.fn(),
-        withTransaction: jest.fn().mockImplementation(async (callback) => callback()),
+        withTransaction: jest
+          .fn()
+          .mockImplementation(async (callback) => callback()),
       };
       mongoose.startSession = jest.fn().mockResolvedValue(mockSession);
 
@@ -257,40 +266,65 @@ describe("Scratch Card Unit Tests (Admin Config & User Eligibility / Rewards)", 
       // Support both call signatures for backward-compatible tests.
       Redeem.create.mockImplementation(async (docOrArray) => {
         const doc = Array.isArray(docOrArray) ? docOrArray[0] : docOrArray;
-        const created = { _id: "redeem999", ...doc, save: jest.fn().mockResolvedValue(true) };
+        const created = {
+          _id: "redeem999",
+          ...doc,
+          save: jest.fn().mockResolvedValue(true),
+        };
         return Array.isArray(docOrArray) ? [created] : created;
       });
 
       Redeem.countDocuments.mockResolvedValue(0);
       AppConfig.findOne.mockReturnValue({
-        lean: jest.fn().mockResolvedValue({ scratchCardSettings: { minBonusPoints: 0, maxBonusPoints: 10 } }),
+        lean: jest
+          .fn()
+          .mockResolvedValue({
+            scratchCardSettings: { minBonusPoints: 0, maxBonusPoints: 10 },
+          }),
       });
 
       // Default: no GiftRedemption instantiation side-effects
-      GiftRedemption.mockImplementation(function(data) {
-        return { ...data, _id: "gr_mock", save: jest.fn().mockResolvedValue(true) };
+      GiftRedemption.mockImplementation(function (data) {
+        return {
+          ...data,
+          _id: "gr_mock",
+          save: jest.fn().mockResolvedValue(true),
+        };
       });
       // awardPhysicalGiftToUser used for physical gifts — mock Gift.findOneAndUpdate
-      Gift.findOneAndUpdate = jest.fn().mockResolvedValue({ _id: "giftGoldBar", rewardedUsers: [] });
+      Gift.findOneAndUpdate = jest
+        .fn()
+        .mockResolvedValue({ _id: "giftGoldBar", rewardedUsers: [] });
     });
-
 
     it("should skip campaign if user is ineligible based on RuleSet", async () => {
       const mockCampaign = {
         _id: "campRuleSet",
         active: true,
         ruleSetId: "rulesetVIP",
-        rewards: [{ rewardType: "COIN", minCoins: 50, maxCoins: 100, probability: 100 }],
+        rewards: [
+          { rewardType: "COIN", minCoins: 50, maxCoins: 100, probability: 100 },
+        ],
       };
 
       ScratchCardRule.find.mockReturnValue({
         lean: jest.fn().mockResolvedValue([mockCampaign]),
       });
 
-      RuleSet.findById.mockResolvedValue({ _id: "rulesetVIP", name: "VIP Rule" });
-      ruleSetEvaluator.evaluateRuleSet.mockResolvedValue({ eligible: false, reasons: ["Rank too low"] });
+      RuleSet.findById.mockResolvedValue({
+        _id: "rulesetVIP",
+        name: "VIP Rule",
+      });
+      ruleSetEvaluator.evaluateRuleSet.mockResolvedValue({
+        eligible: false,
+        reasons: ["Rank too low"],
+      });
 
-      await redeemsService.createRedeem({ userId: "user123", rewardId: "reward123", rewardUidCode: "UID123" });
+      await redeemsService.createRedeem({
+        userId: "user123",
+        rewardId: "reward123",
+        rewardUidCode: "UID123",
+      });
 
       expect(ruleSetEvaluator.evaluateRuleSet).toHaveBeenCalled();
       // Should fallback to default config points because campaign was skipped
@@ -307,17 +341,29 @@ describe("Scratch Card Unit Tests (Admin Config & User Eligibility / Rewards)", 
         _id: "campRuleSet",
         active: true,
         ruleSetId: "rulesetVIP",
-        rewards: [{ rewardType: "COIN", minCoins: 50, maxCoins: 100, probability: 100 }],
+        rewards: [
+          { rewardType: "COIN", minCoins: 50, maxCoins: 100, probability: 100 },
+        ],
       };
 
       ScratchCardRule.find.mockReturnValue({
         lean: jest.fn().mockResolvedValue([mockCampaign]),
       });
 
-      RuleSet.findById.mockResolvedValue({ _id: "rulesetVIP", name: "VIP Rule" });
-      ruleSetEvaluator.evaluateRuleSet.mockResolvedValue({ eligible: true, reasons: [] });
+      RuleSet.findById.mockResolvedValue({
+        _id: "rulesetVIP",
+        name: "VIP Rule",
+      });
+      ruleSetEvaluator.evaluateRuleSet.mockResolvedValue({
+        eligible: true,
+        reasons: [],
+      });
 
-      await redeemsService.createRedeem({ userId: "user123", rewardId: "reward123", rewardUidCode: "UID123" });
+      await redeemsService.createRedeem({
+        userId: "user123",
+        rewardId: "reward123",
+        rewardUidCode: "UID123",
+      });
 
       expect(Redeem.create).toHaveBeenCalledWith(
         expect.arrayContaining([
@@ -338,7 +384,9 @@ describe("Scratch Card Unit Tests (Admin Config & User Eligibility / Rewards)", 
         _id: "campTotalLimit",
         active: true,
         totalScratchLimit: 5,
-        rewards: [{ rewardType: "COIN", minCoins: 20, maxCoins: 30, probability: 100 }],
+        rewards: [
+          { rewardType: "COIN", minCoins: 20, maxCoins: 30, probability: 100 },
+        ],
       };
 
       ScratchCardRule.find.mockReturnValue({
@@ -351,7 +399,11 @@ describe("Scratch Card Unit Tests (Admin Config & User Eligibility / Rewards)", 
         return 0;
       });
 
-      await redeemsService.createRedeem({ userId: "user123", rewardId: "reward123", rewardUidCode: "UID123" });
+      await redeemsService.createRedeem({
+        userId: "user123",
+        rewardId: "reward123",
+        rewardUidCode: "UID123",
+      });
 
       expect(Redeem.create).toHaveBeenCalledWith(
         expect.arrayContaining([
@@ -366,7 +418,9 @@ describe("Scratch Card Unit Tests (Admin Config & User Eligibility / Rewards)", 
         _id: "campUserLimit",
         active: true,
         perUserScratchLimit: 2,
-        rewards: [{ rewardType: "COIN", minCoins: 20, maxCoins: 30, probability: 100 }],
+        rewards: [
+          { rewardType: "COIN", minCoins: 20, maxCoins: 30, probability: 100 },
+        ],
       };
 
       ScratchCardRule.find.mockReturnValue({
@@ -375,11 +429,19 @@ describe("Scratch Card Unit Tests (Admin Config & User Eligibility / Rewards)", 
 
       // Per-user count for user123 = 2 (limit reached)
       Redeem.countDocuments.mockImplementation(async (query) => {
-        if (query.userId === "user123" && query.scratchCardCampaignId === "campUserLimit") return 2;
+        if (
+          query.userId === "user123" &&
+          query.scratchCardCampaignId === "campUserLimit"
+        )
+          return 2;
         return 0;
       });
 
-      await redeemsService.createRedeem({ userId: "user123", rewardId: "reward123", rewardUidCode: "UID123" });
+      await redeemsService.createRedeem({
+        userId: "user123",
+        rewardId: "reward123",
+        rewardUidCode: "UID123",
+      });
 
       expect(Redeem.create).toHaveBeenCalledWith(
         expect.arrayContaining([
@@ -421,12 +483,24 @@ describe("Scratch Card Unit Tests (Admin Config & User Eligibility / Rewards)", 
       Redeem.countDocuments.mockResolvedValue(0);
 
       // Mock giftService.awardPhysicalGiftToUser via module mock
-      jest.mock("../gift.service", () => ({
-        awardPhysicalGiftToUser: jest.fn().mockResolvedValue({ success: true }),
-        awardGiftToUser: jest.fn().mockResolvedValue({ success: true, requiresClaim: true }),
-      }), { virtual: true });
+      jest.mock(
+        "../gift.service",
+        () => ({
+          awardPhysicalGiftToUser: jest
+            .fn()
+            .mockResolvedValue({ success: true }),
+          awardGiftToUser: jest
+            .fn()
+            .mockResolvedValue({ success: true, requiresClaim: true }),
+        }),
+        { virtual: true },
+      );
 
-      await redeemsService.createRedeem({ userId: "user123", rewardId: "reward123", rewardUidCode: "UID123" });
+      await redeemsService.createRedeem({
+        userId: "user123",
+        rewardId: "reward123",
+        rewardUidCode: "UID123",
+      });
 
       expect(Redeem.create).toHaveBeenCalledWith(
         expect.arrayContaining([
@@ -476,10 +550,17 @@ describe("Scratch Card Unit Tests (Admin Config & User Eligibility / Rewards)", 
       Gift.findById.mockResolvedValue(mockVoucherGift);
       Redeem.countDocuments.mockResolvedValue(0);
 
-      const mockGiftRedemptionInstance = { _id: "gr1", save: jest.fn().mockResolvedValue(true) };
+      const mockGiftRedemptionInstance = {
+        _id: "gr1",
+        save: jest.fn().mockResolvedValue(true),
+      };
       GiftRedemption.mockImplementation(() => mockGiftRedemptionInstance);
 
-      await redeemsService.createRedeem({ userId: "user123", rewardId: "reward123", rewardUidCode: "UID123" });
+      await redeemsService.createRedeem({
+        userId: "user123",
+        rewardId: "reward123",
+        rewardUidCode: "UID123",
+      });
 
       expect(Redeem.create).toHaveBeenCalledWith(
         expect.arrayContaining([
@@ -530,7 +611,11 @@ describe("Scratch Card Unit Tests (Admin Config & User Eligibility / Rewards)", 
         return 0;
       });
 
-      await redeemsService.createRedeem({ userId: "user123", rewardId: "reward123", rewardUidCode: "UID123" });
+      await redeemsService.createRedeem({
+        userId: "user123",
+        rewardId: "reward123",
+        rewardUidCode: "UID123",
+      });
 
       expect(Redeem.create).toHaveBeenCalledWith(
         expect.arrayContaining([
@@ -546,4 +631,3 @@ describe("Scratch Card Unit Tests (Admin Config & User Eligibility / Rewards)", 
     });
   });
 });
-

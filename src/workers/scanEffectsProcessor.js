@@ -10,7 +10,7 @@ const { APP_NOTIFICATIONS } = require("../constants/notifications");
 
 /**
  * Orchestrates all post-transaction side effects in a background job.
- * 
+ *
  * @param {object} data
  * @returns {Promise<void>}
  */
@@ -54,7 +54,7 @@ async function processScanSideEffects(data) {
     weightedPoints,
     redeemId,
     actualProductId,
-    currentTierId
+    currentTierId,
   );
 
   // 5. Send FCM Notification (Fire-and-forget)
@@ -63,7 +63,10 @@ async function processScanSideEffects(data) {
     sendFcmNotifications(
       user.fcmTokens,
       rewardNotification.qrScanSuccess.title,
-      formatNotification(rewardNotification.qrScanSuccess.body, { coins: weightedPoints, productName }),
+      formatNotification(rewardNotification.qrScanSuccess.body, {
+        coins: weightedPoints,
+        productName,
+      }),
     ).catch(() => {});
   }
 
@@ -77,7 +80,7 @@ async function processScanSideEffects(data) {
         causeId: scratchCardCampaignId || null,
         causeTitle: scratchCardBonusTitle,
         referenceId: redeemId,
-      }
+      },
     );
   }
 }

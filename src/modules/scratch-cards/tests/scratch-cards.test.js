@@ -20,7 +20,9 @@ describe("Scratch Cards Service Unit Tests", () => {
 
   describe("listScratchCards", () => {
     it("should return paginated scratch cards list with parsed parameters", async () => {
-      const mockCards = [{ _id: "card123", userId: "user123", rewardType: "POINTS" }];
+      const mockCards = [
+        { _id: "card123", userId: "user123", rewardType: "POINTS" },
+      ];
       ScratchCard.find.mockReturnValue({
         populate: jest.fn().mockReturnThis(),
         skip: jest.fn().mockReturnThis(),
@@ -49,7 +51,7 @@ describe("Scratch Cards Service Unit Tests", () => {
       });
 
       await expect(
-        scratchCardsService.scratchCard("invalidId", "user123")
+        scratchCardsService.scratchCard("invalidId", "user123"),
       ).rejects.toThrow(SCRATCH_CARD_ERRORS.NOT_FOUND);
     });
 
@@ -63,7 +65,7 @@ describe("Scratch Cards Service Unit Tests", () => {
       });
 
       await expect(
-        scratchCardsService.scratchCard("card123", "user123")
+        scratchCardsService.scratchCard("card123", "user123"),
       ).rejects.toThrow(SCRATCH_CARD_ERRORS.UNAUTHORIZED);
     });
 
@@ -78,7 +80,7 @@ describe("Scratch Cards Service Unit Tests", () => {
       });
 
       await expect(
-        scratchCardsService.scratchCard("card123", "user123")
+        scratchCardsService.scratchCard("card123", "user123"),
       ).rejects.toThrow(SCRATCH_CARD_ERRORS.ALREADY_SCRATCHED);
     });
 
@@ -97,7 +99,10 @@ describe("Scratch Cards Service Unit Tests", () => {
       });
       rewardsService.awardRewardToUser.mockResolvedValue({ success: true });
 
-      const result = await scratchCardsService.scratchCard("card123", "user123");
+      const result = await scratchCardsService.scratchCard(
+        "card123",
+        "user123",
+      );
 
       expect(mockCard.status).toBe(SCRATCH_CARD_STATUS.SCRATCHED);
       expect(mockCard.save).toHaveBeenCalled();
@@ -109,7 +114,7 @@ describe("Scratch Cards Service Unit Tests", () => {
           causeId: "campaign123",
           causeTitle: SCRATCH_CARD_TITLES.BONUS_POINTS,
           referenceId: "redeem123",
-        }
+        },
       );
       expect(result.message).toBe(SCRATCH_CARD_MESSAGES.SCRATCH_SUCCESS);
     });

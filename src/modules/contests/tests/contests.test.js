@@ -133,9 +133,9 @@ describe("Contests Service Unit Tests", () => {
     it("should throw 404 if entry not found", async () => {
       ContestEntry.findOne.mockResolvedValue(null);
 
-      await expect(
-        contestsService.userClaimReward("c1", "u1"),
-      ).rejects.toThrow(CONTEST_ERRORS.ENTRY_NOT_FOUND);
+      await expect(contestsService.userClaimReward("c1", "u1")).rejects.toThrow(
+        CONTEST_ERRORS.ENTRY_NOT_FOUND,
+      );
     });
 
     it("should throw 400 if contest is not completed", async () => {
@@ -151,9 +151,9 @@ describe("Contests Service Unit Tests", () => {
         lean: jest.fn().mockResolvedValue(mockContest),
       });
 
-      await expect(
-        contestsService.userClaimReward("c1", "u1"),
-      ).rejects.toThrow(CONTEST_ERRORS.NOT_COMPLETED);
+      await expect(contestsService.userClaimReward("c1", "u1")).rejects.toThrow(
+        CONTEST_ERRORS.NOT_COMPLETED,
+      );
     });
 
     it("should claim points reward successfully when contest is completed", async () => {

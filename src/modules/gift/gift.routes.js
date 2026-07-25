@@ -113,7 +113,6 @@ router.get(
   handleError(giftController.getUserRewardedGifts),
 );
 
-
 // Redemptions
 router.post(
   giftPaths.redeemGift,

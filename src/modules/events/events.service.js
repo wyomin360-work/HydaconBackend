@@ -1,5 +1,7 @@
 const { Event } = require("../../schemas/event.schema");
-const { EventRegistration } = require("../../schemas/event-registration.schema");
+const {
+  EventRegistration,
+} = require("../../schemas/event-registration.schema");
 const User = require("../../schemas/user.schema");
 const { attachId, formatNotification } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
@@ -532,7 +534,10 @@ async function userListEvents(query = {}, userId = null) {
       const geoNearPipeline = [
         {
           $geoNear: {
-            near: { type: GEO_TYPES.POINT, coordinates: [parsedLng, parsedLat] },
+            near: {
+              type: GEO_TYPES.POINT,
+              coordinates: [parsedLng, parsedLat],
+            },
             distanceField: "distanceMeters",
             maxDistance: EVENT_CONFIG.MAX_GEO_DISTANCE_METERS,
             spherical: true,

@@ -297,10 +297,7 @@ describe("Video Controller", () => {
     it("should succeed for valid metric type 'views'", async () => {
       const updated = makeVideoDoc({ views: 11 });
       jest
-        .spyOn(
-          require("../video.service"),
-          "updateMetrics",
-        )
+        .spyOn(require("../video.service"), "updateMetrics")
         .mockResolvedValue(updated);
 
       const req = { params: { id: "video123" }, body: { metricType: "views" } };

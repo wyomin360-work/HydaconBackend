@@ -9,30 +9,30 @@
 
 ### Overall Status
 
-| Module | §1 Structure | §2 Routes | §3 Validation | §4 No Hardcoding | §5 Swagger | §6 Responses | §7 Performance | §8 Tests |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| admin | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ❌ |
-| app | ✅ | ✅ | ❌ | ⚠️ | ✅ | ✅ | ⚠️ | ❌ |
-| audit-log | ⚠️ | N/A | N/A | ✅ | ❌ | ✅ | ⚠️ | ✅ |
-| campaigns | ✅ | ✅ | ❌ | ⚠️ | ❌ | ✅ | ⚠️ | ❌ |
-| common | ✅ | ✅ | ❌ | ⚠️ | ✅ | ✅ | ⚠️ | ❌ |
-| content | ✅ | ✅ | ✅ | ⚠️ | ❌ | ✅ | ⚠️ | ❌ |
-| contests | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ⚠️ | ❌ |
-| document | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ❌ |
-| **events** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| files | ✅ | ✅ | ❌ | ⚠️ | ❌ | ✅ | N/A | ❌ |
-| gift | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ | ⚠️ | ✅ |
-| kyc | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ⚠️ | ✅ |
-| loyalty | ✅ | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ | ✅ |
-| products | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ❌ |
-| redeems | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ❌ |
-| referral | ⚠️ | ⚠️ | ❌ | ❌ | ❌ | ✅ | ⚠️ | ✅ |
-| rewards | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ❌ |
-| roles | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ❌ |
-| rule-set | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ |
-| transactions | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ |
-| user | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ⚠️ | ❌ |
-| videos | ✅ | ✅ | ✅ | ⚠️ | ❌ | ✅ | ⚠️ | ✅ |
+| Module       | §1 Structure | §2 Routes | §3 Validation | §4 No Hardcoding | §5 Swagger | §6 Responses | §7 Performance | §8 Tests |
+| :----------- | :----------: | :-------: | :-----------: | :--------------: | :--------: | :----------: | :------------: | :------: |
+| admin        |      ✅      |    ✅     |      ✅       |        ⚠️        |     ✅     |      ✅      |       ⚠️       |    ❌    |
+| app          |      ✅      |    ✅     |      ❌       |        ⚠️        |     ✅     |      ✅      |       ⚠️       |    ❌    |
+| audit-log    |      ⚠️      |    N/A    |      N/A      |        ✅        |     ❌     |      ✅      |       ⚠️       |    ✅    |
+| campaigns    |      ✅      |    ✅     |      ❌       |        ⚠️        |     ❌     |      ✅      |       ⚠️       |    ❌    |
+| common       |      ✅      |    ✅     |      ❌       |        ⚠️        |     ✅     |      ✅      |       ⚠️       |    ❌    |
+| content      |      ✅      |    ✅     |      ✅       |        ⚠️        |     ❌     |      ✅      |       ⚠️       |    ❌    |
+| contests     |      ✅      |    ✅     |      ❌       |        ❌        |     ❌     |      ✅      |       ⚠️       |    ❌    |
+| document     |      ✅      |    ✅     |      ✅       |        ⚠️        |     ✅     |      ✅      |       ⚠️       |    ❌    |
+| **events**   |      ✅      |    ✅     |      ✅       |        ✅        |     ✅     |      ✅      |       ✅       |    ✅    |
+| files        |      ✅      |    ✅     |      ❌       |        ⚠️        |     ❌     |      ✅      |      N/A       |    ❌    |
+| gift         |      ✅      |    ✅     |      ✅       |        ❌        |     ❌     |      ✅      |       ⚠️       |    ✅    |
+| kyc          |      ✅      |    ✅     |      ❌       |        ❌        |     ❌     |      ✅      |       ⚠️       |    ✅    |
+| loyalty      |      ✅      |    ✅     |      ❌       |        ✅        |     ❌     |      ✅      |       ✅       |    ✅    |
+| products     |      ✅      |    ✅     |      ✅       |        ⚠️        |     ✅     |      ✅      |       ⚠️       |    ❌    |
+| redeems      |      ✅      |    ✅     |      ✅       |        ⚠️        |     ✅     |      ✅      |       ⚠️       |    ❌    |
+| referral     |      ⚠️      |    ⚠️     |      ❌       |        ❌        |     ❌     |      ✅      |       ⚠️       |    ✅    |
+| rewards      |      ✅      |    ✅     |      ✅       |        ⚠️        |     ✅     |      ✅      |       ⚠️       |    ❌    |
+| roles        |      ✅      |    ✅     |      ✅       |        ⚠️        |     ✅     |      ✅      |       ⚠️       |    ❌    |
+| rule-set     |      ✅      |    ✅     |      ✅       |        ⚠️        |     ✅     |      ✅      |       ⚠️       |    ✅    |
+| transactions |      ✅      |    ✅     |      ✅       |        ✅        |     ✅     |      ✅      |       ⚠️       |    ❌    |
+| user         |      ✅      |    ✅     |      ✅       |        ❌        |     ✅     |      ✅      |       ⚠️       |    ❌    |
+| videos       |      ✅      |    ✅     |      ✅       |        ⚠️        |     ❌     |      ✅      |       ⚠️       |    ✅    |
 
 **Legend**: ✅ Compliant · ⚠️ Minor Issues · ❌ Violation · N/A Not Applicable  
 **Reference module (fully compliant)**: `events`
@@ -45,36 +45,36 @@
 
 These services pass raw hardcoded string literals into FCM notification payloads instead of importing from constants:
 
-| File | Hardcoded Value | Should Be |
-| :--- | :--- | :--- |
+| File                                   | Hardcoded Value        | Should Be                                |
+| :------------------------------------- | :--------------------- | :--------------------------------------- |
 | `referral/referral.service.js:309,328` | `"REFERRAL_MILESTONE"` | Constant in `src/constants/referrals.js` |
-| `contests/contests.service.js:170` | `"CONTEST_WON"` | Constant in `src/constants/contests.js` |
-| `gift/gift.service.js:347` | `"voucher_redeemed"` | Constant in `src/constants/gift.js` |
+| `contests/contests.service.js:170`     | `"CONTEST_WON"`        | Constant in `src/constants/contests.js`  |
+| `gift/gift.service.js:347`             | `"voucher_redeemed"`   | Constant in `src/constants/gift.js`      |
 
 ### 2. Write Endpoints Missing `validateRequest` Middleware
 
 These modules have POST / PATCH routes with no AJV body validation at all:
 
-| Module | Unvalidated Routes |
-| :--- | :--- |
-| `campaigns` | `POST adminCreate`, `PATCH adminUpdate` |
-| `contests` | `POST adminCreate`, `PATCH adminUpdate`, `POST adminFinalise`, `POST userClaimReward` |
-| `referral` | `POST /reminder`, `POST /milestone` |
-| `kyc` | All mutation endpoints |
-| `app` | All mutation endpoints |
-| `common` | All mutation endpoints |
-| `files` | All mutation endpoints |
-| `loyalty` | All mutation endpoints |
+| Module      | Unvalidated Routes                                                                    |
+| :---------- | :------------------------------------------------------------------------------------ |
+| `campaigns` | `POST adminCreate`, `PATCH adminUpdate`                                               |
+| `contests`  | `POST adminCreate`, `PATCH adminUpdate`, `POST adminFinalise`, `POST userClaimReward` |
+| `referral`  | `POST /reminder`, `POST /milestone`                                                   |
+| `kyc`       | All mutation endpoints                                                                |
+| `app`       | All mutation endpoints                                                                |
+| `common`    | All mutation endpoints                                                                |
+| `files`     | All mutation endpoints                                                                |
+| `loyalty`   | All mutation endpoints                                                                |
 
 ### 3. Hardcoded Error / Success Messages in Service Files
 
 These services use raw string literals instead of a constants file (§4):
 
-| File | Examples |
-| :--- | :--- |
-| `user/user.service.js` | `"User not found"` (20+ places), `"Invalid Data"`, `"Invalid ifscCode"` |
-| `admin/admin.service.js` | `"Registration successful"`, `"Invalid Data"`, `"Invalid or expired reset token"` |
-| `kyc/kyc.service.js` | `"User not found"`, `"Cannot approve KYC…"`, `"Cannot reject KYC…"` |
+| File                           | Examples                                                                           |
+| :----------------------------- | :--------------------------------------------------------------------------------- |
+| `user/user.service.js`         | `"User not found"` (20+ places), `"Invalid Data"`, `"Invalid ifscCode"`            |
+| `admin/admin.service.js`       | `"Registration successful"`, `"Invalid Data"`, `"Invalid or expired reset token"`  |
+| `kyc/kyc.service.js`           | `"User not found"`, `"Cannot approve KYC…"`, `"Cannot reject KYC…"`                |
 | `referral/referral.service.js` | `"User not found"`, `"Invalid milestone key"`, `"User was not referred by anyone"` |
 
 ---
@@ -83,47 +83,47 @@ These services use raw string literals instead of a constants file (§4):
 
 ### 4. Missing Swagger Documentation Files
 
-| Module | Missing File |
-| :--- | :--- |
+| Module    | Missing File                |
+| :-------- | :-------------------------- |
 | campaigns | `src/docs/campaigns.doc.js` |
-| content | `src/docs/content.doc.js` |
-| contests | `src/docs/contests.doc.js` |
-| files | `src/docs/files.doc.js` |
-| gift | `src/docs/gift.doc.js` |
-| kyc | `src/docs/kyc.doc.js` |
-| loyalty | `src/docs/loyalty.doc.js` |
-| referral | `src/docs/referral.doc.js` |
-| videos | `src/docs/videos.doc.js` |
+| content   | `src/docs/content.doc.js`   |
+| contests  | `src/docs/contests.doc.js`  |
+| files     | `src/docs/files.doc.js`     |
+| gift      | `src/docs/gift.doc.js`      |
+| kyc       | `src/docs/kyc.doc.js`       |
+| loyalty   | `src/docs/loyalty.doc.js`   |
+| referral  | `src/docs/referral.doc.js`  |
+| videos    | `src/docs/videos.doc.js`    |
 | audit-log | `src/docs/audit-log.doc.js` |
 
 ### 5. Missing Constants Files
 
-| Module | Missing File |
-| :--- | :--- |
+| Module    | Missing File                 |
+| :-------- | :--------------------------- |
 | campaigns | `src/constants/campaigns.js` |
-| contests | `src/constants/contests.js` |
-| kyc | `src/constants/kyc.js` |
-| app | `src/constants/app.js` |
-| videos | `src/constants/videos.js` |
+| contests  | `src/constants/contests.js`  |
+| kyc       | `src/constants/kyc.js`       |
+| app       | `src/constants/app.js`       |
+| videos    | `src/constants/videos.js`    |
 
 ### 6. No Unit Tests
 
-| Module | Priority |
-| :--- | :--- |
-| user | 🔴 High |
-| admin | 🔴 High |
-| transactions | 🔴 High |
-| redeems | 🔴 High |
-| products | 🟡 Medium |
-| rewards | 🟡 Medium |
-| contests | 🟡 Medium |
-| content | 🟡 Medium |
-| campaigns | 🟡 Medium |
-| document | 🟢 Low |
-| roles | 🟢 Low |
-| common | 🟢 Low |
-| files | 🟢 Low |
-| app | 🟢 Low |
+| Module       | Priority  |
+| :----------- | :-------- |
+| user         | 🔴 High   |
+| admin        | 🔴 High   |
+| transactions | 🔴 High   |
+| redeems      | 🔴 High   |
+| products     | 🟡 Medium |
+| rewards      | 🟡 Medium |
+| contests     | 🟡 Medium |
+| content      | 🟡 Medium |
+| campaigns    | 🟡 Medium |
+| document     | 🟢 Low    |
+| roles        | 🟢 Low    |
+| common       | 🟢 Low    |
+| files        | 🟢 Low    |
+| app          | 🟢 Low    |
 
 ---
 

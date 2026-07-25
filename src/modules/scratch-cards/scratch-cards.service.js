@@ -26,10 +26,7 @@ async function listScratchCards(data) {
   const scratchCards = await ScratchCard.find(query)
     .populate({
       path: "redeemId",
-      populate: [
-        { path: "product" },
-        { path: "reward" }
-      ]
+      populate: [{ path: "product" }, { path: "reward" }],
     })
     .populate("giftId")
     .skip(skip)
@@ -59,8 +56,7 @@ async function listScratchCards(data) {
  * @returns {Promise<object>}
  */
 async function scratchCard(scratchCardId, userId) {
-  const card = await ScratchCard.findById(scratchCardId)
-    .populate("redeemId");
+  const card = await ScratchCard.findById(scratchCardId).populate("redeemId");
 
   if (!card) sendFailResponse(SCRATCH_CARD_ERRORS.NOT_FOUND, 404);
   if (card.userId.toString() !== userId.toString()) {
@@ -86,7 +82,7 @@ async function scratchCard(scratchCardId, userId) {
         causeId: card.redeemId?.scratchCardCampaignId || null,
         causeTitle: scratchCardBonusTitle,
         referenceId: card.redeemId?._id || null,
-      }
+      },
     );
   }
 

@@ -231,7 +231,12 @@ exports.deleteGift = async (giftId) => {
  * (e.g. via a scratch card win) and is only providing a shipping address now.
  * In that case ALL coin balance and RuleSet checks are waived — the gift is free.
  */
-const checkEligibility = async (user, gift, session = null, isRewardedUser = false) => {
+const checkEligibility = async (
+  user,
+  gift,
+  session = null,
+  isRewardedUser = false,
+) => {
   // --- Rewarded-user fast path: waive everything ---
   if (isRewardedUser) {
     return {
@@ -239,7 +244,11 @@ const checkEligibility = async (user, gift, session = null, isRewardedUser = fal
       isRewardedUser: true,
       reasons: [],
       rules: {
-        coins: { required: 0, current: user.hydaconCoins || 0, satisfied: true },
+        coins: {
+          required: 0,
+          current: user.hydaconCoins || 0,
+          satisfied: true,
+        },
         dynamic: [],
       },
     };
@@ -302,7 +311,10 @@ exports.getGiftEligibility = async (userId, giftId) => {
     );
 
     const eligibility = await checkEligibility(user, gift, null, !!rewardEntry);
-    return { success: true, data: { ...eligibility, isRewardedUser: !!rewardEntry } };
+    return {
+      success: true,
+      data: { ...eligibility, isRewardedUser: !!rewardEntry },
+    };
   } catch (error) {
     return { success: false, message: error.message };
   }
@@ -396,8 +408,7 @@ const sendVoucherNotifications = async (user, gift, redemption) => {
 
 exports.redeemGift = async (userId, data) => {
   const { giftId, shippingAddress } = data;
-  if (!giftId)
-    return { success: false, message: "Gift ID is required" };
+  if (!giftId) return { success: false, message: "Gift ID is required" };
 
   const session = await mongoose.startSession();
   try {
@@ -452,7 +463,12 @@ exports.redeemGift = async (userId, data) => {
       }
 
       // Evaluate eligibility — waives coins + ruleset for rewarded users
-      const eligibility = await checkEligibility(user, gift, session, wasRewardedUser);
+      const eligibility = await checkEligibility(
+        user,
+        gift,
+        session,
+        wasRewardedUser,
+      );
       if (!eligibility.eligible) {
         throw new Error(eligibility.reasons.join(", "));
       }
@@ -608,7 +624,13 @@ exports.redeemGift = async (userId, data) => {
  */
 exports.awardPhysicalGiftToUser = async (userId, gift, causeData, session) => {
   try {
-    const { rewardCause, rewardCauseId, rewardCauseTitle, redeemId, expiresAt } = causeData;
+    const {
+      rewardCause,
+      rewardCauseId,
+      rewardCauseTitle,
+      redeemId,
+      expiresAt,
+    } = causeData;
 
     // Prevent duplicate pending rewards: a user should only have one
     // unclaimed entry per gift at a time.
@@ -651,7 +673,10 @@ exports.awardPhysicalGiftToUser = async (userId, gift, causeData, session) => {
     );
 
     if (!updatedGift) {
-      return { success: false, message: "Gift is out of stock and cannot be awarded." };
+      return {
+        success: false,
+        message: "Gift is out of stock and cannot be awarded.",
+      };
     }
 
     return { success: true, data: updatedGift };
@@ -664,7 +689,7 @@ exports.awardPhysicalGiftToUser = async (userId, gift, causeData, session) => {
  * Awards a gift (either voucher or physical) to a user from a scratch card, event, etc.
  * For physical: reserves stock and adds user to rewardedUsers array.
  * For voucher: creates and saves a GiftRedemption document immediately.
- * 
+ *
  * @param {string} userId
  * @param {object} gift - The Gift document
  * @param {object} causeData - { rewardCause, rewardCauseId, rewardCauseTitle, redeemId, expiresAt }
@@ -1021,7 +1046,8 @@ exports.getAnalytics = async () => {
 exports.getScratchCardConfig = async () => {
   try {
     const configDoc = await AppConfig.findOne().lean();
-    if (!configDoc) return { success: false, message: SCRATCH_CARD_ERRORS.CONFIG_NOT_FOUND };
+    if (!configDoc)
+      return { success: false, message: SCRATCH_CARD_ERRORS.CONFIG_NOT_FOUND };
 
     const settings = configDoc.scratchCardSettings || {};
 

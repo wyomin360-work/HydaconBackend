@@ -7,7 +7,7 @@ const { registerContestsCron } = require("./contests.cron");
  */
 function initCronJobs() {
   console.log("Initializing CRON jobs...");
-  
+
   registerLoyaltyCron();
   registerContentCron();
   registerContestsCron();

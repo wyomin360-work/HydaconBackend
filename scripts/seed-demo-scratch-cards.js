@@ -243,7 +243,9 @@ async function seedDemoScratchCards() {
   const db = new Database();
   try {
     await db.connectDb();
-    console.log("🌱 Seeding realistic production-level demo contents for Scratch Card Campaigns...");
+    console.log(
+      "🌱 Seeding realistic production-level demo contents for Scratch Card Campaigns...",
+    );
 
     // Fetch all existing gifts to map giftName -> giftId
     const gifts = await Gift.find().lean();
@@ -297,7 +299,9 @@ async function seedDemoScratchCards() {
     });
 
     const createdCards = await ScratchCardRule.insertMany(scratchCardsToInsert);
-    console.log(`✅ Successfully created ${createdCards.length} realistic Scratch Card campaigns with prize pools!`);
+    console.log(
+      `✅ Successfully created ${createdCards.length} realistic Scratch Card campaigns with prize pools!`,
+    );
 
     createdCards.forEach((c) => {
       const isUpcoming = c.startDate > new Date();
@@ -308,7 +312,9 @@ async function seedDemoScratchCards() {
       } else if (isUpcoming) {
         stateLabel = "UPCOMING";
       }
-      console.log(`  - [${stateLabel}] ${c.name} (${c.rewards.length} prize pool rewards)`);
+      console.log(
+        `  - [${stateLabel}] ${c.name} (${c.rewards.length} prize pool rewards)`,
+      );
     });
   } catch (error) {
     console.error("❌ Error seeding demo scratch cards:", error);

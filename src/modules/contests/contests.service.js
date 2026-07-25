@@ -3,7 +3,10 @@ const { ContestEntry } = require("../../schemas/contest-entry.schema");
 const User = require("../../schemas/user.schema");
 const Gift = require("../../schemas/gift.schema");
 const GiftRedemption = require("../../schemas/gift-redemption.schema");
-const { GIFT_REDEMPTION_STATUS, REWARD_CAUSE } = require("../../constants/gift");
+const {
+  GIFT_REDEMPTION_STATUS,
+  REWARD_CAUSE,
+} = require("../../constants/gift");
 const { evaluateRuleSet } = require("../rule-set/rule-set.evaluator");
 const { attachId, formatNotification } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
@@ -79,7 +82,10 @@ async function adminUpdateContest(contestId, data) {
       new Date() > new Date(contest.endDate)) &&
     data.active === true
   ) {
-    sendFailResponse("Completed or cancelled contests cannot be re-activated", 400);
+    sendFailResponse(
+      "Completed or cancelled contests cannot be re-activated",
+      400,
+    );
   }
 
   Object.assign(contest, data);
@@ -104,7 +110,10 @@ async function adminCancelContest(contestId, adminId) {
   if (adminId) contest.cancelledBy = adminId;
   contest.cancelledAt = new Date();
   await contest.save();
-  return { message: "Contest cancelled successfully", data: { cancelled: true } };
+  return {
+    message: "Contest cancelled successfully",
+    data: { cancelled: true },
+  };
 }
 
 async function adminDeleteContest(contestId) {
@@ -488,7 +497,9 @@ async function syncUserContestEntries(
     status: { $in: [CONTEST_STATUS.ONGOING, CONTEST_STATUS.ACTIVE] },
     startDate: { $lte: now },
     endDate: { $gte: now },
-  }).populate("ruleSetId").lean();
+  })
+    .populate("ruleSetId")
+    .lean();
 
   const user = await User.findById(userId).lean();
   if (!user) return;
@@ -499,13 +510,23 @@ async function syncUserContestEntries(
         const ruleSetObj =
           typeof contest.ruleSetId === "object"
             ? contest.ruleSetId
-            : await require("mongoose").model("RuleSet").findById(contest.ruleSetId).lean();
+            : await require("mongoose")
+                .model("RuleSet")
+                .findById(contest.ruleSetId)
+                .lean();
         if (ruleSetObj) {
-          const isEligible = await evaluateRuleSet(ruleSetObj, user, { productId, currentTierId });
+          const isEligible = await evaluateRuleSet(ruleSetObj, user, {
+            productId,
+            currentTierId,
+          });
           if (!isEligible) continue;
         }
       } catch (err) {
-        console.error("RuleSet evaluation failed for contest:", contest._id, err);
+        console.error(
+          "RuleSet evaluation failed for contest:",
+          contest._id,
+          err,
+        );
       }
     }
 
@@ -645,4 +666,3 @@ module.exports = {
   syncUserContestEntries,
   userClaimReward,
 };
-

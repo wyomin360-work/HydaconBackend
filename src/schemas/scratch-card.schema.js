@@ -34,7 +34,7 @@ const scratchCardSchema = new mongoose.Schema(
     },
     scratchedAt: { type: Date },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 const ScratchCard = mongoose.model("ScratchCard", scratchCardSchema);

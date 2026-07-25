@@ -355,9 +355,7 @@ describe("Events Service Unit Tests", () => {
 
         expect(mockReg.attendanceStatus).toBe(ATTENDANCE_STATUS.CHECKED_IN);
         expect(mockReg.save).toHaveBeenCalled();
-        expect(result.data.attendanceStatus).toBe(
-          ATTENDANCE_STATUS.CHECKED_IN,
-        );
+        expect(result.data.attendanceStatus).toBe(ATTENDANCE_STATUS.CHECKED_IN);
       });
 
       it("should throw 400 when attempting to check in a cancelled registration", async () => {
@@ -375,9 +373,9 @@ describe("Events Service Unit Tests", () => {
       it("should throw 404 if registration not found", async () => {
         EventRegistration.findOne.mockResolvedValue(null);
 
-        await expect(
-          eventsService.adminCheckIn("NONEXISTENT"),
-        ).rejects.toThrow("Registration not found");
+        await expect(eventsService.adminCheckIn("NONEXISTENT")).rejects.toThrow(
+          "Registration not found",
+        );
       });
     });
   });
@@ -415,14 +413,14 @@ describe("Events Service Unit Tests", () => {
           select: jest.fn().mockReturnThis(),
           lean: jest.fn().mockResolvedValue([]),
         });
-        Event.aggregate.mockRejectedValue(
-          new Error("2dsphere index missing"),
-        );
+        Event.aggregate.mockRejectedValue(new Error("2dsphere index missing"));
         Event.find.mockReturnValue({
           sort: jest.fn().mockReturnThis(),
           skip: jest.fn().mockReturnThis(),
           limit: jest.fn().mockReturnThis(),
-          lean: jest.fn().mockResolvedValue([{ _id: "e1", title: "Fallback Event" }]),
+          lean: jest
+            .fn()
+            .mockResolvedValue([{ _id: "e1", title: "Fallback Event" }]),
         });
         Event.countDocuments.mockResolvedValue(1);
 
@@ -496,7 +494,10 @@ describe("Events Service Unit Tests", () => {
           enableNotification: true,
         });
 
-        const result = await eventsService.userRegisterForEvent("e1", "user123");
+        const result = await eventsService.userRegisterForEvent(
+          "e1",
+          "user123",
+        );
 
         expect(result.data.registrationId).toBe("REG_DESIGN_101");
         expect(result.message).toBe("Registered successfully");
@@ -548,7 +549,10 @@ describe("Events Service Unit Tests", () => {
         });
         User.findById.mockResolvedValue({ _id: "user123" });
 
-        const result = await eventsService.userRegisterForEvent("e1", "user123");
+        const result = await eventsService.userRegisterForEvent(
+          "e1",
+          "user123",
+        );
 
         expect(result.data.registrationId).toBe("REG_EXISTS_101");
       });

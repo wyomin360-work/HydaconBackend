@@ -18,13 +18,20 @@ function registerContestsCron() {
       });
 
       if (expiredContests.length > 0) {
-        console.log(`[Scheduler] Found ${expiredContests.length} expired contests to auto-finalize.`);
+        console.log(
+          `[Scheduler] Found ${expiredContests.length} expired contests to auto-finalize.`,
+        );
         for (const contest of expiredContests) {
           try {
-            console.log(`[Scheduler] Auto-finalizing contest: "${contest.name}" (${contest._id})`);
+            console.log(
+              `[Scheduler] Auto-finalizing contest: "${contest.name}" (${contest._id})`,
+            );
             await contestsService.adminFinaliseContest(contest._id, null);
           } catch (err) {
-            console.error(`[Scheduler] Failed to finalize contest ${contest._id}:`, err);
+            console.error(
+              `[Scheduler] Failed to finalize contest ${contest._id}:`,
+              err,
+            );
           }
         }
       }

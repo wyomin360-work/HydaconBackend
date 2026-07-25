@@ -20,7 +20,10 @@ describe("Contests Controller Unit Tests", () => {
 
   describe("Admin Controller Actions", () => {
     it("adminCreateContest should delegate to contestsService.adminCreateContest", async () => {
-      const req = { body: { name: "Summer Contest" }, admin: { _id: "admin1" } };
+      const req = {
+        body: { name: "Summer Contest" },
+        admin: { _id: "admin1" },
+      };
       contestsService.adminCreateContest.mockResolvedValue({
         message: "Contest created",
         data: { contestId: "c1" },
@@ -39,7 +42,10 @@ describe("Contests Controller Unit Tests", () => {
     });
 
     it("adminUpdateContest should delegate to contestsService.adminUpdateContest", async () => {
-      const req = { params: { contestId: "c1" }, body: { name: "Updated Name" } };
+      const req = {
+        params: { contestId: "c1" },
+        body: { name: "Updated Name" },
+      };
       contestsService.adminUpdateContest.mockResolvedValue({
         message: "Contest updated",
         data: { updated: true },
@@ -102,7 +108,10 @@ describe("Contests Controller Unit Tests", () => {
 
       await contestsController.adminFinaliseContest(req, res);
 
-      expect(contestsService.adminFinaliseContest).toHaveBeenCalledWith("c1", undefined);
+      expect(contestsService.adminFinaliseContest).toHaveBeenCalledWith(
+        "c1",
+        undefined,
+      );
       expect(res.status).toHaveBeenCalledWith(200);
     });
   });

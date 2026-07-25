@@ -298,14 +298,11 @@ async function completeMilestone(userId, milestone) {
       await sendFcmNotifications(
         referrerUser.fcmTokens,
         APP_NOTIFICATIONS.referral.referrerMilestone.title,
-        formatNotification(
-          APP_NOTIFICATIONS.referral.referrerMilestone.body,
-          {
-            friendName: user.name || user.phone || "someone",
-            milestoneName: config.name,
-            points: points,
-          },
-        ),
+        formatNotification(APP_NOTIFICATIONS.referral.referrerMilestone.body, {
+          friendName: user.name || user.phone || "someone",
+          milestoneName: config.name,
+          points: points,
+        }),
         { type: "REFERRAL_MILESTONE" },
       );
     } catch (err) {
@@ -319,12 +316,9 @@ async function completeMilestone(userId, milestone) {
       await sendFcmNotifications(
         user.fcmTokens,
         APP_NOTIFICATIONS.referral.refereeMilestone.title,
-        formatNotification(
-          APP_NOTIFICATIONS.referral.refereeMilestone.body,
-          {
-            milestoneName: config.name,
-          },
-        ),
+        formatNotification(APP_NOTIFICATIONS.referral.refereeMilestone.body, {
+          milestoneName: config.name,
+        }),
         { type: "REFERRAL_MILESTONE" },
       );
     } catch (err) {
@@ -344,7 +338,7 @@ async function completeMilestone(userId, milestone) {
 /**
  * Processes referral milestones triggered by a QR scan (e.g. FIRST_SCAN, DAILY_SCAN).
  * Updates lastScanDate on the user and evaluates milestone rewards.
- * 
+ *
  * @param {string} userId
  * @param {object} user - The user document before this scan was completed
  */
@@ -355,9 +349,13 @@ async function handleScanReferralMilestones(userId, user) {
 
     // 2. Daily scan milestone check
     const todayStr = new Date().toDateString();
-    const lastScanStr = user.lastScanDate ? new Date(user.lastScanDate).toDateString() : "";
+    const lastScanStr = user.lastScanDate
+      ? new Date(user.lastScanDate).toDateString()
+      : "";
     if (todayStr !== lastScanStr) {
-      await User.findByIdAndUpdate(userId, { $set: { lastScanDate: new Date() } });
+      await User.findByIdAndUpdate(userId, {
+        $set: { lastScanDate: new Date() },
+      });
       await completeMilestone(userId, REFERRAL_MILESTONES.DAILY_SCAN);
     }
 

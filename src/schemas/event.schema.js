@@ -1,9 +1,5 @@
 const { default: mongoose } = require("mongoose");
-const {
-  EVENT_STATUS,
-  EVENT_TYPE,
-  GEO_TYPES,
-} = require("../constants/events");
+const { EVENT_STATUS, EVENT_TYPE, GEO_TYPES } = require("../constants/events");
 
 const eventSchema = new mongoose.Schema(
   {

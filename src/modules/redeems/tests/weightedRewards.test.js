@@ -1,6 +1,4 @@
-const {
-  createRedeem,
-} = require("../redeems.service");
+const { createRedeem } = require("../redeems.service");
 const User = require("../../../schemas/user.schema");
 const Role = require("../../../schemas/role.schema");
 const Product = require("../../../schemas/product.schema");
@@ -23,7 +21,9 @@ jest.mock("../../../schemas/scratch-card.schema", () => ({
 }));
 jest.mock("../../../modules/gift/gift.service", () => ({
   awardPhysicalGiftToUser: jest.fn().mockResolvedValue({ success: true }),
-  awardGiftToUser: jest.fn().mockResolvedValue({ success: true, requiresClaim: true }),
+  awardGiftToUser: jest
+    .fn()
+    .mockResolvedValue({ success: true, requiresClaim: true }),
 }));
 jest.mock("../../../schemas/contest-entry.schema", () => ({
   ContestEntry: {

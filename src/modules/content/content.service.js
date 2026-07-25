@@ -6,7 +6,10 @@ const validatePlacements = (placements) => {
   if (!placements || !Array.isArray(placements)) return;
   for (const p of placements) {
     if (!ALLOWED_PLACEMENTS.includes(p)) {
-      throw new AppError(`Invalid placement: ${p}. Allowed: ${ALLOWED_PLACEMENTS.join(", ")}`, 400);
+      throw new AppError(
+        `Invalid placement: ${p}. Allowed: ${ALLOWED_PLACEMENTS.join(", ")}`,
+        400,
+      );
     }
   }
 };
@@ -55,14 +58,14 @@ const listContent = async (query = {}) => {
 
   const [data, total] = await Promise.all([
     queryBuilder,
-    Content.countDocuments(filter)
+    Content.countDocuments(filter),
   ]);
 
-  return { 
-    data, 
-    total, 
-    page: page ? parseInt(page) : 1, 
-    limit: limit ? parseInt(limit) : total 
+  return {
+    data,
+    total,
+    page: page ? parseInt(page) : 1,
+    limit: limit ? parseInt(limit) : total,
   };
 };
 

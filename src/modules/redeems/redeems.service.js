@@ -23,7 +23,10 @@ const TierConfiguration = require("../../schemas/tier-configuration.schema");
 const rewardsService = require("../rewards/rewards.service");
 const cacheService = require("../../utils/cacheService");
 const queueService = require("../../utils/queueService");
-const { SCRATCH_CARD_STATUS, SCRATCH_CARD_REWARD_TYPE } = require("../../constants/scratch-cards");
+const {
+  SCRATCH_CARD_STATUS,
+  SCRATCH_CARD_REWARD_TYPE,
+} = require("../../constants/scratch-cards");
 
 async function listRedeems(data) {
   const { page = 1, limit = 20 } = data;
@@ -175,10 +178,22 @@ async function resolveAndValidateReward(redeemData, user) {
   const actualProductId = reward.productId;
 
   const product = await Product.findById(actualProductId);
-  if (!product)        { await trackFraudAttempt(user); sendFailResponse("product not found"); }
-  if (!reward.active)  { await trackFraudAttempt(user); sendFailResponse("reward is inactive"); }
-  if (new Date(reward.expiresAt) < now) { await trackFraudAttempt(user); sendFailResponse("reward is expired"); }
-  if (reward.isRedeemed) { await trackFraudAttempt(user); sendFailResponse("reward already redeemed"); }
+  if (!product) {
+    await trackFraudAttempt(user);
+    sendFailResponse("product not found");
+  }
+  if (!reward.active) {
+    await trackFraudAttempt(user);
+    sendFailResponse("reward is inactive");
+  }
+  if (new Date(reward.expiresAt) < now) {
+    await trackFraudAttempt(user);
+    sendFailResponse("reward is expired");
+  }
+  if (reward.isRedeemed) {
+    await trackFraudAttempt(user);
+    sendFailResponse("reward already redeemed");
+  }
 
   return { reward, actualRewardId, actualProductId, product };
 }
@@ -214,7 +229,9 @@ async function computeWeightedPoints(reward, user, userId) {
   }
 
   const roleMultiplier = user.roleId?.pointMultiplier || 1;
-  const weightedPoints = Math.round((reward?.point || 0) * roleMultiplier * tierMultiplier);
+  const weightedPoints = Math.round(
+    (reward?.point || 0) * roleMultiplier * tierMultiplier,
+  );
 
   return { weightedPoints, activeSeason };
 }
@@ -256,10 +273,14 @@ async function resolveTestReward(redeemData) {
     const configDoc = await AppConfig.findOne().lean();
     const settings = configDoc?.scratchCardSettings;
     const giftQuery = { active: true, stockQuantity: { $gt: 0 } };
-    if (settings?.selectedGiftIds?.length > 0) giftQuery._id = { $in: settings.selectedGiftIds };
+    if (settings?.selectedGiftIds?.length > 0)
+      giftQuery._id = { $in: settings.selectedGiftIds };
 
     const count = await Gift.countDocuments(giftQuery);
-    if (count > 0) chosenGift = await Gift.findOne(giftQuery).skip(Math.floor(Math.random() * count));
+    if (count > 0)
+      chosenGift = await Gift.findOne(giftQuery).skip(
+        Math.floor(Math.random() * count),
+      );
     if (!chosenGift) rewardType = "POINTS";
   }
 
@@ -268,7 +289,8 @@ async function resolveTestReward(redeemData) {
     const settings = configDoc?.scratchCardSettings;
     const min = settings?.minBonusPoints ?? 0;
     const max = settings?.maxBonusPoints ?? 0;
-    if (max >= min) bonusPoints = Math.floor(Math.random() * (max - min + 1)) + min;
+    if (max >= min)
+      bonusPoints = Math.floor(Math.random() * (max - min + 1)) + min;
   }
 
   return { rewardType, bonusPoints, chosenGift, matchedCampaign: null };
@@ -293,15 +315,16 @@ async function isCampaignEligible(campaign, user, userId, actualProductId) {
 
   // A. Date window
   if (campaign.startDate && new Date(campaign.startDate) > now) return false;
-  if (campaign.endDate   && new Date(campaign.endDate)   < now) return false;
+  if (campaign.endDate && new Date(campaign.endDate) < now) return false;
 
   // B. RuleSet eligibility (optional — campaigns without a ruleSetId pass automatically)
   if (campaign.ruleSetId) {
     const ruleSet = await RuleSet.findById(campaign.ruleSetId);
     if (ruleSet) {
-      const evaluation = await ruleSetEvaluator.evaluateRuleSet(
-        ruleSet, user, { targetId: campaign._id, productId: actualProductId },
-      );
+      const evaluation = await ruleSetEvaluator.evaluateRuleSet(ruleSet, user, {
+        targetId: campaign._id,
+        productId: actualProductId,
+      });
       if (!evaluation.eligible) return false;
     }
   }
@@ -310,7 +333,7 @@ async function isCampaignEligible(campaign, user, userId, actualProductId) {
   if (campaign.totalScratchLimit > 0) {
     const totalScans = await cacheService.getOrInitialize(
       `campaign:scans:${campaign._id}`,
-      () => Redeem.countDocuments({ scratchCardCampaignId: campaign._id })
+      () => Redeem.countDocuments({ scratchCardCampaignId: campaign._id }),
     );
     if (totalScans >= campaign.totalScratchLimit) return false;
   }
@@ -319,7 +342,8 @@ async function isCampaignEligible(campaign, user, userId, actualProductId) {
   if (campaign.perUserScratchLimit > 0) {
     const userScans = await cacheService.getOrInitialize(
       `campaign:scans:${campaign._id}:user:${userId}`,
-      () => Redeem.countDocuments({ userId, scratchCardCampaignId: campaign._id })
+      () =>
+        Redeem.countDocuments({ userId, scratchCardCampaignId: campaign._id }),
     );
     if (userScans >= campaign.perUserScratchLimit) return false;
   }
@@ -340,7 +364,12 @@ async function isCampaignEligible(campaign, user, userId, actualProductId) {
 async function matchActiveCampaign(user, userId, actualProductId) {
   const campaigns = await ScratchCardRule.find({ active: true }).lean();
   for (const campaign of campaigns) {
-    const eligible = await isCampaignEligible(campaign, user, userId, actualProductId);
+    const eligible = await isCampaignEligible(
+      campaign,
+      user,
+      userId,
+      actualProductId,
+    );
     if (eligible) return campaign;
   }
   return null;
@@ -372,7 +401,10 @@ async function selectCampaignReward(campaign, userId) {
 
   for (const r of pool) {
     cumulative += r.probability || 0;
-    if (randVal <= cumulative) { chosenReward = r; break; }
+    if (randVal <= cumulative) {
+      chosenReward = r;
+      break;
+    }
   }
   if (!chosenReward) chosenReward = pool[0]; // safety fallback if rounding misses
 
@@ -381,14 +413,14 @@ async function selectCampaignReward(campaign, userId) {
     rewardType = "POINTS";
     const min = chosenReward.minCoins ?? 0;
     const max = chosenReward.maxCoins ?? 0;
-    if (max >= min) bonusPoints = Math.floor(Math.random() * (max - min + 1)) + min;
-
+    if (max >= min)
+      bonusPoints = Math.floor(Math.random() * (max - min + 1)) + min;
   } else if (chosenReward.rewardType === "BONUS_POINTS") {
     rewardType = "POINTS";
     const min = chosenReward.minPoints ?? 0;
     const max = chosenReward.maxPoints ?? 0;
-    if (max >= min) bonusPoints = Math.floor(Math.random() * (max - min + 1)) + min;
-
+    if (max >= min)
+      bonusPoints = Math.floor(Math.random() * (max - min + 1)) + min;
   } else if (chosenReward.rewardType === "GIFT" && chosenReward.giftId) {
     chosenGift = await Gift.findById(chosenReward.giftId);
     if (chosenGift && chosenGift.active) {
@@ -396,19 +428,29 @@ async function selectCampaignReward(campaign, userId) {
         // Per-campaign gift cap: count how many times this gift was already awarded
         const awardedCount = await cacheService.getOrInitialize(
           `campaign:scans:${campaign._id}:gift:${chosenGift._id}`,
-          () => Redeem.countDocuments({
-            scratchCardCampaignId: campaign._id,
-            scratchCardGiftId: chosenGift._id,
-          })
+          () =>
+            Redeem.countDocuments({
+              scratchCardCampaignId: campaign._id,
+              scratchCardGiftId: chosenGift._id,
+            }),
         );
-        rewardType = awardedCount >= chosenReward.stockLimit ? "POINTS" : "GIFT";
+        rewardType =
+          awardedCount >= chosenReward.stockLimit ? "POINTS" : "GIFT";
       } else {
         // General stock check: stockQuantity minus already-reserved slots
-        rewardType = (chosenGift.stockQuantity - chosenGift.reservedQuantity) > 0 ? "GIFT" : "POINTS";
+        rewardType =
+          chosenGift.stockQuantity - chosenGift.reservedQuantity > 0
+            ? "GIFT"
+            : "POINTS";
       }
-      if (rewardType === "POINTS") { bonusPoints = 0; chosenGift = null; }
+      if (rewardType === "POINTS") {
+        bonusPoints = 0;
+        chosenGift = null;
+      }
     } else {
-      rewardType = "POINTS"; bonusPoints = 0; chosenGift = null;
+      rewardType = "POINTS";
+      bonusPoints = 0;
+      chosenGift = null;
     }
   }
 
@@ -424,7 +466,10 @@ async function selectCampaignReward(campaign, userId) {
  * @returns {Promise<{ rewardType, bonusPoints, chosenGift }|null>}
  */
 async function resolveLegacyTierReward(userTierId) {
-  const tierRules = await ScratchCardRule.find({ tierId: userTierId, active: true }).lean();
+  const tierRules = await ScratchCardRule.find({
+    tierId: userTierId,
+    active: true,
+  }).lean();
   if (!tierRules?.length) return null;
 
   const rule = tierRules[Math.floor(Math.random() * tierRules.length)];
@@ -434,16 +479,20 @@ async function resolveLegacyTierReward(userTierId) {
 
   if (rule.rewardType === "GIFT" && rule.giftId) {
     chosenGift = await Gift.findById(rule.giftId);
-    const available = chosenGift ? chosenGift.stockQuantity - chosenGift.reservedQuantity : 0;
+    const available = chosenGift
+      ? chosenGift.stockQuantity - chosenGift.reservedQuantity
+      : 0;
     if (chosenGift && chosenGift.active && available > 0) {
       rewardType = "GIFT";
     } else {
-      rewardType = "POINTS"; chosenGift = null;
+      rewardType = "POINTS";
+      chosenGift = null;
     }
   } else if (rule.rewardType === "POINTS") {
     const min = rule.minCoins ?? 0;
     const max = rule.maxCoins ?? 0;
-    if (max >= min) bonusPoints = Math.floor(Math.random() * (max - min + 1)) + min;
+    if (max >= min)
+      bonusPoints = Math.floor(Math.random() * (max - min + 1)) + min;
   }
 
   return { rewardType, bonusPoints, chosenGift };
@@ -463,7 +512,8 @@ async function resolveGlobalConfigReward() {
   const giftProbability = (settings?.giftProbability ?? 50) / 100;
 
   const giftQuery = { active: true, stockQuantity: { $gt: 0 } };
-  if (settings?.selectedGiftIds?.length > 0) giftQuery._id = { $in: settings.selectedGiftIds };
+  if (settings?.selectedGiftIds?.length > 0)
+    giftQuery._id = { $in: settings.selectedGiftIds };
 
   let rewardType = "POINTS";
   let bonusPoints = 0;
@@ -473,14 +523,18 @@ async function resolveGlobalConfigReward() {
   if (hasGifts && Math.random() < giftProbability) {
     rewardType = "GIFT";
     const count = await Gift.countDocuments(giftQuery);
-    if (count > 0) chosenGift = await Gift.findOne(giftQuery).skip(Math.floor(Math.random() * count));
+    if (count > 0)
+      chosenGift = await Gift.findOne(giftQuery).skip(
+        Math.floor(Math.random() * count),
+      );
     if (!chosenGift) rewardType = "POINTS"; // pool check passed but no document returned
   }
 
   if (rewardType === "POINTS") {
     const min = settings?.minBonusPoints ?? 0;
     const max = settings?.maxBonusPoints ?? 0;
-    if (max >= min) bonusPoints = Math.floor(Math.random() * (max - min + 1)) + min;
+    if (max >= min)
+      bonusPoints = Math.floor(Math.random() * (max - min + 1)) + min;
   }
 
   return { rewardType, bonusPoints, chosenGift };
@@ -498,23 +552,36 @@ async function resolveGlobalConfigReward() {
  * @param {{ userId, user, actualProductId, activeSeason, redeemData }} ctx
  * @returns {Promise<{ rewardType, bonusPoints, chosenGift, matchedCampaign }>}
  */
-async function resolveScratchCardReward({ userId, user, actualProductId, activeSeason, redeemData }) {
+async function resolveScratchCardReward({
+  userId,
+  user,
+  actualProductId,
+  activeSeason,
+  redeemData,
+}) {
   try {
     // Path 1: Unit-test override
-    if (redeemData.testRewardType && process.env.NODE_ENV === "test") return resolveTestReward(redeemData);
+    if (redeemData.testRewardType && process.env.NODE_ENV === "test")
+      return resolveTestReward(redeemData);
 
     // Resolve the user's current tier ID (needed for legacy fallback)
     let userTierId = null;
     if (activeSeason) {
       const userProgress = await loyaltyService.getOrCreateUserProgress(userId);
-      if (userProgress) userTierId = userProgress.currentTierId?._id || userProgress.currentTierId;
+      if (userProgress)
+        userTierId =
+          userProgress.currentTierId?._id || userProgress.currentTierId;
     }
     if (!userTierId && user.currentTierId) {
       userTierId = user.currentTierId?._id || user.currentTierId;
     }
 
     // Path 2: Active campaign match
-    const matchedCampaign = await matchActiveCampaign(user, userId, actualProductId);
+    const matchedCampaign = await matchActiveCampaign(
+      user,
+      userId,
+      actualProductId,
+    );
     if (matchedCampaign?.rewards?.length > 0) {
       const result = await selectCampaignReward(matchedCampaign, userId);
       return { ...result, matchedCampaign };
@@ -529,10 +596,14 @@ async function resolveScratchCardReward({ userId, user, actualProductId, activeS
     // Path 4: Global AppConfig probability fallback
     const globalResult = await resolveGlobalConfigReward();
     return { ...globalResult, matchedCampaign: null };
-
   } catch (error) {
     console.error("[Scratch Card] Error determining reward:", error);
-    return { rewardType: "POINTS", bonusPoints: 0, chosenGift: null, matchedCampaign: null };
+    return {
+      rewardType: "POINTS",
+      bonusPoints: 0,
+      chosenGift: null,
+      matchedCampaign: null,
+    };
   }
 }
 
@@ -551,9 +622,19 @@ async function resolveScratchCardReward({ userId, user, actualProductId, activeS
  */
 async function persistRedeemRecord(payload, session) {
   const {
-    userId, actualProductId, actualRewardId, rewardUidCode,
-    weightedPoints, location, bgColor, scannerRole, scannerId,
-    rewardType, bonusPoints, chosenGift, matchedCampaign,
+    userId,
+    actualProductId,
+    actualRewardId,
+    rewardUidCode,
+    weightedPoints,
+    location,
+    bgColor,
+    scannerRole,
+    scannerId,
+    rewardType,
+    bonusPoints,
+    chosenGift,
+    matchedCampaign,
   } = payload;
 
   let redeem = await Redeem.create(
@@ -590,7 +671,10 @@ async function persistRedeemRecord(payload, session) {
  * @param {{ userId, redeem, chosenGift, matchedCampaign }} ctx
  * @param {ClientSession} session
  */
-async function handleScratchCardGiftAward({ userId, redeem, chosenGift, matchedCampaign }, session) {
+async function handleScratchCardGiftAward(
+  { userId, redeem, chosenGift, matchedCampaign },
+  session,
+) {
   if (!chosenGift || redeem.scratchCardRewardType !== "GIFT") return;
   const rewardDetails = {
     type: "GIFT",
@@ -600,7 +684,9 @@ async function handleScratchCardGiftAward({ userId, redeem, chosenGift, matchedC
   const sourceDetails = {
     cause: "SCRATCH_CARD",
     causeId: matchedCampaign ? matchedCampaign._id : null,
-    causeTitle: matchedCampaign ? `Scratch & Win: ${matchedCampaign.name}` : "Scratch Card Win",
+    causeTitle: matchedCampaign
+      ? `Scratch & Win: ${matchedCampaign.name}`
+      : "Scratch Card Win",
     referenceId: redeem._id,
   };
 
@@ -608,7 +694,7 @@ async function handleScratchCardGiftAward({ userId, redeem, chosenGift, matchedC
     userId,
     rewardDetails,
     sourceDetails,
-    session
+    session,
   );
 
   if (awardResult.success) {
@@ -620,7 +706,9 @@ async function handleScratchCardGiftAward({ userId, redeem, chosenGift, matchedC
     }
   } else {
     // Fallback to POINTS: 0
-    console.warn(`[Scratch Card] Could not award gift ${chosenGift._id}: ${awardResult.message}`);
+    console.warn(
+      `[Scratch Card] Could not award gift ${chosenGift._id}: ${awardResult.message}`,
+    );
     redeem.scratchCardRewardType = "POINTS";
     redeem.scratchCardBonusPoints = 0;
     redeem.scratchCardGiftId = null;
@@ -634,8 +722,6 @@ async function handleScratchCardGiftAward({ userId, redeem, chosenGift, matchedC
 // SECTION 6 — Post-Transaction Actions
 // ═══════════════════════════════════════════════════════════════════════════════
 
-
-
 /**
  * Syncs the in-memory user object's point totals and scan counters to reflect
  * what was just persisted. Kept for test-suite compatibility — tests inspect
@@ -647,11 +733,11 @@ async function handleScratchCardGiftAward({ userId, redeem, chosenGift, matchedC
  */
 function syncUserInMemoryState(user, weightedPoints, rewardType, bonusPoints) {
   const bonus = rewardType === "POINTS" ? bonusPoints : 0;
-  user.totalPoints    = (user.totalPoints    || 0) + weightedPoints + bonus;
+  user.totalPoints = (user.totalPoints || 0) + weightedPoints + bonus;
   user.lifetimePoints = (user.lifetimePoints || 0) + weightedPoints + bonus;
-  user.totalScans       = (user.totalScans       || 0) + 1;
+  user.totalScans = (user.totalScans || 0) + 1;
   user.failedScanAttempts = 0;
-  user.scanBanUntil       = null;
+  user.scanBanUntil = null;
 }
 
 /**
@@ -667,10 +753,18 @@ function syncUserInMemoryState(user, weightedPoints, rewardType, bonusPoints) {
  * @param {string} bgColor
  * @returns {object} API response payload
  */
-function buildRedeemResponse(newRedeem, scratchResult, weightedPoints, user, product, bgColor) {
+function buildRedeemResponse(
+  newRedeem,
+  scratchResult,
+  weightedPoints,
+  user,
+  product,
+  bgColor,
+) {
   const { chosenGift, scratchCardId } = scratchResult;
-  const finalRewardType  = newRedeem.scratchCardRewardType;
-  const finalBonusPoints = finalRewardType === "POINTS" ? newRedeem.scratchCardBonusPoints : 0;
+  const finalRewardType = newRedeem.scratchCardRewardType;
+  const finalBonusPoints =
+    finalRewardType === "POINTS" ? newRedeem.scratchCardBonusPoints : 0;
 
   return {
     message: "redeem successful",
@@ -680,13 +774,13 @@ function buildRedeemResponse(newRedeem, scratchResult, weightedPoints, user, pro
       rewardType: finalRewardType,
       gift: newRedeem.scratchCardGiftId
         ? {
-          id: newRedeem.scratchCardGiftId,
-          name: chosenGift?.name,
-          image: chosenGift?.image,
-          giftType: chosenGift?.giftType,
-          // Physical gifts: user must provide a shipping address via POST /gifts/user/redeem
-          requiresClaim: chosenGift?.giftType === "physical",
-        }
+            id: newRedeem.scratchCardGiftId,
+            name: chosenGift?.name,
+            image: chosenGift?.image,
+            giftType: chosenGift?.giftType,
+            // Physical gifts: user must provide a shipping address via POST /gifts/user/redeem
+            requiresClaim: chosenGift?.giftType === "physical",
+          }
         : null,
       pointsRewarded: weightedPoints,
       bonusPoints: finalBonusPoints,
@@ -716,7 +810,8 @@ function buildRedeemResponse(newRedeem, scratchResult, weightedPoints, user, pro
  */
 async function createRedeem(redeemData, reqUser = null) {
   const { userId, rewardUidCode, location } = redeemData;
-  const bgColor = LIGHT_CARD_COLORS[Math.floor(Math.random() * LIGHT_CARD_COLORS.length)];
+  const bgColor =
+    LIGHT_CARD_COLORS[Math.floor(Math.random() * LIGHT_CARD_COLORS.length)];
 
   // 1. Validate user + check scan ban
   const user = await validateUserAndBan(userId);
@@ -726,47 +821,78 @@ async function createRedeem(redeemData, reqUser = null) {
     await resolveAndValidateReward(redeemData, user);
 
   // 3. Compute weighted scan points (tier × role multipliers)
-  const { weightedPoints, activeSeason } = await computeWeightedPoints(reward, user, userId);
+  const { weightedPoints, activeSeason } = await computeWeightedPoints(
+    reward,
+    user,
+    userId,
+  );
 
   // 4. Extract scanner identity (admin/distributor scanning on behalf of user)
   const { scannerRole, scannerId } = extractScannerInfo(reqUser);
 
   // 5. Determine scratch card reward: campaign → legacy tier → global config
   const scratchResult = await resolveScratchCardReward({
-    userId, user, actualProductId, activeSeason, redeemData,
+    userId,
+    user,
+    actualProductId,
+    activeSeason,
+    redeemData,
   });
-  const { rewardType, bonusPoints, chosenGift, matchedCampaign } = scratchResult;
+  const { rewardType, bonusPoints, chosenGift, matchedCampaign } =
+    scratchResult;
 
   // 6. Atomic transaction: persist Redeem record + handle gift award together
   const session = await mongoose.startSession();
   let newRedeem;
   try {
     await session.withTransaction(async () => {
-      newRedeem = await persistRedeemRecord({
-        userId, actualProductId, actualRewardId, rewardUidCode,
-        weightedPoints, location, bgColor, scannerRole, scannerId,
-        rewardType, bonusPoints, chosenGift, matchedCampaign,
-      }, session);
+      newRedeem = await persistRedeemRecord(
+        {
+          userId,
+          actualProductId,
+          actualRewardId,
+          rewardUidCode,
+          weightedPoints,
+          location,
+          bgColor,
+          scannerRole,
+          scannerId,
+          rewardType,
+          bonusPoints,
+          chosenGift,
+          matchedCampaign,
+        },
+        session,
+      );
 
       await handleScratchCardGiftAward(
         { userId, redeem: newRedeem, chosenGift, matchedCampaign },
         session,
       );
 
-      if (rewardType === SCRATCH_CARD_REWARD_TYPE.POINTS || rewardType === SCRATCH_CARD_REWARD_TYPE.GIFT) {
+      if (
+        rewardType === SCRATCH_CARD_REWARD_TYPE.POINTS ||
+        rewardType === SCRATCH_CARD_REWARD_TYPE.GIFT
+      ) {
         const createdCards = await ScratchCard.create(
           [
             {
               userId,
               redeemId: newRedeem._id,
               rewardType,
-              points: rewardType === SCRATCH_CARD_REWARD_TYPE.POINTS ? bonusPoints : 0,
-              giftId: rewardType === SCRATCH_CARD_REWARD_TYPE.GIFT ? (chosenGift?._id || newRedeem.scratchCardGiftId) : null,
+              points:
+                rewardType === SCRATCH_CARD_REWARD_TYPE.POINTS
+                  ? bonusPoints
+                  : 0,
+              giftId:
+                rewardType === SCRATCH_CARD_REWARD_TYPE.GIFT
+                  ? chosenGift?._id || newRedeem.scratchCardGiftId
+                  : null,
               cardBg: bgColor,
               status: SCRATCH_CARD_STATUS.UNSCRATCHED,
             },
           ],
-          { session }
+          { session },
         );
         scratchResult.scratchCardId = createdCards[0]._id;
       }
@@ -782,9 +908,13 @@ async function createRedeem(redeemData, reqUser = null) {
   // Increment campaign/gift limits in Redis/Cache
   if (matchedCampaign) {
     await cacheService.incr(`campaign:scans:${matchedCampaign._id}`);
-    await cacheService.incr(`campaign:scans:${matchedCampaign._id}:user:${userId}`);
+    await cacheService.incr(
+      `campaign:scans:${matchedCampaign._id}:user:${userId}`,
+    );
     if (chosenGift && rewardType === "GIFT") {
-      await cacheService.incr(`campaign:scans:${matchedCampaign._id}:gift:${chosenGift._id}`);
+      await cacheService.incr(
+        `campaign:scans:${matchedCampaign._id}:gift:${chosenGift._id}`,
+      );
     }
   }
 
@@ -804,9 +934,21 @@ async function createRedeem(redeemData, reqUser = null) {
   });
 
   // 13. Keep in-memory user state in sync (for test-suite assertions)
-  syncUserInMemoryState(user, weightedPoints, newRedeem.scratchCardRewardType, newRedeem.scratchCardBonusPoints);
+  syncUserInMemoryState(
+    user,
+    weightedPoints,
+    newRedeem.scratchCardRewardType,
+    newRedeem.scratchCardBonusPoints,
+  );
 
-  return buildRedeemResponse(newRedeem, scratchResult, weightedPoints, user, product, bgColor);
+  return buildRedeemResponse(
+    newRedeem,
+    scratchResult,
+    weightedPoints,
+    user,
+    product,
+    bgColor,
+  );
 }
 
 async function deleteRedeem(redeemId) {
@@ -820,4 +962,3 @@ module.exports = {
   createRedeem,
   deleteRedeem,
 };
-

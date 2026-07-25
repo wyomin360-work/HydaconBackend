@@ -74,7 +74,10 @@ describe("Scratch Cards Controller Unit Tests", () => {
 
       await scratchCardsController.scratchCard(req, res);
 
-      expect(scratchCardsService.scratchCard).toHaveBeenCalledWith("card123", "user123");
+      expect(scratchCardsService.scratchCard).toHaveBeenCalledWith(
+        "card123",
+        "user123",
+      );
       expect(res.status).toHaveBeenCalledWith(200);
     });
   });

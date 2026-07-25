@@ -17,17 +17,45 @@ module.exports = {
               required: ["title", "description", "venue", "date"],
               properties: {
                 title: { type: "string", example: "Annual Tech Expo" },
-                description: { type: "string", example: "Annual tech conference" },
-                bannerImage: { type: "string", example: "https://cdn.example.com/banner.jpg" },
+                description: {
+                  type: "string",
+                  example: "Annual tech conference",
+                },
+                bannerImage: {
+                  type: "string",
+                  example: "https://cdn.example.com/banner.jpg",
+                },
                 venue: { type: "string", example: "Convention Center Hall 1" },
                 city: { type: "string", example: "Kochi" },
                 state: { type: "string", example: "Kerala" },
                 country: { type: "string", example: "India" },
-                date: { type: "string", format: "date-time", example: "2026-09-01T10:00:00.000Z" },
-                endDate: { type: "string", format: "date-time", example: "2026-09-02T18:00:00.000Z" },
-                registrationDeadline: { type: "string", format: "date-time", example: "2026-08-30T23:59:59.000Z" },
+                date: {
+                  type: "string",
+                  format: "date-time",
+                  example: "2026-09-01T10:00:00.000Z",
+                },
+                endDate: {
+                  type: "string",
+                  format: "date-time",
+                  example: "2026-09-02T18:00:00.000Z",
+                },
+                registrationDeadline: {
+                  type: "string",
+                  format: "date-time",
+                  example: "2026-08-30T23:59:59.000Z",
+                },
                 capacity: { type: "integer", example: 200 },
-                type: { type: "string", enum: ["webinar", "workshop", "conference", "meetup", "other"], example: "conference" },
+                type: {
+                  type: "string",
+                  enum: [
+                    "webinar",
+                    "workshop",
+                    "conference",
+                    "meetup",
+                    "other",
+                  ],
+                  example: "conference",
+                },
                 isInvitationOnly: { type: "boolean", example: false },
                 active: { type: "boolean", example: true },
               },
@@ -48,7 +76,12 @@ module.exports = {
       tags: ["Events Admin"],
       security: [{ bearerAuth: [] }],
       parameters: [
-        { name: "eventId", in: "path", required: true, schema: { type: "string" } },
+        {
+          name: "eventId",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+        },
       ],
       requestBody: {
         required: true,
@@ -79,7 +112,12 @@ module.exports = {
       tags: ["Events Admin"],
       security: [{ bearerAuth: [] }],
       parameters: [
-        { name: "eventId", in: "path", required: true, schema: { type: "string" } },
+        {
+          name: "eventId",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+        },
       ],
       responses: {
         200: { description: "Event deleted successfully" },
@@ -94,8 +132,19 @@ module.exports = {
       security: [{ bearerAuth: [] }],
       parameters: [
         { name: "page", in: "query", schema: { type: "integer", default: 1 } },
-        { name: "limit", in: "query", schema: { type: "integer", default: 20 } },
-        { name: "status", in: "query", schema: { type: "string", enum: ["upcoming", "ongoing", "completed"] } },
+        {
+          name: "limit",
+          in: "query",
+          schema: { type: "integer", default: 20 },
+        },
+        {
+          name: "status",
+          in: "query",
+          schema: {
+            type: "string",
+            enum: ["upcoming", "ongoing", "completed"],
+          },
+        },
       ],
       responses: {
         200: { description: "Paginated events list" },
@@ -108,7 +157,12 @@ module.exports = {
       tags: ["Events Admin"],
       security: [{ bearerAuth: [] }],
       parameters: [
-        { name: "eventId", in: "path", required: true, schema: { type: "string" } },
+        {
+          name: "eventId",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+        },
       ],
       responses: {
         200: { description: "Event details with registrations" },
@@ -122,7 +176,12 @@ module.exports = {
       tags: ["Events Admin"],
       security: [{ bearerAuth: [] }],
       parameters: [
-        { name: "eventId", in: "path", required: true, schema: { type: "string" } },
+        {
+          name: "eventId",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+        },
       ],
       requestBody: {
         required: true,
@@ -150,7 +209,12 @@ module.exports = {
       tags: ["Events Admin"],
       security: [{ bearerAuth: [] }],
       parameters: [
-        { name: "registrationId", in: "path", required: true, schema: { type: "string" } },
+        {
+          name: "registrationId",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+        },
       ],
       responses: {
         200: { description: "Attendee checked in successfully" },
@@ -165,11 +229,19 @@ module.exports = {
       tags: ["Events User"],
       security: [{ bearerAuth: [] }],
       parameters: [
-        { name: "tab", in: "query", schema: { type: "string", enum: ["featured", "nearby", "upcoming"] } },
+        {
+          name: "tab",
+          in: "query",
+          schema: { type: "string", enum: ["featured", "nearby", "upcoming"] },
+        },
         { name: "lat", in: "query", schema: { type: "string" } },
         { name: "lng", in: "query", schema: { type: "string" } },
         { name: "page", in: "query", schema: { type: "integer", default: 1 } },
-        { name: "limit", in: "query", schema: { type: "integer", default: 10 } },
+        {
+          name: "limit",
+          in: "query",
+          schema: { type: "integer", default: 10 },
+        },
       ],
       responses: {
         200: { description: "User event feed" },
@@ -182,7 +254,12 @@ module.exports = {
       tags: ["Events User"],
       security: [{ bearerAuth: [] }],
       parameters: [
-        { name: "eventId", in: "path", required: true, schema: { type: "string" } },
+        {
+          name: "eventId",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+        },
       ],
       responses: {
         200: { description: "Event details and user eligibility status" },
@@ -196,7 +273,12 @@ module.exports = {
       tags: ["Events User"],
       security: [{ bearerAuth: [] }],
       parameters: [
-        { name: "eventId", in: "path", required: true, schema: { type: "string" } },
+        {
+          name: "eventId",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+        },
       ],
       responses: {
         200: { description: "Registered successfully" },
@@ -212,7 +294,12 @@ module.exports = {
       tags: ["Events User"],
       security: [{ bearerAuth: [] }],
       parameters: [
-        { name: "registrationId", in: "path", required: true, schema: { type: "string" } },
+        {
+          name: "registrationId",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+        },
       ],
       responses: {
         200: { description: "Event pass data" },
@@ -228,7 +315,11 @@ module.exports = {
       security: [{ bearerAuth: [] }],
       parameters: [
         { name: "page", in: "query", schema: { type: "integer", default: 1 } },
-        { name: "limit", in: "query", schema: { type: "integer", default: 10 } },
+        {
+          name: "limit",
+          in: "query",
+          schema: { type: "integer", default: 10 },
+        },
       ],
       responses: {
         200: { description: "List of user registered events" },

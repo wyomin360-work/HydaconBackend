@@ -5,7 +5,7 @@ const localCache = new Map();
 /**
  * Retrieve value by key from cache.
  * Falls back to local in-memory Map if Redis is not available.
- * 
+ *
  * @param {string} key
  * @returns {Promise<string|null>}
  */
@@ -23,7 +23,7 @@ async function get(key) {
 /**
  * Increment key value in cache.
  * Falls back to local in-memory Map if Redis is not available.
- * 
+ *
  * @param {string} key
  * @returns {Promise<number>} The updated incremented value
  */
@@ -35,7 +35,7 @@ async function incr(key) {
   } catch (err) {
     // Suppress error and fall back to local memory
   }
-  const val = (parseInt(localCache.get(key) || 0)) + 1;
+  const val = parseInt(localCache.get(key) || 0) + 1;
   localCache.set(key, val.toString());
   return val;
 }
@@ -43,7 +43,7 @@ async function incr(key) {
 /**
  * Set value by key in cache.
  * Falls back to local in-memory Map if Redis is not available.
- * 
+ *
  * @param {string} key
  * @param {string|number} value
  * @returns {Promise<void>}
@@ -62,7 +62,7 @@ async function set(key, value) {
 
 /**
  * Retrieve key value, or initialize it from database callback on cache miss.
- * 
+ *
  * @param {string} key
  * @param {Function} dbQueryCallback
  * @returns {Promise<number>} The cached or initialized value

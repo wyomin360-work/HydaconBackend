@@ -4,7 +4,7 @@ const { ROLES } = require("../../constants/common");
 
 exports.listScratchCards = async (req, res) => {
   const isAdmin = req.role === ROLES.ADMIN || !!req.admin;
-  const userId = isAdmin ? (req.body?.userId || req.userId) : req.userId;
+  const userId = isAdmin ? req.body?.userId || req.userId : req.userId;
 
   const data = {
     userId,

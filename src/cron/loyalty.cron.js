@@ -5,9 +5,7 @@ const LoyaltyTransaction = require("../schemas/loyalty-transaction.schema");
 const User = require("../schemas/user.schema");
 const Tier = require("../schemas/tier.schema");
 const TierConfiguration = require("../schemas/tier-configuration.schema");
-const {
-  CARRY_FORWARD_BEHAVIOR,
-} = require("../constants/loyalty");
+const { CARRY_FORWARD_BEHAVIOR } = require("../constants/loyalty");
 
 function registerLoyaltyCron() {
   // 1. Season Rollover Task

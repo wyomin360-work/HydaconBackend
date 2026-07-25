@@ -12,7 +12,9 @@ if (process.env.REDIS_URL || process.env.NODE_ENV === "production") {
   redis.on("error", (err) => {
     // Only log the full error once to avoid spamming local console
     if (redis && !redis.hasLoggedError) {
-      console.warn("⚠️ Redis client connection failed. Falling back to local in-memory execution.");
+      console.warn(
+        "⚠️ Redis client connection failed. Falling back to local in-memory execution.",
+      );
       redis.hasLoggedError = true;
     }
   });

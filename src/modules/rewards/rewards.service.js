@@ -347,14 +347,19 @@ async function deleteAllReward() {
 /**
  * Awards a reward (either POINTS, COINS, or GIFT) to a user globally.
  * Uses lazy requiring of other services to prevent circular dependencies.
- * 
+ *
  * @param {string} userId
  * @param {object} rewardDetails - { type: "POINTS"|"GIFT", amount: number, giftId: string }
  * @param {object} sourceDetails - { cause: string, causeId: string, causeTitle: string, referenceId: string }
  * @param {ClientSession} session - Optional MongoDB session
  * @returns {Promise<object>} Award result { success: boolean, ... }
  */
-async function awardRewardToUser(userId, rewardDetails, sourceDetails, session = null) {
+async function awardRewardToUser(
+  userId,
+  rewardDetails,
+  sourceDetails,
+  session = null,
+) {
   const { type, amount, giftId } = rewardDetails;
   const { cause, causeId, causeTitle, referenceId } = sourceDetails;
 
@@ -396,7 +401,7 @@ async function awardRewardToUser(userId, rewardDetails, sourceDetails, session =
       causeTitle || "Campaign bonus points",
       referenceId,
       options,
-      ...(session ? [session] : [])
+      ...(session ? [session] : []),
     );
 
     return { success: true, pointsAwarded: amount };

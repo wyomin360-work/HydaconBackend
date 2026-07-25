@@ -14,16 +14,23 @@ if (redis) {
     }
     if (!bullWorker) {
       console.log("🔌 Initializing BullMQ Worker...");
-      bullWorker = new Worker("scan-effects", async (job) => {
-        await processScanSideEffects(job.data);
-      }, { connection: redis });
+      bullWorker = new Worker(
+        "scan-effects",
+        async (job) => {
+          await processScanSideEffects(job.data);
+        },
+        { connection: redis },
+      );
 
       bullWorker.on("completed", (job) => {
         console.log(`✅ Background Job ${job.id} completed successfully.`);
       });
 
       bullWorker.on("failed", (job, err) => {
-        console.error(`❌ Background Job ${job ? job.id : "unknown"} failed:`, err);
+        console.error(
+          `❌ Background Job ${job ? job.id : "unknown"} failed:`,
+          err,
+        );
       });
     }
   });
@@ -38,7 +45,7 @@ if (redis) {
 /**
  * Adds a scan effect job to the queue.
  * Falls back to in-memory async setImmediate or synchronous test execution if Redis is offline.
- * 
+ *
  * @param {string} jobName
  * @param {object} data
  * @returns {Promise<void>}
@@ -60,7 +67,10 @@ async function addJob(jobName, data) {
       });
       return;
     } catch (err) {
-      console.warn("⚠️ Failed to enqueue job to BullMQ. Falling back to local in-memory execution.", err);
+      console.warn(
+        "⚠️ Failed to enqueue job to BullMQ. Falling back to local in-memory execution.",
+        err,
+      );
     }
   }
 

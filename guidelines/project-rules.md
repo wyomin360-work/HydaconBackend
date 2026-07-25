@@ -79,6 +79,7 @@ Any endpoint receiving input payloads (POST, PATCH, PUT, DELETE with body) **mus
 To maintain consistency, prevent typos, and simplify global maintenance, **never use raw hardcoded values or hardcoded notification strings in business logic or database schemas**.
 
 ### A. Constants, Enums & Magic Numbers
+
 - **No Hardcoded Strings/Numbers**: Do not hardcode status strings, event types, tab names, error messages, success responses, query limits, distance radiuses, or time intervals inside `.service.js`, `.controller.js`, or schema files.
 - **Centralized Constants**: All application-wide enums, constants, messages, and configuration limits must be defined in `src/constants/` files (e.g., `src/constants/events.js`, `src/constants/user.js`, `src/constants/common.js`).
 - **Mongoose Schema Enums**: In Mongoose schemas, restrict field inputs using imported constant enum arrays:
@@ -91,6 +92,7 @@ To maintain consistency, prevent typos, and simplify global maintenance, **never
   ```
 
 ### B. FCM Push Notifications
+
 - **No Hardcoded Notification Texts**: Never hardcode push notification titles, body text, or notification type strings directly inside service methods or controllers.
 - **Centralized Notification Store**: All FCM notification templates (titles, bodies with `{{placeholders}}`, and type identifiers) **must** be stored inside `APP_NOTIFICATIONS` in `src/constants/notifications.js`.
 - **Formatting Helper**: Use the `formatNotification(template, data)` helper from `src/utils/heplers.js` to dynamically inject parameters into notification body templates:
@@ -158,4 +160,3 @@ To maintain readability and prevent node application startup crashes:
   3. Constants, schemas, and helper utilities.
   4. Relative service dependencies.
 - **Acyclic Architecture**: Keep feature modules decoupled. Ensure dependencies between modules are strictly unidirectional to completely avoid circular import loops.
-

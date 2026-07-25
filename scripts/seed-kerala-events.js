@@ -1,11 +1,16 @@
 const mongoose = require("mongoose");
 const Database = require("../src/config/mongodb.config");
-const { Event, EVENT_TYPE, EVENT_STATUS } = require("../src/schemas/event.schema");
+const {
+  Event,
+  EVENT_TYPE,
+  EVENT_STATUS,
+} = require("../src/schemas/event.schema");
 
 const sampleEvents = [
   {
     title: "Kerala Tech Innovation Conclave 2026",
-    description: "A premier gathering of tech founders, software architects, and AI developers showcasing cutting-edge tech innovations in Kerala.",
+    description:
+      "A premier gathering of tech founders, software architects, and AI developers showcasing cutting-edge tech innovations in Kerala.",
     bannerImage: "https://images.unsplash.com/photo-1540575467063-178a50c2df87",
     venue: "Lulu Bolgatty International Convention Centre, Bolgatty Island",
     location: {
@@ -25,7 +30,8 @@ const sampleEvents = [
   },
   {
     title: "Trivandrum Global AI & Robotics Expo",
-    description: "An international expo featuring breakthroughs in Artificial Intelligence, IoT devices, and Robotics research from Kerala's leading IT hubs.",
+    description:
+      "An international expo featuring breakthroughs in Artificial Intelligence, IoT devices, and Robotics research from Kerala's leading IT hubs.",
     bannerImage: "https://images.unsplash.com/photo-1485827404703-89b55fcc595e",
     venue: "Technopark Campus, Kazhakoottam",
     location: {
@@ -45,7 +51,8 @@ const sampleEvents = [
   },
   {
     title: "Malabar Startup & Entrepreneurship Summit",
-    description: "Empowering early-stage founders and student entrepreneurs with mentorship, VC pitching, and growth strategies in Malabar region.",
+    description:
+      "Empowering early-stage founders and student entrepreneurs with mentorship, VC pitching, and growth strategies in Malabar region.",
     bannerImage: "https://images.unsplash.com/photo-1515187029135-18ee286d815b",
     venue: "Calicut Trade Centre, Mini Bypass Road",
     location: {
@@ -65,7 +72,8 @@ const sampleEvents = [
   },
   {
     title: "Kerala Cultural Arts & Heritage Festival",
-    description: "Celebrating Kerala's rich cultural traditions, classical music performances, mural art displays, and heritage crafts.",
+    description:
+      "Celebrating Kerala's rich cultural traditions, classical music performances, mural art displays, and heritage crafts.",
     bannerImage: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819",
     venue: "Vadakkunnathan Temple Ground (Thekke Gopura Maithanam)",
     location: {
@@ -85,7 +93,8 @@ const sampleEvents = [
   },
   {
     title: "Backwater Eco-Tourism & Hospitality Forum",
-    description: "Dialogue on sustainable tourism practices, eco-friendly houseboats, and marine ecosystem conservation in Alappuzha.",
+    description:
+      "Dialogue on sustainable tourism practices, eco-friendly houseboats, and marine ecosystem conservation in Alappuzha.",
     bannerImage: "https://images.unsplash.com/photo-1602216056096-3b40cc0c9944",
     venue: "Punnamada Finishing Point Complex",
     location: {
@@ -105,7 +114,8 @@ const sampleEvents = [
   },
   {
     title: "Western Ghats Biodiversity & Climate Summit",
-    description: "Environmental conference focusing on wildlife preservation, tea plantation sustainability, and Western Ghats ecology.",
+    description:
+      "Environmental conference focusing on wildlife preservation, tea plantation sustainability, and Western Ghats ecology.",
     bannerImage: "https://images.unsplash.com/photo-1506744038136-46273834b3fb",
     venue: "High Range Club Convention Hall",
     location: {
@@ -125,7 +135,8 @@ const sampleEvents = [
   },
   {
     title: "Wayanad Agro-Tech & Organic Farming Meet",
-    description: "Connecting spice growers, coffee planters, and agricultural scientists to showcase smart farming tools and sustainable yield techniques.",
+    description:
+      "Connecting spice growers, coffee planters, and agricultural scientists to showcase smart farming tools and sustainable yield techniques.",
     bannerImage: "https://images.unsplash.com/photo-1500937386664-56d1dfef3854",
     venue: "Wayanad Club Convention Centre, Kalpetta",
     location: {
@@ -145,7 +156,8 @@ const sampleEvents = [
   },
   {
     title: "North Malabar Textile & Handloom Fair",
-    description: "Showcasing traditional Malabar weavers, sustainable fabrics, handcrafted apparel, and export opportunities.",
+    description:
+      "Showcasing traditional Malabar weavers, sustainable fabrics, handcrafted apparel, and export opportunities.",
     bannerImage: "https://images.unsplash.com/photo-1558769132-cb1aea458c5e",
     venue: "Police Maidan Ground",
     location: {
@@ -165,7 +177,8 @@ const sampleEvents = [
   },
   {
     title: "Kollam Maritime & Coastal Trade Conference",
-    description: "A gathering of port authorities, shipping companies, and seafood exporters discussing port modernization and trade logistics.",
+    description:
+      "A gathering of port authorities, shipping companies, and seafood exporters discussing port modernization and trade logistics.",
     bannerImage: "https://images.unsplash.com/photo-1518837695005-2083093ee35b",
     venue: "Asramam Maidan Convention Center",
     location: {
@@ -185,7 +198,8 @@ const sampleEvents = [
   },
   {
     title: "Palakkad Renewable Energy & Solar Tech Expo",
-    description: "Clean energy conference bringing together solar panel innovators, wind energy pioneers, and green power investors.",
+    description:
+      "Clean energy conference bringing together solar panel innovators, wind energy pioneers, and green power investors.",
     bannerImage: "https://images.unsplash.com/photo-1509391365360-2e959784a276",
     venue: "Fort Maidan Convention Hall",
     location: {
@@ -214,7 +228,7 @@ async function seedEvents() {
     console.log(`✅ Successfully created ${createdEvents.length} events!`);
     createdEvents.forEach((ev) => {
       console.log(
-        ` - [${ev.city}] ${ev.title} @ [Lng: ${ev.location.coordinates[0]}, Lat: ${ev.location.coordinates[1]}]`
+        ` - [${ev.city}] ${ev.title} @ [Lng: ${ev.location.coordinates[0]}, Lat: ${ev.location.coordinates[1]}]`,
       );
     });
   } catch (error) {

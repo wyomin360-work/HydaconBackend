@@ -286,7 +286,9 @@ module.exports = {
       tags: ["Contests User"],
       security: [{ bearerAuth: [] }],
       responses: {
-        200: { description: "General leaderboard rankings and user nearby rank" },
+        200: {
+          description: "General leaderboard rankings and user nearby rank",
+        },
       },
     },
   },

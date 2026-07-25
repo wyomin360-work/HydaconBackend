@@ -1,12 +1,18 @@
 const mongoose = require("mongoose");
 const Database = require("../src/config/mongodb.config");
 const { Contest } = require("../src/schemas/contest.schema");
-const { ContestEntry, ENTRY_REWARD_STATUS } = require("../src/schemas/contest-entry.schema");
+const {
+  ContestEntry,
+  ENTRY_REWARD_STATUS,
+} = require("../src/schemas/contest-entry.schema");
 const User = require("../src/schemas/user.schema");
 const Gift = require("../src/schemas/gift.schema");
 const GiftCategory = require("../src/schemas/gift-category.schema");
 const GiftRedemption = require("../src/schemas/gift-redemption.schema");
-const { GIFT_REDEMPTION_STATUS, REWARD_CAUSE } = require("../src/constants/gift");
+const {
+  GIFT_REDEMPTION_STATUS,
+  REWARD_CAUSE,
+} = require("../src/constants/gift");
 const {
   CONTEST_STATUS,
   REWARD_TYPE,
@@ -16,9 +22,18 @@ const {
 const { hashData } = require("../src/utils/heplers");
 
 const sampleCategories = [
-  { name: "Electronics & Gadgets", description: "Smartphones, TVs, Laptops & Accessories" },
-  { name: "Gold & Vehicles", description: "Gold coins, vouchers for bikes & scooters" },
-  { name: "Hardware & Tools", description: "Power tools and professional equipment" },
+  {
+    name: "Electronics & Gadgets",
+    description: "Smartphones, TVs, Laptops & Accessories",
+  },
+  {
+    name: "Gold & Vehicles",
+    description: "Gold coins, vouchers for bikes & scooters",
+  },
+  {
+    name: "Hardware & Tools",
+    description: "Power tools and professional equipment",
+  },
 ];
 
 const sampleGiftsData = [
@@ -42,7 +57,8 @@ const sampleGiftsData = [
   },
   {
     name: "Bosch Heavy Duty Power Tool Kit",
-    description: "Professional cordless drill, grinder, and impact driver combo kit",
+    description:
+      "Professional cordless drill, grinder, and impact driver combo kit",
     giftType: "physical",
     categoryName: "Hardware & Tools",
     priceInCoins: 15000,
@@ -177,7 +193,8 @@ const sampleUsersData = [
     name: "Anil Kumar",
     email: "anil.kumar@example.com",
     phone: "9847012345",
-    profileImage: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150",
+    profileImage:
+      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150",
     totalPoints: 14500,
     lifetimePoints: 18200,
     totalScans: 142,
@@ -187,7 +204,8 @@ const sampleUsersData = [
     name: "Rahim Panicker",
     email: "rahim.p@example.com",
     phone: "9847023456",
-    profileImage: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150",
+    profileImage:
+      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150",
     totalPoints: 12800,
     lifetimePoints: 15400,
     totalScans: 118,
@@ -197,7 +215,8 @@ const sampleUsersData = [
     name: "Suresh Nair",
     email: "suresh.nair@example.com",
     phone: "9847034567",
-    profileImage: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150",
+    profileImage:
+      "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150",
     totalPoints: 9600,
     lifetimePoints: 11000,
     totalScans: 89,
@@ -207,7 +226,8 @@ const sampleUsersData = [
     name: "Vipin Das",
     email: "vipin.das@example.com",
     phone: "9847045678",
-    profileImage: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150",
+    profileImage:
+      "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150",
     totalPoints: 8100,
     lifetimePoints: 9500,
     totalScans: 74,
@@ -217,7 +237,8 @@ const sampleUsersData = [
     name: "Mathew George",
     email: "mathew.g@example.com",
     phone: "9847056789",
-    profileImage: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
+    profileImage:
+      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
     totalPoints: 6400,
     lifetimePoints: 7200,
     totalScans: 56,
@@ -231,7 +252,8 @@ const rawContestsDefinition = [
     name: "Hydacon Monsoon Plumbers Championship 2026",
     description:
       "A premier monsoon scan contest for registered plumbers and contractors across Kerala. Scan Hydacon CPVC and PVC piping products to collect qualification points and win high-value rewards!",
-    bannerImage: "https://images.unsplash.com/photo-1541888946425-d0fbb186a5b3?w=1200",
+    bannerImage:
+      "https://images.unsplash.com/photo-1541888946425-d0fbb186a5b3?w=1200",
     rewardSummary: "Top 3 rankers win iPhone 15 Pro, Smart TV & Bosch Tool Kit",
     startDate: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000), // 10 days ago
     endDate: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000), // in 20 days
@@ -240,9 +262,21 @@ const rawContestsDefinition = [
     productScope: PRODUCT_SCOPE.EVERY_PRODUCT,
     tierScope: TIER_SCOPE.ALL_TIERS,
     prizesRaw: [
-      { rank: 1, rewardType: REWARD_TYPE.GIFT, giftName: "iPhone 15 Pro (256 GB)" },
-      { rank: 2, rewardType: REWARD_TYPE.GIFT, giftName: "Smart TV 55-inch 4K" },
-      { rank: 3, rewardType: REWARD_TYPE.GIFT, giftName: "Bosch Heavy Duty Power Tool Kit" },
+      {
+        rank: 1,
+        rewardType: REWARD_TYPE.GIFT,
+        giftName: "iPhone 15 Pro (256 GB)",
+      },
+      {
+        rank: 2,
+        rewardType: REWARD_TYPE.GIFT,
+        giftName: "Smart TV 55-inch 4K",
+      },
+      {
+        rank: 3,
+        rewardType: REWARD_TYPE.GIFT,
+        giftName: "Bosch Heavy Duty Power Tool Kit",
+      },
       { rank: 4, rewardType: REWARD_TYPE.POINTS, points: 2500 },
       { rank: 5, rewardType: REWARD_TYPE.POINTS, points: 1000 },
     ],
@@ -252,8 +286,10 @@ const rawContestsDefinition = [
     name: "Kochi Builders Mega Scan Sprint",
     description:
       "Exclusive high-intensity scanning competition for contractors and plumbers in the Kochi metropolitan area. Scan Hydacon Water Storage Tanks and Drainage Systems to dominate the leaderboard.",
-    bannerImage: "https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=1200",
-    rewardSummary: "Grand prize of 24K Gold Coin, Yamaha RayZR Scooter & iPad Air",
+    bannerImage:
+      "https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=1200",
+    rewardSummary:
+      "Grand prize of 24K Gold Coin, Yamaha RayZR Scooter & iPad Air",
     startDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
     endDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000), // in 15 days
     region: "Kochi",
@@ -262,7 +298,11 @@ const rawContestsDefinition = [
     tierScope: TIER_SCOPE.ALL_TIERS,
     prizesRaw: [
       { rank: 1, rewardType: REWARD_TYPE.GIFT, giftName: "24K 10g Gold Coin" },
-      { rank: 2, rewardType: REWARD_TYPE.GIFT, giftName: "Yamaha RayZR Scooter Voucher" },
+      {
+        rank: 2,
+        rewardType: REWARD_TYPE.GIFT,
+        giftName: "Yamaha RayZR Scooter Voucher",
+      },
       { rank: 3, rewardType: REWARD_TYPE.GIFT, giftName: "iPad Air 128GB" },
       { rank: 4, rewardType: REWARD_TYPE.POINTS, points: 2000 },
     ],
@@ -272,7 +312,8 @@ const rawContestsDefinition = [
     name: "Malabar CPVC Master Scan Contest",
     description:
       "Regional scanning challenge tailored for CPVC fitting installations in Kozhikode, Kannur, and Malappuram districts. Accumulate maximum points to qualify for high-tier rewards.",
-    bannerImage: "https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=1200",
+    bannerImage:
+      "https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=1200",
     rewardSummary: "Top scanners win Honda Activa 6G Scooter and HP Laptop",
     startDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
     endDate: new Date(Date.now() + 25 * 24 * 60 * 60 * 1000), // in 25 days
@@ -281,9 +322,17 @@ const rawContestsDefinition = [
     productScope: PRODUCT_SCOPE.EVERY_PRODUCT,
     tierScope: TIER_SCOPE.ALL_TIERS,
     prizesRaw: [
-      { rank: 1, rewardType: REWARD_TYPE.GIFT, giftName: "Honda Activa 6G Scooter" },
+      {
+        rank: 1,
+        rewardType: REWARD_TYPE.GIFT,
+        giftName: "Honda Activa 6G Scooter",
+      },
       { rank: 2, rewardType: REWARD_TYPE.GIFT, giftName: "HP Laptop Core i5" },
-      { rank: 3, rewardType: REWARD_TYPE.GIFT, giftName: "Samsung Galaxy Tab S9" },
+      {
+        rank: 3,
+        rewardType: REWARD_TYPE.GIFT,
+        giftName: "Samsung Galaxy Tab S9",
+      },
       { rank: 4, rewardType: REWARD_TYPE.POINTS, points: 3000 },
     ],
     active: true,
@@ -292,8 +341,10 @@ const rawContestsDefinition = [
     name: "Onam Gold Harvest Contest 2026",
     description:
       "Celebrate the festival of Onam with Hydacon! Scan any Hydacon product line during the festive season to win Sovereign Gold Coins and Mega Bonus Loyalty Points.",
-    bannerImage: "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=1200",
-    rewardSummary: "Grand prize of Sovereign Gold Coins & Bonus Points for Top 5 Scanners",
+    bannerImage:
+      "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=1200",
+    rewardSummary:
+      "Grand prize of Sovereign Gold Coins & Bonus Points for Top 5 Scanners",
     startDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000), // in 10 days
     endDate: new Date(Date.now() + 40 * 24 * 60 * 60 * 1000), // in 40 days
     region: "Kerala",
@@ -301,9 +352,21 @@ const rawContestsDefinition = [
     productScope: PRODUCT_SCOPE.EVERY_PRODUCT,
     tierScope: TIER_SCOPE.ALL_TIERS,
     prizesRaw: [
-      { rank: 1, rewardType: REWARD_TYPE.GIFT, giftName: "1 Sovereign (8g) Gold Coin" },
-      { rank: 2, rewardType: REWARD_TYPE.GIFT, giftName: "1 Sovereign (8g) Gold Coin" },
-      { rank: 3, rewardType: REWARD_TYPE.GIFT, giftName: "0.5 Sovereign (4g) Gold Coin" },
+      {
+        rank: 1,
+        rewardType: REWARD_TYPE.GIFT,
+        giftName: "1 Sovereign (8g) Gold Coin",
+      },
+      {
+        rank: 2,
+        rewardType: REWARD_TYPE.GIFT,
+        giftName: "1 Sovereign (8g) Gold Coin",
+      },
+      {
+        rank: 3,
+        rewardType: REWARD_TYPE.GIFT,
+        giftName: "0.5 Sovereign (4g) Gold Coin",
+      },
       { rank: 4, rewardType: REWARD_TYPE.POINTS, points: 5000 },
       { rank: 5, rewardType: REWARD_TYPE.POINTS, points: 2500 },
     ],
@@ -313,7 +376,8 @@ const rawContestsDefinition = [
     name: "Diwali Festival Scan Bonanza 2026",
     description:
       "Nationwide festive scan extravaganza. All verified users earning double points will automatically enter this grand contest leaderboard.",
-    bannerImage: "https://images.unsplash.com/photo-1513151233558-d860c5398176?w=1200",
+    bannerImage:
+      "https://images.unsplash.com/photo-1513151233558-d860c5398176?w=1200",
     rewardSummary: "Win Apple MacBook Air M3, Sony OLED TVs & Instant Coins",
     startDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // in 30 days
     endDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000), // in 60 days
@@ -322,8 +386,16 @@ const rawContestsDefinition = [
     productScope: PRODUCT_SCOPE.EVERY_PRODUCT,
     tierScope: TIER_SCOPE.ALL_TIERS,
     prizesRaw: [
-      { rank: 1, rewardType: REWARD_TYPE.GIFT, giftName: "MacBook Air M3 15-inch" },
-      { rank: 2, rewardType: REWARD_TYPE.GIFT, giftName: "Sony 65-inch Bravia OLED TV" },
+      {
+        rank: 1,
+        rewardType: REWARD_TYPE.GIFT,
+        giftName: "MacBook Air M3 15-inch",
+      },
+      {
+        rank: 2,
+        rewardType: REWARD_TYPE.GIFT,
+        giftName: "Sony 65-inch Bravia OLED TV",
+      },
       { rank: 3, rewardType: REWARD_TYPE.POINTS, points: 10000 },
     ],
     active: true,
@@ -332,8 +404,10 @@ const rawContestsDefinition = [
     name: "Hydacon Summer Plumber Super League 2026",
     description:
       "The concluded annual summer scan leaderboard challenge. Over 50 active trade partners and plumbers participated across South India.",
-    bannerImage: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=1200",
-    rewardSummary: "Over 50 winners awarded bonus points and electronic appliances",
+    bannerImage:
+      "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=1200",
+    rewardSummary:
+      "Over 50 winners awarded bonus points and electronic appliances",
     startDate: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000), // 60 days ago
     endDate: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000), // 10 days ago
     region: "Global",
@@ -341,8 +415,16 @@ const rawContestsDefinition = [
     productScope: PRODUCT_SCOPE.EVERY_PRODUCT,
     tierScope: TIER_SCOPE.ALL_TIERS,
     prizesRaw: [
-      { rank: 1, rewardType: REWARD_TYPE.GIFT, giftName: "Double Door Refrigerator" },
-      { rank: 2, rewardType: REWARD_TYPE.GIFT, giftName: "Front Load Washing Machine" },
+      {
+        rank: 1,
+        rewardType: REWARD_TYPE.GIFT,
+        giftName: "Double Door Refrigerator",
+      },
+      {
+        rank: 2,
+        rewardType: REWARD_TYPE.GIFT,
+        giftName: "Front Load Washing Machine",
+      },
       { rank: 3, rewardType: REWARD_TYPE.GIFT, giftName: "Microwave Oven" },
       { rank: 4, rewardType: REWARD_TYPE.POINTS, points: 3000 },
       { rank: 5, rewardType: REWARD_TYPE.POINTS, points: 1500 },
@@ -355,7 +437,9 @@ async function seedDemoContests() {
   const db = new Database();
   try {
     await db.connectDb();
-    console.log("🌱 Seeding production-level realistic demo contents for GiftCategories, Gifts, Users & Contests...");
+    console.log(
+      "🌱 Seeding production-level realistic demo contents for GiftCategories, Gifts, Users & Contests...",
+    );
 
     // 0. Ensure Gift Categories exist
     const categoryMap = {};
@@ -453,7 +537,9 @@ async function seedDemoContests() {
     });
 
     const createdContests = await Contest.insertMany(contestsToInsert);
-    console.log(`✅ Successfully created ${createdContests.length} realistic demo contests!`);
+    console.log(
+      `✅ Successfully created ${createdContests.length} realistic demo contests!`,
+    );
 
     // 5. Create Contest Entries for active & completed contests
     let entryCount = 0;
@@ -464,7 +550,8 @@ async function seedDemoContests() {
 
       for (let i = 0; i < users.length; i++) {
         const user = users[i];
-        const qualificationPoints = scores[i % scores.length] + Math.floor(Math.random() * 50);
+        const qualificationPoints =
+          scores[i % scores.length] + Math.floor(Math.random() * 50);
         const rank = i + 1;
         const matchingPrize = contest.prizes.find((p) => p.rank === rank);
 
@@ -507,13 +594,21 @@ async function seedDemoContests() {
           rank: contest.status === CONTEST_STATUS.COMPLETED ? rank : undefined,
           rewardType: matchingPrize ? matchingPrize.rewardType : null,
           giftRedemptionId,
-          bonusPointsAwarded: matchingPrize && matchingPrize.rewardType === REWARD_TYPE.POINTS ? matchingPrize.points : 0,
-          rewardStatus: contest.status === CONTEST_STATUS.COMPLETED ? ENTRY_REWARD_STATUS.CREDITED : ENTRY_REWARD_STATUS.PENDING,
+          bonusPointsAwarded:
+            matchingPrize && matchingPrize.rewardType === REWARD_TYPE.POINTS
+              ? matchingPrize.points
+              : 0,
+          rewardStatus:
+            contest.status === CONTEST_STATUS.COMPLETED
+              ? ENTRY_REWARD_STATUS.CREDITED
+              : ENTRY_REWARD_STATUS.PENDING,
         });
         entryCount++;
       }
     }
-    console.log(`✅ Created ${entryCount} contest entry records for leaderboards and details views!`);
+    console.log(
+      `✅ Created ${entryCount} contest entry records for leaderboards and details views!`,
+    );
 
     createdContests.forEach((c) => {
       console.log(`  - [${c.status.toUpperCase()}] [${c.region}] ${c.name}`);

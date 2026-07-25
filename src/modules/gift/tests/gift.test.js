@@ -379,8 +379,12 @@ describe("Gift Service & Rules Engine Tests", () => {
 
       const mockSession = buildMockSession();
       mongoose.startSession = jest.fn().mockResolvedValue(mockSession);
-      Gift.findOneAndUpdate = jest.fn().mockResolvedValue({ ...mockGift, rewardedUsers: [] });
-      GiftRedemption.prototype.save = jest.fn().mockResolvedValue({ _id: "r1", coinsUsed: 0 });
+      Gift.findOneAndUpdate = jest
+        .fn()
+        .mockResolvedValue({ ...mockGift, rewardedUsers: [] });
+      GiftRedemption.prototype.save = jest
+        .fn()
+        .mockResolvedValue({ _id: "r1", coinsUsed: 0 });
 
       const response = await giftService.redeemGift("user123", {
         giftId: "gift123",
@@ -398,7 +402,11 @@ describe("Gift Service & Rules Engine Tests", () => {
 
       const mockSession = buildMockSession();
       mockSession.withTransaction.mockImplementation(async (callback) => {
-        try { await callback(); } catch (e) { throw e; }
+        try {
+          await callback();
+        } catch (e) {
+          throw e;
+        }
       });
       mongoose.startSession = jest.fn().mockResolvedValue(mockSession);
 
@@ -418,7 +426,11 @@ describe("Gift Service & Rules Engine Tests", () => {
     it("should fail if shippingAddress is missing even for rewarded users", async () => {
       const mockSession = buildMockSession();
       mockSession.withTransaction.mockImplementation(async (callback) => {
-        try { await callback(); } catch (e) { throw e; }
+        try {
+          await callback();
+        } catch (e) {
+          throw e;
+        }
       });
       mongoose.startSession = jest.fn().mockResolvedValue(mockSession);
 

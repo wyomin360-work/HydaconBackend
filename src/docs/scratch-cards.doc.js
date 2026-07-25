@@ -11,7 +11,10 @@ module.exports = {
             schema: {
               type: "object",
               properties: {
-                userId: { type: "string", description: "Admin only: target user ID" },
+                userId: {
+                  type: "string",
+                  description: "Admin only: target user ID",
+                },
                 page: { type: "integer", minimum: 1, default: 1 },
                 limit: { type: "integer", minimum: 1, default: 15 },
               },
