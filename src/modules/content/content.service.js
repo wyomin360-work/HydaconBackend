@@ -1,30 +1,12 @@
 const Content = require("../../schemas/content.schema");
-const { ErrorHandler } = require("../../utils/heplers");
-
-const ALLOWED_PLACEMENTS = [
-  "HOME_TOP_CAROUSEL",
-  "HOME_MIDDLE_BANNER",
-  "HOME_BOTTOM_BANNER",
-  "REWARDS_PAGE",
-  "PRODUCT_SELECTOR",
-  "COVERAGE_CALCULATOR",
-  "GIFT_CATALOGUE",
-  "PROFILE",
-  "SCAN_PAGE",
-  "REWARD_SUCCESS_SCREEN",
-  "SEASON_LANDING_PAGE",
-  "ANNOUNCEMENTS",
-  "SEASON_CAMPAIGN",
-];
+const AppError = require("../../utils/appError");
+const { ALLOWED_PLACEMENTS } = require("./content.constants");
 
 const validatePlacements = (placements) => {
   if (!placements || !Array.isArray(placements)) return;
   for (const p of placements) {
     if (!ALLOWED_PLACEMENTS.includes(p)) {
-      throw new ErrorHandler(
-        `Invalid placement: ${p}. Allowed: ${ALLOWED_PLACEMENTS.join(", ")}`,
-        400,
-      );
+      throw new AppError(`Invalid placement: ${p}. Allowed: ${ALLOWED_PLACEMENTS.join(", ")}`, 400);
     }
   }
 };
@@ -40,7 +22,7 @@ const updateContent = async (id, data) => {
   validatePlacements(data.placements);
   const content = await Content.findByIdAndUpdate(id, data, { new: true });
   if (!content) {
-    throw new ErrorHandler("Content not found", 404);
+    throw new AppError("Content not found", 404);
   }
   return content;
 };
@@ -48,7 +30,7 @@ const updateContent = async (id, data) => {
 const deleteContent = async (id) => {
   const content = await Content.findByIdAndDelete(id);
   if (!content) {
-    throw new ErrorHandler("Content not found", 404);
+    throw new AppError("Content not found", 404);
   }
   return content;
 };
@@ -62,17 +44,26 @@ const listContent = async (query = {}) => {
   if (active !== undefined)
     filter.active = active === "true" || active === true;
 
-  const skip = (parseInt(page) - 1) * parseInt(limit);
+  let queryBuilder = Content.find(filter).sort({ sortOrder: 1, createdAt: -1 });
+
+  if (page && limit) {
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    queryBuilder = queryBuilder.skip(skip).limit(parseInt(limit));
+  } else if (limit) {
+    queryBuilder = queryBuilder.limit(parseInt(limit));
+  }
 
   const [data, total] = await Promise.all([
-    Content.find(filter)
-      .sort({ sortOrder: 1, createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit)),
-    Content.countDocuments(filter),
+    queryBuilder,
+    Content.countDocuments(filter)
   ]);
 
-  return { data, total, page: parseInt(page), limit: parseInt(limit) };
+  return { 
+    data, 
+    total, 
+    page: page ? parseInt(page) : 1, 
+    limit: limit ? parseInt(limit) : total 
+  };
 };
 
 const getHomepageContent = async () => {
@@ -125,7 +116,7 @@ const getPlacementContent = async (placement) => {
 const getContentDetails = async (id) => {
   const content = await Content.findById(id);
   if (!content) {
-    throw new ErrorHandler("Content not found", 404);
+    throw new AppError("Content not found", 404);
   }
   return content;
 };
