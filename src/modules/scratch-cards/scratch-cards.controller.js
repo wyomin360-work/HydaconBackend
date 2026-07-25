@@ -4,14 +4,17 @@ const { ROLES } = require("../../constants/common");
 
 exports.listScratchCards = async (req, res) => {
   const isAdmin = req.role === ROLES.ADMIN || !!req.admin;
-  const userId = isAdmin ? req.body?.userId || req.userId : req.userId;
+  const userId = isAdmin ? req.body?.userId : req.userId;
 
   const data = {
     userId,
     page: Math.max(1, parseInt(req.body?.page) || 1),
     limit: Math.max(1, parseInt(req.body?.limit) || 15),
+    startDate: req.body?.startDate,
+    endDate: req.body?.endDate,
+    scratchCardCampaignId: req.body?.scratchCardCampaignId,
   };
-  const response = await scratchCardsService.listScratchCards(data);
+  const response = await scratchCardsService.listScratchCards(data, isAdmin);
   return sendResponse(res, response);
 };
 

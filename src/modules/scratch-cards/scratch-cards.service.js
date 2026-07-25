@@ -3,6 +3,8 @@ const Gift = require("../../schemas/gift.schema");
 const rewardsService = require("../rewards/rewards.service");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const { attachId } = require("../../utils/heplers");
+const Redeem = require("../../schemas/redeem.schema");
+const ScratchCardRule = require("../../schemas/scratch-card-rule.schema");
 const { REWARD_CAUSE } = require("../../constants/gift");
 const {
   SCRATCH_CARD_STATUS,
@@ -18,23 +20,38 @@ const {
  * @param {object} data
  * @returns {Promise<object>}
  */
-async function listScratchCards(data) {
-  const { userId, page = 1, limit = 15 } = data;
+async function listScratchCards(data, isAdmin = false) {
+  const { userId, page = 1, limit = 15, startDate, endDate, scratchCardCampaignId } = data;
   const skip = (page - 1) * limit;
 
-  const query = { userId };
+  const query = {};
+  if (userId) query.userId = userId;
 
-  const scratchCards = await ScratchCard.find(query)
+  if (startDate || endDate) {
+    query.createdAt = {};
+    if (startDate) query.createdAt.$gte = new Date(startDate);
+    if (endDate) query.createdAt.$lte = new Date(endDate);
+  }
+
+  if (scratchCardCampaignId) {
+
+    const redeems = await Redeem.find({ scratchCardCampaignId }).select("_id").lean();
+    const redeemIds = redeems.map(r => r._id);
+    query.redeemId = { $in: redeemIds };
+  }
+
+  const scratchCardsQuery = ScratchCard.find(query)
     .populate({
       path: "redeemId",
       select:
-        "scratchCardGiftClaimed scratchCardGiftRedemptionId scratchCardRewardType scratchCardBonusPoints scratchCardGiftId product",
+        "scratchCardGiftClaimed scratchCardGiftRedemptionId scratchCardRewardType scratchCardBonusPoints scratchCardGiftId productId product scratchCardCampaignId",
       populate: [
         { path: "product", select: "name image" },
         {
           path: "scratchCardGiftRedemptionId",
           select: "status trackingNumber courierName shippingAddress createdAt",
         },
+        { path: "scratchCardCampaignId", select: "name _id" },
       ],
     })
     .populate({
@@ -43,8 +60,16 @@ async function listScratchCards(data) {
     })
     .skip(skip)
     .limit(limit)
-    .sort({ createdAt: -1 })
-    .lean();
+    .sort({ createdAt: -1 });
+
+  if (isAdmin) {
+    scratchCardsQuery.populate({
+      path: "userId",
+      select: "name phone email uidId id",
+    });
+  }
+
+  const scratchCards = await scratchCardsQuery.lean();
 
   const scratchCardsWithId = attachId(scratchCards).map((card) => {
     const isGift = card.rewardType === "GIFT" || !!card.giftId;
