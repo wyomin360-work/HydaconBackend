@@ -4,6 +4,7 @@ const mongoose = require("mongoose");
 const GiftRedemption = require("../../schemas/gift-redemption.schema");
 const Document = require("../../schemas/document.schema");
 const User = require("../../schemas/user.schema");
+const Redeem = require("../../schemas/redeem.schema");
 const {
   GIFT_REDEMPTION_STATUS,
   REWARD_CAUSE,
@@ -179,13 +180,41 @@ exports.giftList = async (data, isAdmin) => {
   }
 };
 
-exports.getGiftDetails = async (giftId) => {
+exports.getGiftDetails = async (giftId, userId = null) => {
   try {
     const gift = await Gift.findById(giftId)
       .populate("categoryId", "name")
-      .populate("ruleSetId", "name active validFrom validUntil");
+      .populate("ruleSetId", "name active validFrom validUntil")
+      .lean();
 
     if (!gift) return { success: false, message: "Gift not found" };
+
+    const now = new Date();
+    let myRewardedEntry = null;
+
+    if (gift.rewardedUsers && Array.isArray(gift.rewardedUsers)) {
+      if (userId) {
+        const found = gift.rewardedUsers.find(
+          (e) =>
+            String(e.userId) === String(userId) &&
+            (!e.expiresAt || new Date(e.expiresAt) > now),
+        );
+        if (found) {
+          myRewardedEntry = {
+            rewardCause: found.rewardCause,
+            rewardCauseTitle: found.rewardCauseTitle,
+            rewardedAt: found.rewardedAt,
+            expiresAt: found.expiresAt,
+          };
+        }
+      }
+      // Never send all users' rewardedUsers data to the client
+      delete gift.rewardedUsers;
+    }
+
+    gift.myRewardedEntry = myRewardedEntry;
+    gift.isFreeClaimable = !!myRewardedEntry;
+
     return { success: true, data: gift };
   } catch (error) {
     return { success: false, message: error.message };
@@ -511,6 +540,19 @@ exports.redeemGift = async (userId, data) => {
 
         const redemption = new GiftRedemption(redemptionData);
         await redemption.save({ session });
+
+        // Update the corresponding Redeem record if this claim was tied to a scratch card
+        if (rewardEntry.redeemId) {
+          await Redeem.findByIdAndUpdate(
+            rewardEntry.redeemId,
+            {
+              scratchCardGiftClaimed: true,
+              scratchCardGiftRedemptionId: redemption._id,
+            },
+            { session },
+          );
+        }
+
         result = redemption;
         userForNotification = user;
         giftForNotification = gift;

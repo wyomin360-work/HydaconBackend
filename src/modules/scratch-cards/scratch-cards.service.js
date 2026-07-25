@@ -26,15 +26,41 @@ async function listScratchCards(data) {
   const scratchCards = await ScratchCard.find(query)
     .populate({
       path: "redeemId",
-      populate: [{ path: "product" }, { path: "reward" }],
+      select:
+        "scratchCardGiftClaimed scratchCardGiftRedemptionId scratchCardRewardType scratchCardBonusPoints scratchCardGiftId product",
+      populate: [
+        { path: "product", select: "name image" },
+        {
+          path: "scratchCardGiftRedemptionId",
+          select: "status trackingNumber courierName shippingAddress createdAt",
+        },
+      ],
     })
-    .populate("giftId")
+    .populate({
+      path: "giftId",
+      select: "name image giftType active priceInCoins",
+    })
     .skip(skip)
     .limit(limit)
     .sort({ createdAt: -1 })
     .lean();
 
-  const scratchCardsWithId = attachId(scratchCards);
+  // Attach formatted ID & convenience flag for whether physical gift is claimed
+  const scratchCardsWithId = attachId(scratchCards).map((card) => {
+    const isGift = card.rewardType === "GIFT" || !!card.giftId;
+    const isClaimed = Boolean(
+      card.redeemId?.scratchCardGiftClaimed ||
+        card.redeemId?.scratchCardGiftRedemptionId,
+    );
+
+    return {
+      ...card,
+      isGift,
+      isClaimed,
+      scratchCardGiftClaimed: isClaimed,
+    };
+  });
+
   const totalDocuments = await ScratchCard.countDocuments(query);
 
   return {

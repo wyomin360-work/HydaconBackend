@@ -36,7 +36,8 @@ exports.adminListGifts = async (req, res) => {
 
 exports.getGiftDetails = async (req, res) => {
   const giftId = req.params?.giftId;
-  const response = await giftService.getGiftDetails(giftId);
+  const userId = req.user?.id || req.user?._id;
+  const response = await giftService.getGiftDetails(giftId, userId);
   return sendResponse(res, response);
 };
 
