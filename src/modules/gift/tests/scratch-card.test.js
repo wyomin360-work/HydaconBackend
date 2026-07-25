@@ -276,11 +276,9 @@ describe("Scratch Card Unit Tests (Admin Config & User Eligibility / Rewards)", 
 
       Redeem.countDocuments.mockResolvedValue(0);
       AppConfig.findOne.mockReturnValue({
-        lean: jest
-          .fn()
-          .mockResolvedValue({
-            scratchCardSettings: { minBonusPoints: 0, maxBonusPoints: 10 },
-          }),
+        lean: jest.fn().mockResolvedValue({
+          scratchCardSettings: { minBonusPoints: 0, maxBonusPoints: 10 },
+        }),
       });
 
       // Default: no GiftRedemption instantiation side-effects

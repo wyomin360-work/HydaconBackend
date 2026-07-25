@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Product = require("../../schemas/product.schema");
 const Reward = require("../../schemas/reward.schema");
 const Gift = require("../../schemas/gift.schema");
+const User = require("../../schemas/user.schema");
 const giftService = require("../gift/gift.service");
 const loyaltyService = require("../loyalty/loyalty.service");
 const { LOYALTY_TRANSACTION_SOURCES } = require("../../constants/loyalty");
@@ -405,6 +406,30 @@ async function awardRewardToUser(
     );
 
     return { success: true, pointsAwarded: amount };
+  }
+
+  if (type === "COIN" || type === "HYDACOIN" || type === "HYDACON_COIN") {
+    const coinsToAward = Number(amount) || 0;
+    let userQuery = User.findByIdAndUpdate(
+      userId,
+      {
+        $inc: {
+          hydaconCoins: coinsToAward,
+          lifetimeHydaconCoins: coinsToAward,
+        },
+      },
+      { new: true },
+    );
+    if (session && typeof userQuery.session === "function") {
+      userQuery = userQuery.session(session);
+    }
+    const updatedUser = await userQuery;
+
+    return {
+      success: true,
+      coinsAwarded: coinsToAward,
+      currentCoins: updatedUser?.hydaconCoins || 0,
+    };
   }
 
   return { success: false, message: "Unsupported reward type" };

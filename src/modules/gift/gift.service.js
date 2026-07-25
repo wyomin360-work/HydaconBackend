@@ -1179,6 +1179,11 @@ exports.updateScratchCardConfig = async (configData) => {
     if (enabled !== undefined) update["scratchCardSettings.enabled"] = enabled;
     if (probability !== undefined)
       update["scratchCardSettings.probability"] = probability;
+    if (configData.cooldownMinutes !== undefined)
+      update["scratchCardSettings.cooldownMinutes"] =
+        configData.cooldownMinutes;
+    if (configData.maxPerDay !== undefined)
+      update["scratchCardSettings.maxPerDay"] = configData.maxPerDay;
     if (minBonusPoints !== undefined)
       update["scratchCardSettings.minBonusPoints"] = minBonusPoints;
     if (maxBonusPoints !== undefined)

@@ -42,6 +42,38 @@ describe("Scratch Cards Service Unit Tests", () => {
       expect(result.data.scratchCards[0].id).toBe("card123");
       expect(result.data.total).toBe(1);
     });
+
+    it("should compute effective points from redeemId if card.points is 0", async () => {
+      const mockCards = [
+        {
+          _id: "card456",
+          userId: "user123",
+          rewardType: "POINTS",
+          points: 0,
+          redeemId: {
+            _id: "redeem456",
+            scratchCardBonusPoints: 0,
+            weightedPoints: 100,
+          },
+        },
+      ];
+      ScratchCard.find.mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        sort: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockResolvedValue(mockCards),
+      });
+      ScratchCard.countDocuments.mockResolvedValue(1);
+
+      const result = await scratchCardsService.listScratchCards({
+        userId: "user123",
+        page: 1,
+        limit: 15,
+      });
+
+      expect(result.data.scratchCards[0].points).toBe(100);
+    });
   });
 
   describe("scratchCard", () => {

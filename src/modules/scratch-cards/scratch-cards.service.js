@@ -45,16 +45,24 @@ async function listScratchCards(data) {
     .sort({ createdAt: -1 })
     .lean();
 
-  // Attach formatted ID & convenience flag for whether physical gift is claimed
   const scratchCardsWithId = attachId(scratchCards).map((card) => {
     const isGift = card.rewardType === "GIFT" || !!card.giftId;
     const isClaimed = Boolean(
       card.redeemId?.scratchCardGiftClaimed ||
-        card.redeemId?.scratchCardGiftRedemptionId,
+      card.redeemId?.scratchCardGiftRedemptionId,
     );
+
+    const effectivePoints =
+      card.points > 0
+        ? card.points
+        : card.redeemId?.scratchCardBonusPoints ||
+          card.redeemId?.weightedPoints ||
+          card.points ||
+          0;
 
     return {
       ...card,
+      points: effectivePoints,
       isGift,
       isClaimed,
       scratchCardGiftClaimed: isClaimed,
@@ -96,7 +104,7 @@ async function scratchCard(scratchCardId, userId) {
   card.scratchedAt = new Date();
   await card.save();
 
-  // If reward type is POINTS, award them immediately to the user's wallet
+  // If reward type is POINTS or COIN, award them immediately to the user's wallet
   if (card.rewardType === SCRATCH_CARD_REWARD_TYPE.POINTS && card.points > 0) {
     const scratchCardBonusTitle = SCRATCH_CARD_TITLES.BONUS_POINTS;
 
@@ -107,6 +115,22 @@ async function scratchCard(scratchCardId, userId) {
         cause: REWARD_CAUSE.SCRATCH_CARD,
         causeId: card.redeemId?.scratchCardCampaignId || null,
         causeTitle: scratchCardBonusTitle,
+        referenceId: card.redeemId?._id || null,
+      },
+    );
+  } else if (
+    (card.rewardType === SCRATCH_CARD_REWARD_TYPE.COIN ||
+      card.rewardType === "COIN" ||
+      card.rewardType === "HYDACOIN") &&
+    card.points > 0
+  ) {
+    await rewardsService.awardRewardToUser(
+      userId,
+      { type: "COIN", amount: card.points },
+      {
+        cause: REWARD_CAUSE.SCRATCH_CARD,
+        causeId: card.redeemId?.scratchCardCampaignId || null,
+        causeTitle: "Scratch Card Bonus Hydacon Coins",
         referenceId: card.redeemId?._id || null,
       },
     );

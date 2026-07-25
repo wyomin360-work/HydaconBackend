@@ -181,8 +181,12 @@ async function evaluateReferralReward(userId, userTotalScans) {
     );
     if (!matchedReward) return;
 
-    const { referrerRewardPoints = 50, refereeRewardPoints = 50 } =
-      matchedReward;
+    const {
+      referrerRewardPoints = 50,
+      refereeRewardPoints = 50,
+      referrerRewardCoins = 0,
+      refereeRewardCoins = 0,
+    } = matchedReward;
 
     // Atomically claim the milestone — only succeeds if it hasn't been claimed yet.
     // The $ne guard + $addToSet makes this safe against retries and race conditions.
@@ -204,23 +208,31 @@ async function evaluateReferralReward(userId, userTotalScans) {
     const referrerId = user.referredBy;
 
     // Reward the referee (the user who was referred)
+    const refereeInc = {};
     if (refereeRewardPoints > 0) {
-      await User.findByIdAndUpdate(userId, {
-        $inc: {
-          totalPoints: refereeRewardPoints,
-          lifetimePoints: refereeRewardPoints,
-        },
-      });
+      refereeInc.totalPoints = refereeRewardPoints;
+      refereeInc.lifetimePoints = refereeRewardPoints;
+    }
+    if (refereeRewardCoins > 0) {
+      refereeInc.hydaconCoins = refereeRewardCoins;
+      refereeInc.lifetimeHydaconCoins = refereeRewardCoins;
+    }
+    if (Object.keys(refereeInc).length > 0) {
+      await User.findByIdAndUpdate(userId, { $inc: refereeInc });
     }
 
     // Reward the referrer (the user who shared the code)
+    const referrerInc = {};
     if (referrerRewardPoints > 0) {
-      await User.findByIdAndUpdate(referrerId, {
-        $inc: {
-          totalPoints: referrerRewardPoints,
-          lifetimePoints: referrerRewardPoints,
-        },
-      });
+      referrerInc.totalPoints = referrerRewardPoints;
+      referrerInc.lifetimePoints = referrerRewardPoints;
+    }
+    if (referrerRewardCoins > 0) {
+      referrerInc.hydaconCoins = referrerRewardCoins;
+      referrerInc.lifetimeHydaconCoins = referrerRewardCoins;
+    }
+    if (Object.keys(referrerInc).length > 0) {
+      await User.findByIdAndUpdate(referrerId, { $inc: referrerInc });
     }
   } catch (error) {
     console.error("Error evaluating referral reward:", error);

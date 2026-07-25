@@ -40,6 +40,8 @@ const referralRewardsSchema = new mongoose.Schema(
     requiredScans: { type: Number, default: 1 },
     referrerRewardPoints: { type: Number, default: 50 },
     refereeRewardPoints: { type: Number, default: 50 },
+    referrerRewardCoins: { type: Number, default: 0 },
+    refereeRewardCoins: { type: Number, default: 0 },
   },
   { _id: false },
 );
@@ -49,6 +51,10 @@ const scratchCardSettingsSchema = new mongoose.Schema(
     enabled: { type: Boolean, default: true },
     // Percentage chance (0-100) that a successful scan shows a scratch card
     probability: { type: Number, default: 100, min: 0, max: 100 },
+    // Minimum time in minutes required between scratch card rewards for a user
+    cooldownMinutes: { type: Number, default: 0 },
+    // Maximum scratch cards a single user can receive in a 24-hour day (0 = unlimited)
+    maxPerDay: { type: Number, default: 0 },
     // Bonus points range awarded on scratch reveal (on top of base scan points)
     minBonusPoints: { type: Number, default: 0 },
     maxBonusPoints: { type: Number, default: 0 },

@@ -506,9 +506,48 @@ async function resolveLegacyTierReward(userTierId) {
  *   - minBonusPoints / maxBonusPoints bound the POINTS range
  * @returns {Promise<{ rewardType, bonusPoints, chosenGift }>}
  */
-async function resolveGlobalConfigReward() {
+async function resolveGlobalConfigReward(userId) {
   const configDoc = await AppConfig.findOne().lean();
   const settings = configDoc?.scratchCardSettings;
+
+  // 1. Check if global scratch cards are enabled (default: true)
+  if (settings?.enabled === false) {
+    return { rewardType: "NONE", bonusPoints: 0, chosenGift: null };
+  }
+
+  // 2. Cooldown frequency check (minimum minutes between cards for a user)
+  if (settings?.cooldownMinutes > 0 && userId) {
+    const cooldownCutoff = new Date(
+      Date.now() - settings.cooldownMinutes * 60 * 1000,
+    );
+    const recentCard = await ScratchCard.exists({
+      userId,
+      createdAt: { $gte: cooldownCutoff },
+    });
+    if (recentCard) {
+      return { rewardType: "NONE", bonusPoints: 0, chosenGift: null };
+    }
+  }
+
+  // 3. Max scratch cards per user per day check
+  if (settings?.maxPerDay > 0 && userId) {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const todayCount = await ScratchCard.countDocuments({
+      userId,
+      createdAt: { $gte: startOfDay },
+    });
+    if (todayCount >= settings.maxPerDay) {
+      return { rewardType: "NONE", bonusPoints: 0, chosenGift: null };
+    }
+  }
+
+  // 4. Check global probability chance (0-100%, default: 100)
+  const probability = settings?.probability ?? 100;
+  if (probability < 100 && Math.random() * 100 >= probability) {
+    return { rewardType: "NONE", bonusPoints: 0, chosenGift: null };
+  }
+
   const giftProbability = (settings?.giftProbability ?? 50) / 100;
 
   const giftQuery = { active: true, stockQuantity: { $gt: 0 } };
@@ -594,7 +633,7 @@ async function resolveScratchCardReward({
     }
 
     // Path 4: Global AppConfig probability fallback
-    const globalResult = await resolveGlobalConfigReward();
+    const globalResult = await resolveGlobalConfigReward(userId);
     return { ...globalResult, matchedCampaign: null };
   } catch (error) {
     console.error("[Scratch Card] Error determining reward:", error);
@@ -766,11 +805,13 @@ function buildRedeemResponse(
   const finalBonusPoints =
     finalRewardType === "POINTS" ? newRedeem.scratchCardBonusPoints : 0;
 
+  const showScratchCard = finalRewardType !== "NONE" && Boolean(scratchCardId);
+
   return {
     message: "redeem successful",
     data: {
       redeemSuccessful: true,
-      showScratchCard: true,
+      showScratchCard,
       rewardType: finalRewardType,
       gift: newRedeem.scratchCardGiftId
         ? {
@@ -874,16 +915,20 @@ async function createRedeem(redeemData, reqUser = null) {
         rewardType === SCRATCH_CARD_REWARD_TYPE.POINTS ||
         rewardType === SCRATCH_CARD_REWARD_TYPE.GIFT
       ) {
+        const finalCardPoints =
+          rewardType === SCRATCH_CARD_REWARD_TYPE.POINTS
+            ? bonusPoints > 0
+              ? bonusPoints
+              : weightedPoints
+            : 0;
+
         const createdCards = await ScratchCard.create(
           [
             {
               userId,
               redeemId: newRedeem._id,
               rewardType,
-              points:
-                rewardType === SCRATCH_CARD_REWARD_TYPE.POINTS
-                  ? bonusPoints
-                  : 0,
+              points: finalCardPoints,
               giftId:
                 rewardType === SCRATCH_CARD_REWARD_TYPE.GIFT
                   ? chosenGift?._id || newRedeem.scratchCardGiftId
