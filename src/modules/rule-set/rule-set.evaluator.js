@@ -449,7 +449,17 @@ exports.evaluateRuleSet = async (
         context,
         session,
       );
-      const expectedValue = rule.value;
+      let expectedValue = rule.value;
+      if (
+        (rule.type === RuleType.TIER || rule.type === RuleType.SEASON_RANK) &&
+        mongoose.Types.ObjectId.isValid(expectedValue)
+      ) {
+        const Tier = mongoose.model("Tier");
+        const targetTier = await Tier.findById(expectedValue).session(session);
+        if (targetTier) {
+          expectedValue = targetTier.rank;
+        }
+      }
       const satisfied = applyOperator(
         actualValue,
         rule.operator,

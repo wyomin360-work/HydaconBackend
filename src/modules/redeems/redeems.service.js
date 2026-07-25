@@ -370,6 +370,7 @@ async function matchActiveCampaign(user, userId, actualProductId) {
       userId,
       actualProductId,
     );
+    console.log("isCampagiin eligible",eligible)
     if (eligible) return campaign;
   }
   return null;
@@ -605,6 +606,8 @@ async function resolveScratchCardReward({
 
     // Resolve the user's current tier ID (needed for legacy fallback)
     let userTierId = null;
+
+    console.log("resolveScratchCardReward",{activeSeason,userId,actualProductId,redeemData})
     if (activeSeason) {
       const userProgress = await loyaltyService.getOrCreateUserProgress(userId);
       if (userProgress)
@@ -815,13 +818,13 @@ function buildRedeemResponse(
       rewardType: finalRewardType,
       gift: newRedeem.scratchCardGiftId
         ? {
-            id: newRedeem.scratchCardGiftId,
-            name: chosenGift?.name,
-            image: chosenGift?.image,
-            giftType: chosenGift?.giftType,
-            // Physical gifts: user must provide a shipping address via POST /gifts/user/redeem
-            requiresClaim: chosenGift?.giftType === "physical",
-          }
+          id: newRedeem.scratchCardGiftId,
+          name: chosenGift?.name,
+          image: chosenGift?.image,
+          giftType: chosenGift?.giftType,
+          // Physical gifts: user must provide a shipping address via POST /gifts/user/redeem
+          requiresClaim: chosenGift?.giftType === "physical",
+        }
         : null,
       pointsRewarded: weightedPoints,
       bonusPoints: finalBonusPoints,
@@ -911,14 +914,15 @@ async function createRedeem(redeemData, reqUser = null) {
         session,
       );
 
+      const finalRewardType = newRedeem.scratchCardRewardType;
       if (
-        rewardType === SCRATCH_CARD_REWARD_TYPE.POINTS ||
-        rewardType === SCRATCH_CARD_REWARD_TYPE.GIFT
+        finalRewardType === SCRATCH_CARD_REWARD_TYPE.POINTS ||
+        finalRewardType === SCRATCH_CARD_REWARD_TYPE.GIFT
       ) {
         const finalCardPoints =
-          rewardType === SCRATCH_CARD_REWARD_TYPE.POINTS
-            ? bonusPoints > 0
-              ? bonusPoints
+          finalRewardType === SCRATCH_CARD_REWARD_TYPE.POINTS
+            ? newRedeem.scratchCardBonusPoints > 0
+              ? newRedeem.scratchCardBonusPoints
               : weightedPoints
             : 0;
 
@@ -927,11 +931,11 @@ async function createRedeem(redeemData, reqUser = null) {
             {
               userId,
               redeemId: newRedeem._id,
-              rewardType,
+              rewardType: finalRewardType,
               points: finalCardPoints,
               giftId:
-                rewardType === SCRATCH_CARD_REWARD_TYPE.GIFT
-                  ? chosenGift?._id || newRedeem.scratchCardGiftId
+                finalRewardType === SCRATCH_CARD_REWARD_TYPE.GIFT
+                  ? newRedeem.scratchCardGiftId
                   : null,
               cardBg: bgColor,
               status: SCRATCH_CARD_STATUS.UNSCRATCHED,

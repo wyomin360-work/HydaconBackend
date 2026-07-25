@@ -4,6 +4,7 @@ const Role = require("../../../schemas/role.schema");
 const Product = require("../../../schemas/product.schema");
 const Reward = require("../../../schemas/reward.schema");
 const Redeem = require("../../../schemas/redeem.schema");
+const Gift = require("../../../schemas/gift.schema");
 
 // Mocking the schemas and services
 jest.mock("../../../schemas/user.schema");
@@ -309,5 +310,64 @@ describe("Weighted Rewards Calculation", () => {
     });
     expect(response.data.bonusPoints).toBe(0);
     expect(response.data.totalPointsAwarded).toBe(5);
+  });
+  it("should fallback to POINTS if gift award fails (e.g. duplicate or out of stock)", async () => {
+
+    Gift.exists.mockResolvedValue(true);
+    Gift.countDocuments.mockResolvedValue(1);
+    Gift.findById.mockResolvedValue({
+      _id: "gift123",
+      name: "Hydacon T-Shirt",
+      image: "tshirt.png",
+      active: true,
+      giftType: "physical",
+    });
+    Gift.findOne.mockReturnValue({
+      skip: jest.fn().mockResolvedValue({
+        _id: "gift123",
+        name: "Hydacon T-Shirt",
+        image: "tshirt.png",
+        active: true,
+        giftType: "physical",
+      }),
+    });
+
+    const giftService = require("../../../modules/gift/gift.service");
+    // Simulate failure during gift award (e.g. user already has an unclaimed reward for this gift)
+    giftService.awardGiftToUser.mockResolvedValueOnce({
+      success: false,
+      message: "User already has a pending unclaimed reward for this gift.",
+      duplicate: true,
+    });
+
+    mockUser.roleId = null;
+
+    const redeemData = {
+      userId: "user123",
+      productId: "prod123",
+      rewardId: "reward123",
+      rewardUidCode: "ABC-123",
+      location: { lat: 0, lng: 0 },
+      testRewardType: "GIFT",
+    };
+
+    const response = await createRedeem(redeemData);
+
+    // Assert that the API response falls back to POINTS
+    expect(response.data.pointsRewarded).toBe(5); // base points
+    expect(response.data.rewardType).toBe("POINTS");
+    expect(response.data.gift).toBeNull();
+
+    // Assert that the ScratchCard document is created with POINTS, not GIFT
+    const ScratchCard = require("../../../schemas/scratch-card.schema");
+    expect(ScratchCard.create).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          rewardType: "POINTS",
+          giftId: null,
+        }),
+      ]),
+      expect.any(Object),
+    );
   });
 });

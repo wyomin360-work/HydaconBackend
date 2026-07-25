@@ -21,7 +21,8 @@ async function sendFcmNotifications(tokens, title, body, data) {
       if (res.success) {
         results.success.push(tokens[index]);
       } else {
-        console.log("FCM notifications error for notification", res);
+        // Log a concise error instead of the full stack trace for every token
+        // console.log(`FCM error for token ${tokens[index]}: ${res.error?.message || "Unknown error"}`);
         results.errors.push(tokens[index]);
 
         // logError();
