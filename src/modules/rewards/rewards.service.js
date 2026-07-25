@@ -379,7 +379,7 @@ async function awardRewardToUser(
       rewardCauseId: causeId,
       rewardCauseTitle: causeTitle,
       redeemId: referenceId,
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30-day default claim window
+      expiresAt: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000), // 10-day default claim window
     };
 
     return giftService.awardGiftToUser(userId, gift, causeData, session);

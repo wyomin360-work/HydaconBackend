@@ -1,5 +1,6 @@
 const scratchCardsService = require("../scratch-cards.service");
 const ScratchCard = require("../../../schemas/scratch-card.schema");
+const Gift = require("../../../schemas/gift.schema");
 const rewardsService = require("../../rewards/rewards.service");
 const {
   SCRATCH_CARD_STATUS,
@@ -11,6 +12,7 @@ const {
 const { REWARD_CAUSE } = require("../../../constants/gift");
 
 jest.mock("../../../schemas/scratch-card.schema");
+jest.mock("../../../schemas/gift.schema");
 jest.mock("../../rewards/rewards.service");
 
 describe("Scratch Cards Service Unit Tests", () => {
@@ -149,6 +151,35 @@ describe("Scratch Cards Service Unit Tests", () => {
         },
       );
       expect(result.message).toBe(SCRATCH_CARD_MESSAGES.SCRATCH_SUCCESS);
+    });
+  });
+
+  describe("releaseExpiredScratchCardGifts", () => {
+    it("should release reserved gift stock and mark expired cards", async () => {
+      Gift.find.mockReturnValue({
+        lean: jest.fn().mockResolvedValue([]),
+      });
+      Gift.updateOne.mockResolvedValue({ modifiedCount: 1 });
+      Gift.updateMany.mockResolvedValue({ modifiedCount: 1 });
+
+      const expiredCards = [
+        { _id: "cardExpired1", giftId: "gift123", rewardType: "GIFT" },
+      ];
+
+      ScratchCard.find.mockReturnValue({
+        lean: jest.fn().mockResolvedValue(expiredCards),
+      });
+      ScratchCard.updateOne.mockResolvedValue({ modifiedCount: 1 });
+
+      const result =
+        await scratchCardsService.releaseExpiredScratchCardGifts();
+
+      expect(ScratchCard.find).toHaveBeenCalled();
+      expect(ScratchCard.updateOne).toHaveBeenCalledWith(
+        { _id: "cardExpired1", status: SCRATCH_CARD_STATUS.UNSCRATCHED },
+        { $set: { status: "EXPIRED" } },
+      );
+      expect(result.processed).toBe(1);
     });
   });
 });

@@ -1,4 +1,5 @@
 const ScratchCard = require("../../schemas/scratch-card.schema");
+const Gift = require("../../schemas/gift.schema");
 const rewardsService = require("../rewards/rewards.service");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const { attachId } = require("../../utils/heplers");
@@ -143,7 +144,67 @@ async function scratchCard(scratchCardId, userId) {
   };
 }
 
+/**
+ * CRON TASK HANDLER: Finds expired unscratched gift cards & unclaimed gift reservations (10 days) and releases reserved stock back.
+ */
+async function releaseExpiredScratchCardGifts() {
+  const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+
+  // 1. Find gift scratch cards that are still UNSCRATCHED and older than 10 days
+  const expiredCards = await ScratchCard.find({
+    status: SCRATCH_CARD_STATUS.UNSCRATCHED,
+    rewardType: SCRATCH_CARD_REWARD_TYPE.GIFT,
+    createdAt: { $lt: tenDaysAgo },
+  }).lean();
+
+  let count = 0;
+  for (const card of expiredCards) {
+    const updated = await ScratchCard.updateOne(
+      { _id: card._id, status: SCRATCH_CARD_STATUS.UNSCRATCHED },
+      { $set: { status: "EXPIRED" } },
+    );
+
+    if (updated.modifiedCount > 0 && card.giftId) {
+      await Gift.updateOne(
+        { _id: card.giftId, reservedQuantity: { $gt: 0 } },
+        { $inc: { reservedQuantity: -1 } },
+      );
+      count++;
+    }
+  }
+
+  // 2. Clean up unclaimed entries in Gift.rewardedUsers array older than 10 days / expiresAt < now
+  const now = new Date();
+  const giftsWithExpiredUsers = await Gift.find({
+    "rewardedUsers.expiresAt": { $lt: now },
+  }).lean();
+
+  for (const g of giftsWithExpiredUsers) {
+    const expiredEntries = (g.rewardedUsers || []).filter(
+      (u) => u.expiresAt && new Date(u.expiresAt) < now,
+    );
+    if (expiredEntries.length > 0) {
+      await Gift.updateOne(
+        { _id: g._id },
+        {
+          $pull: { rewardedUsers: { expiresAt: { $lt: now } } },
+          $inc: {
+            reservedQuantity: -Math.min(
+              g.reservedQuantity || 0,
+              expiredEntries.length,
+            ),
+          },
+        },
+      );
+      count += expiredEntries.length;
+    }
+  }
+
+  return { processed: count };
+}
+
 module.exports = {
   listScratchCards,
   scratchCard,
+  releaseExpiredScratchCardGifts,
 };
