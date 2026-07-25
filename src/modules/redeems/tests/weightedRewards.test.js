@@ -18,6 +18,9 @@ jest.mock("../../../schemas/gift-redemption.schema");
 jest.mock("../../../schemas/app-config.schema");
 jest.mock("../../../schemas/tier-configuration.schema");
 jest.mock("../../../schemas/scratch-card-rule.schema");
+jest.mock("../../../schemas/scratch-card.schema", () => ({
+  create: jest.fn().mockResolvedValue([{ _id: "scratch123" }]),
+}));
 jest.mock("../../../modules/gift/gift.service", () => ({
   awardPhysicalGiftToUser: jest.fn().mockResolvedValue({ success: true }),
   awardGiftToUser: jest.fn().mockResolvedValue({ success: true, requiresClaim: true }),

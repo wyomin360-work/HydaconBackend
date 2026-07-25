@@ -23,6 +23,9 @@ jest.mock("../../../schemas/gift.schema", () => ({
   countDocuments: jest.fn().mockResolvedValue(0),
 }));
 jest.mock("../../../schemas/gift-redemption.schema");
+jest.mock("../../../schemas/scratch-card.schema", () => ({
+  create: jest.fn().mockResolvedValue([{ _id: "scratch123" }]),
+}));
 jest.mock("../../../schemas/scratch-card-rule.schema", () => ({
   find: jest.fn().mockReturnValue({
     lean: jest.fn().mockResolvedValue([]),

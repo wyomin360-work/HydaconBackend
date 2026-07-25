@@ -16,6 +16,9 @@ jest.mock("../../../schemas/scratch-card-rule.schema");
 jest.mock("../../../schemas/app-config.schema");
 jest.mock("../../../schemas/gift.schema");
 jest.mock("../../../schemas/gift-redemption.schema");
+jest.mock("../../../schemas/scratch-card.schema", () => ({
+  create: jest.fn().mockResolvedValue([{ _id: "scratch123" }]),
+}));
 jest.mock("../../../schemas/user.schema");
 jest.mock("../../../schemas/reward.schema");
 jest.mock("../../../schemas/product.schema");

@@ -8,6 +8,7 @@ const Redeem = require("../../schemas/redeem.schema");
 const Reward = require("../../schemas/reward.schema");
 const User = require("../../schemas/user.schema");
 const Gift = require("../../schemas/gift.schema");
+const ScratchCard = require("../../schemas/scratch-card.schema");
 const { REWARD_CAUSE } = require("../../constants/gift");
 const ScratchCardRule = require("../../schemas/scratch-card-rule.schema");
 const { RuleSet } = require("../../schemas/rule-set.schema");
@@ -22,6 +23,7 @@ const TierConfiguration = require("../../schemas/tier-configuration.schema");
 const rewardsService = require("../rewards/rewards.service");
 const cacheService = require("../../utils/cacheService");
 const queueService = require("../../utils/queueService");
+const { SCRATCH_CARD_STATUS, SCRATCH_CARD_REWARD_TYPE } = require("../../constants/scratch-cards");
 
 async function listRedeems(data) {
   const { page = 1, limit = 20 } = data;
@@ -666,7 +668,7 @@ function syncUserInMemoryState(user, weightedPoints, rewardType, bonusPoints) {
  * @returns {object} API response payload
  */
 function buildRedeemResponse(newRedeem, scratchResult, weightedPoints, user, product, bgColor) {
-  const { chosenGift } = scratchResult;
+  const { chosenGift, scratchCardId } = scratchResult;
   const finalRewardType  = newRedeem.scratchCardRewardType;
   const finalBonusPoints = finalRewardType === "POINTS" ? newRedeem.scratchCardBonusPoints : 0;
 
@@ -691,6 +693,7 @@ function buildRedeemResponse(newRedeem, scratchResult, weightedPoints, user, pro
       totalPointsAwarded: weightedPoints + finalBonusPoints,
       updatedPointsBalance: user.totalPoints || 0,
       redeemId: newRedeem._id,
+      scratchCardId: scratchCardId || null,
       cardBg: bgColor,
       productName: product?.name || null,
       productImage: product?.image || null,
@@ -749,6 +752,24 @@ async function createRedeem(redeemData, reqUser = null) {
         { userId, redeem: newRedeem, chosenGift, matchedCampaign },
         session,
       );
+
+      if (rewardType === SCRATCH_CARD_REWARD_TYPE.POINTS || rewardType === SCRATCH_CARD_REWARD_TYPE.GIFT) {
+        const createdCards = await ScratchCard.create(
+          [
+            {
+              userId,
+              redeemId: newRedeem._id,
+              rewardType,
+              points: rewardType === SCRATCH_CARD_REWARD_TYPE.POINTS ? bonusPoints : 0,
+              giftId: rewardType === SCRATCH_CARD_REWARD_TYPE.GIFT ? (chosenGift?._id || newRedeem.scratchCardGiftId) : null,
+              cardBg: bgColor,
+              status: SCRATCH_CARD_STATUS.UNSCRATCHED,
+            },
+          ],
+          { session }
+        );
+        scratchResult.scratchCardId = createdCards[0]._id;
+      }
     });
   } catch (err) {
     throw err;
