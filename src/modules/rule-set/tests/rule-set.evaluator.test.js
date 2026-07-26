@@ -579,7 +579,9 @@ describe("RuleSet Evaluator", () => {
       const result = await ruleSetEvaluator.evaluateRuleSet(
         ruleSet,
         mockUser,
-        {},
+        {
+          targetProduct: { _id: "prod123" },
+        },
         session,
       );
       expect(result.eligible).toBe(true);
@@ -587,6 +589,65 @@ describe("RuleSet Evaluator", () => {
         userId: mockUser._id,
         productId: "product123",
       });
+    });
+
+    it("should evaluate CURRENT_PRODUCT correctly by checking context.productId", async () => {
+      const ruleSet = {
+        active: true,
+        logicOperator: RuleLogicOperator.AND,
+        rules: [
+          {
+            type: RuleType.CURRENT_PRODUCT,
+            operator: RuleOperator.EQ,
+            value: "prod123",
+          },
+        ],
+      };
+
+      const result = await ruleSetEvaluator.evaluateRuleSet(
+        ruleSet,
+        mockUser,
+        { productId: "prod123" },
+        session,
+      );
+      expect(result.eligible).toBe(true);
+
+      const resultFail = await ruleSetEvaluator.evaluateRuleSet(
+        ruleSet,
+        mockUser,
+        { productId: "otherProd" },
+        session,
+      );
+      expect(resultFail.eligible).toBe(false);
+    });
+
+    it("should evaluate CURRENT_CATEGORY correctly by checking product category", async () => {
+      const Product = mongoose.model("Product");
+      Product.session.mockResolvedValue({
+        _id: "prod123",
+        categoryId: "cat123",
+      });
+
+      const ruleSet = {
+        active: true,
+        logicOperator: RuleLogicOperator.AND,
+        rules: [
+          {
+            type: RuleType.CURRENT_CATEGORY,
+            operator: RuleOperator.EQ,
+            value: "cat123",
+          },
+        ],
+      };
+
+      const result = await ruleSetEvaluator.evaluateRuleSet(
+        ruleSet,
+        mockUser,
+        { productId: "prod123" },
+        session,
+      );
+      expect(result.eligible).toBe(true);
+      expect(Product.findById).toHaveBeenCalledWith("prod123");
     });
 
     it("should fail gracefully and return false actual value for unknown RuleType", async () => {

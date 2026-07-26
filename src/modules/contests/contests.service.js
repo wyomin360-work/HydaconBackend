@@ -68,7 +68,7 @@ async function adminCreateContest(data, adminId) {
   });
   return {
     message: CONTEST_MESSAGES.CREATED,
-    data: { contestId: contest._id },
+    data: { contestCreated: true, contestId: contest._id },
   };
 }
 
@@ -96,7 +96,7 @@ async function adminUpdateContest(contestId, data) {
     contest.status = resolveContestStatus(contest);
   }
   await contest.save();
-  return { message: CONTEST_MESSAGES.UPDATED, data: { updated: true } };
+  return { message: CONTEST_MESSAGES.UPDATED, data: { contestUpdated: true } };
 }
 
 async function adminCancelContest(contestId, adminId) {
@@ -115,13 +115,13 @@ async function adminCancelContest(contestId, adminId) {
   await contest.save();
   return {
     message: "Contest cancelled successfully",
-    data: { cancelled: true },
+    data: { contestCancelled: true },
   };
 }
 
 async function adminDeleteContest(contestId) {
   await Contest.findByIdAndDelete(contestId);
-  return { message: CONTEST_MESSAGES.DELETED, data: { deleted: true } };
+  return { message: CONTEST_MESSAGES.DELETED, data: { contestDeleted: true } };
 }
 
 async function adminListContests(query = {}) {
@@ -280,7 +280,7 @@ async function adminFinaliseContest(contestId, adminId) {
 
   return {
     message: CONTEST_MESSAGES.FINALISED,
-    data: { ranked: entries.length },
+    data: { contestFinalised: true, ranked: entries.length },
   };
 }
 
