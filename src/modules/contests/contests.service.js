@@ -314,7 +314,16 @@ async function userListContests(query = {}, userId) {
   );
 
   const filter = { active: true };
-  if (query.status) filter.status = query.status;
+  if (query.status) {
+    filter.status = query.status;
+    if (query.status === CONTEST_STATUS.ONGOING) {
+      filter.endDate = { $gte: new Date() };
+    } else if (query.status === CONTEST_STATUS.UPCOMING) {
+      filter.startDate = { $gte: new Date() };
+    } else if (query.status === CONTEST_STATUS.COMPLETED) {
+      filter.status = CONTEST_STATUS.COMPLETED;
+    }
+  }
 
   const [contests, total] = await Promise.all([
     Contest.find(filter).sort({ startDate: 1 }).skip(skip).limit(limit).lean(),
@@ -350,17 +359,18 @@ async function userListContests(query = {}, userId) {
 }
 
 async function userGetContestDetails(contestId, userId) {
-  const contest = await Contest.findById(contestId)
-    .populate("products")
-    .populate("tiers")
-    .lean();
+  const contest = await Contest.findById(contestId).lean();
   if (!contest) {
     sendFailResponse(CONTEST_ERRORS.CONTEST_NOT_FOUND, 404);
   }
 
   // All contest entries sorted by qualificationPoints DESC
   const topEntries = await ContestEntry.find({ contestId })
-    .populate({ path: "user", select: "name profileImage" })
+    .populate({
+      path: "user",
+      select: "name profileImage currentTierId totalPoints",
+      populate: { path: "currentTierId", select: "name colorIdentity badgeUrl" },
+    })
     .sort({ qualificationPoints: -1 })
     .lean();
 
@@ -394,7 +404,11 @@ async function userGetLeaderboard(contestId) {
     sendFailResponse(CONTEST_ERRORS.CONTEST_NOT_FOUND, 404);
   }
   const entries = await ContestEntry.find({ contestId })
-    .populate({ path: "user", select: "name profileImage" })
+    .populate({
+      path: "user",
+      select: "name profileImage currentTierId totalPoints",
+      populate: { path: "currentTierId", select: "name colorIdentity badgeUrl" },
+    })
     .sort({ qualificationPoints: -1 })
     .lean();
   return { data: { leaderboard: attachId(entries) } };
