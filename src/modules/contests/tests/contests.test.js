@@ -2,17 +2,28 @@ const contestsService = require("../contests.service");
 const { Contest } = require("../../../schemas/contest.schema");
 const { ContestEntry } = require("../../../schemas/contest-entry.schema");
 const User = require("../../../schemas/user.schema");
+const ContestTransaction = require("../../../schemas/contest-transaction.schema");
+const { RuleSet } = require("../../../schemas/rule-set.schema");
+const GiftRedemption = require("../../../schemas/gift-redemption.schema");
+const { evaluateRuleSet } = require("../../rule-set/rule-set.evaluator");
 const {
   CONTEST_STATUS,
   REWARD_TYPE,
   ENTRY_REWARD_STATUS,
   CONTEST_MESSAGES,
   CONTEST_ERRORS,
+  CONTEST_METRICS,
 } = require("../../../constants/contests");
 
 jest.mock("../../../schemas/contest.schema");
 jest.mock("../../../schemas/contest-entry.schema");
 jest.mock("../../../schemas/user.schema");
+jest.mock("../../../schemas/contest-transaction.schema");
+jest.mock("../../../schemas/rule-set.schema");
+jest.mock("../../../schemas/gift-redemption.schema");
+jest.mock("../../rule-set/rule-set.evaluator", () => ({
+  evaluateRuleSet: jest.fn().mockResolvedValue(true),
+}));
 jest.mock("../../../functions/fcm", () => ({
   sendFcmNotifications: jest.fn().mockResolvedValue({ successCount: 1 }),
 }));
@@ -189,6 +200,195 @@ describe("Contests Service Unit Tests", () => {
       expect(mockUser.totalPoints).toBe(600);
       expect(mockEntry.rewardStatus).toBe(ENTRY_REWARD_STATUS.CREDITED);
       expect(result.data.message).toBe(CONTEST_MESSAGES.REWARD_CLAIMED);
+    });
+  });
+
+  describe("syncUserContestEntries", () => {
+    it("should process scan count metric correctly", async () => {
+      const mockContests = [
+        {
+          _id: "c1",
+          metric: CONTEST_METRICS.SCAN_COUNT,
+          ruleSetId: "rs1",
+        },
+      ];
+      Contest.find.mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockResolvedValue(mockContests),
+      });
+
+      User.findById.mockReturnValue({
+        lean: jest.fn().mockResolvedValue({ _id: "u1" }),
+      });
+
+      RuleSet.findById.mockReturnValue({
+        lean: jest.fn().mockResolvedValue({ _id: "rs1" }),
+      });
+
+      evaluateRuleSet.mockResolvedValue(true);
+      ContestTransaction.create.mockResolvedValue({ _id: "t1" });
+      ContestEntry.findOneAndUpdate.mockResolvedValue({ _id: "e1" });
+
+      await contestsService.syncUserContestEntries(
+        "u1",
+        50, // points awarded
+        "prod1",
+        "tier1",
+        "txn1"
+      );
+
+      // Verify transaction was recorded with metricValue = 1 (for SCAN_COUNT)
+      expect(ContestTransaction.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          contestId: "c1",
+          userId: "u1",
+          transactionId: "txn1",
+          metric: CONTEST_METRICS.SCAN_COUNT,
+          metricValue: 1,
+        })
+      );
+
+      // Verify ContestEntry points incremented by 1
+      expect(ContestEntry.findOneAndUpdate).toHaveBeenCalledWith(
+        { contestId: "c1", userId: "u1" },
+        { $inc: { qualificationPoints: 1 } },
+        { upsert: true, new: true }
+      );
+    });
+
+    it("should process points metric correctly", async () => {
+      const mockContests = [
+        {
+          _id: "c2",
+          metric: CONTEST_METRICS.POINTS,
+          ruleSetId: null,
+        },
+      ];
+      Contest.find.mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockResolvedValue(mockContests),
+      });
+
+      User.findById.mockReturnValue({
+        lean: jest.fn().mockResolvedValue({ _id: "u1" }),
+      });
+
+      ContestTransaction.create.mockResolvedValue({ _id: "t1" });
+
+      await contestsService.syncUserContestEntries(
+        "u1",
+        150, // points awarded
+        "prod1",
+        "tier1",
+        "txn2"
+      );
+
+      // Verify transaction recorded with metricValue = 150
+      expect(ContestTransaction.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metricValue: 150,
+        })
+      );
+
+      // Verify ContestEntry points incremented by 150
+      expect(ContestEntry.findOneAndUpdate).toHaveBeenCalledWith(
+        { contestId: "c2", userId: "u1" },
+        { $inc: { qualificationPoints: 150 } },
+        { upsert: true, new: true }
+      );
+    });
+
+    it("should skip ContestEntry update if duplicate transaction occurs", async () => {
+      const mockContests = [
+        { _id: "c1", metric: CONTEST_METRICS.POINTS },
+      ];
+      Contest.find.mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockResolvedValue(mockContests),
+      });
+      User.findById.mockReturnValue({
+        lean: jest.fn().mockResolvedValue({ _id: "u1" }),
+      });
+
+      const duplicateError = new Error("Duplicate");
+      duplicateError.code = 11000;
+      ContestTransaction.create.mockRejectedValue(duplicateError);
+
+      await contestsService.syncUserContestEntries(
+        "u1",
+        50,
+        "prod1",
+        "tier1",
+        "txn3"
+      );
+
+      // Because transaction threw duplicate error, findOneAndUpdate should NOT be called
+      expect(ContestEntry.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("adminFinaliseContest", () => {
+    it("should throw error if contest is not ongoing", async () => {
+      Contest.findById.mockResolvedValue({
+        _id: "c1",
+        status: CONTEST_STATUS.COMPLETED,
+      });
+
+      await expect(
+        contestsService.adminFinaliseContest("c1", "admin1")
+      ).rejects.toThrow("Only ongoing contests can be finalised");
+    });
+
+    it("should finalize contest and award points correctly", async () => {
+      const mockContest = {
+        _id: "c1",
+        status: CONTEST_STATUS.ONGOING,
+        prizes: [{ rank: 1, rewardType: REWARD_TYPE.POINTS, points: 500 }],
+        save: jest.fn().mockResolvedValue(true),
+      };
+      Contest.findById.mockResolvedValue(mockContest);
+
+      const mockUser = {
+        _id: "u1",
+        totalPoints: 100,
+        enableNotification: true,
+        fcmTokens: ["token1"],
+        save: jest.fn().mockResolvedValue(true),
+      };
+      User.findById.mockResolvedValue(mockUser);
+
+      const mockEntry = {
+        _id: "e1",
+        userId: "u1",
+        qualificationPoints: 1000,
+        user: mockUser,
+        save: jest.fn().mockResolvedValue(true),
+      };
+
+      const queryChain = {
+        populate: jest.fn().mockReturnThis(),
+        sort: jest.fn().mockResolvedValue([mockEntry]),
+      };
+      ContestEntry.find.mockReturnValue(queryChain);
+
+      const result = await contestsService.adminFinaliseContest("c1", "admin1");
+
+      expect(mockContest.status).toBe(CONTEST_STATUS.COMPLETED);
+      expect(mockContest.isFinalizedManually).toBe(true);
+      expect(mockContest.finalizedBy).toBe("admin1");
+      expect(mockContest.save).toHaveBeenCalled();
+
+      // Ensure user received bonus points
+      expect(mockUser.totalPoints).toBe(600);
+      expect(mockUser.save).toHaveBeenCalled();
+
+      // Ensure entry was updated
+      expect(mockEntry.rank).toBe(1);
+      expect(mockEntry.rewardType).toBe(REWARD_TYPE.POINTS);
+      expect(mockEntry.bonusPointsAwarded).toBe(500);
+      expect(mockEntry.save).toHaveBeenCalled();
+
+      expect(result.message).toBe(CONTEST_MESSAGES.FINALISED);
     });
   });
 });

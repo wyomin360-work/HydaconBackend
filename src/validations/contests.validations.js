@@ -2,6 +2,7 @@ const {
   REWARD_TYPE,
   PRODUCT_SCOPE,
   TIER_SCOPE,
+  CONTEST_METRICS,
 } = require("../constants/contests");
 
 const prizeItemSchema = {
@@ -42,6 +43,7 @@ const adminCreateContestRequestType = {
       type: "array",
       items: prizeItemSchema,
     },
+    metric: { type: "string", enum: Object.values(CONTEST_METRICS) },
     active: { type: "boolean" },
   },
   required: ["name", "startDate", "endDate"],
@@ -81,6 +83,7 @@ const adminUpdateContestRequestType = {
       type: "array",
       items: prizeItemSchema,
     },
+    metric: { type: "string", enum: Object.values(CONTEST_METRICS) },
     active: { type: "boolean" },
   },
   additionalProperties: false,

@@ -4,6 +4,7 @@ const {
   REWARD_TYPE,
   PRODUCT_SCOPE,
   TIER_SCOPE,
+  CONTEST_METRICS,
 } = require("../constants/contests");
 
 const prizeSchema = new mongoose.Schema(
@@ -29,6 +30,11 @@ const contestSchema = new mongoose.Schema(
     description: { type: String },
     bannerImage: { type: String },
     rewardSummary: { type: String },
+    metric: {
+      type: String,
+      enum: Object.values(CONTEST_METRICS),
+      default: CONTEST_METRICS.POINTS,
+    },
     startDate: { type: Date, required: true },
     endDate: { type: Date, required: true },
     region: { type: String }, // null = global

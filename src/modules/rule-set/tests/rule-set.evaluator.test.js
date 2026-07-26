@@ -25,7 +25,9 @@ jest.mock("mongoose", () => {
       return models[modelName];
     }),
     Types: {
-      ObjectId: jest.fn(() => "mockedObjectId"),
+      ObjectId: Object.assign(jest.fn(() => "mockedObjectId"), {
+        isValid: jest.fn().mockReturnValue(true),
+      }),
     },
   };
 
@@ -74,6 +76,34 @@ describe("RuleSet Evaluator", () => {
       );
       expect(result.eligible).toBe(false);
       expect(result.reasons).toContain("Rule set is not active");
+    });
+
+    it("should evaluate TIER rule correctly by looking up Tier rank", async () => {
+      const Tier = mongoose.model("Tier");
+      Tier.session.mockResolvedValue({
+        _id: "tier123",
+        rank: 2,
+      });
+
+      const ruleSet = {
+        active: true,
+        logicOperator: RuleLogicOperator.AND,
+        rules: [
+          {
+            type: RuleType.TIER,
+            operator: RuleOperator.GTE,
+            value: 2,
+          },
+        ],
+      };
+      const result = await ruleSetEvaluator.evaluateRuleSet(
+        ruleSet,
+        mockUser,
+        {},
+        session,
+      );
+      expect(result.eligible).toBe(true);
+      expect(Tier.findById).toHaveBeenCalledWith("tier123");
     });
 
     it("should evaluate boolean strings correctly", async () => {

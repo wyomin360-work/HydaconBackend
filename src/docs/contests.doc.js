@@ -45,6 +45,11 @@ module.exports = {
                   enum: ["EVERY_PRODUCT", "SELECTED_PRODUCTS"],
                   example: "EVERY_PRODUCT",
                 },
+                metric: {
+                  type: "string",
+                  enum: ["points", "scan_count"],
+                  example: "points",
+                },
                 tierScope: {
                   type: "string",
                   enum: ["ALL_TIERS", "SELECTED_TIERS"],
@@ -102,6 +107,11 @@ module.exports = {
                 description: { type: "string" },
                 startDate: { type: "string", format: "date-time" },
                 endDate: { type: "string", format: "date-time" },
+                metric: {
+                  type: "string",
+                  enum: ["points", "scan_count"],
+                  example: "points",
+                },
               },
             },
           },

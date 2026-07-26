@@ -3,6 +3,8 @@ const { ContestEntry } = require("../../schemas/contest-entry.schema");
 const User = require("../../schemas/user.schema");
 const Gift = require("../../schemas/gift.schema");
 const GiftRedemption = require("../../schemas/gift-redemption.schema");
+const { RuleSet } = require("../../schemas/rule-set.schema");
+const ContestTransaction = require("../../schemas/contest-transaction.schema");
 const {
   GIFT_REDEMPTION_STATUS,
   REWARD_CAUSE,
@@ -20,6 +22,7 @@ const {
   CONTEST_MESSAGES,
   CONTEST_ERRORS,
   CONTEST_CONFIG,
+  CONTEST_METRICS,
 } = require("../../constants/contests");
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -490,6 +493,7 @@ async function syncUserContestEntries(
   pointsAwarded,
   productId,
   currentTierId,
+  transactionId,
 ) {
   const now = new Date();
   const activeContests = await Contest.find({
@@ -510,8 +514,7 @@ async function syncUserContestEntries(
         const ruleSetObj =
           typeof contest.ruleSetId === "object"
             ? contest.ruleSetId
-            : await require("mongoose")
-                .model("RuleSet")
+            : await RuleSet
                 .findById(contest.ruleSetId)
                 .lean();
         if (ruleSetObj) {
@@ -530,9 +533,34 @@ async function syncUserContestEntries(
       }
     }
 
+    let metricValue = 0;
+    if (contest.metric === CONTEST_METRICS.SCAN_COUNT) {
+      metricValue = 1;
+    } else {
+      metricValue = pointsAwarded;
+    }
+
+    if (transactionId) {
+      try {
+        await ContestTransaction.create({
+          contestId: contest._id,
+          userId,
+          transactionId,
+          metric: contest.metric || CONTEST_METRICS.POINTS,
+          metricValue,
+        });
+      } catch (err) {
+        if (err.code === 11000) {
+          // Duplicate transaction, safely skip updating ContestEntry
+          continue;
+        }
+        console.error("Failed to record ContestTransaction:", err);
+      }
+    }
+
     await ContestEntry.findOneAndUpdate(
       { contestId: contest._id, userId },
-      { $inc: { qualificationPoints: pointsAwarded } },
+      { $inc: { qualificationPoints: metricValue } },
       { upsert: true, new: true },
     );
   }

@@ -1711,7 +1711,13 @@ async function processLoyaltyAndContestsAfterScan(
     fallbackTierId;
 
   contestsService
-    .syncUserContestEntries(userId, weightedPoints, actualProductId, userTierId)
+    .syncUserContestEntries(
+      userId,
+      weightedPoints,
+      actualProductId,
+      userTierId,
+      redeemId,
+    )
     .catch(() => {}); // Non-blocking
 
   return updatedProgress;

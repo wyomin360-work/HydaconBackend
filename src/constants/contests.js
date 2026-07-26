@@ -52,6 +52,11 @@ const CONTEST_CONFIG = {
   GENERAL_LEADERBOARD_LIMIT: 100,
 };
 
+const CONTEST_METRICS = {
+  POINTS: "points",
+  SCAN_COUNT: "scan_count",
+};
+
 module.exports = {
   CONTEST_STATUS,
   REWARD_TYPE,
@@ -62,4 +67,5 @@ module.exports = {
   CONTEST_MESSAGES,
   CONTEST_ERRORS,
   CONTEST_CONFIG,
+  CONTEST_METRICS,
 };

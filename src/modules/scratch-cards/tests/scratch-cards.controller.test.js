@@ -32,11 +32,17 @@ describe("Scratch Cards Controller Unit Tests", () => {
 
       await scratchCardsController.listScratchCards(req, res);
 
-      expect(scratchCardsService.listScratchCards).toHaveBeenCalledWith({
-        userId: "user123",
-        page: 2,
-        limit: 10,
-      });
+      expect(scratchCardsService.listScratchCards).toHaveBeenCalledWith(
+        {
+          userId: "user123",
+          page: 2,
+          limit: 10,
+          startDate: undefined,
+          endDate: undefined,
+          scratchCardCampaignId: undefined,
+        },
+        true
+      );
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
@@ -52,11 +58,17 @@ describe("Scratch Cards Controller Unit Tests", () => {
 
       await scratchCardsController.listScratchCards(req, res);
 
-      expect(scratchCardsService.listScratchCards).toHaveBeenCalledWith({
-        userId: "user123", // should be standard user's own ID
-        page: 1,
-        limit: 5,
-      });
+      expect(scratchCardsService.listScratchCards).toHaveBeenCalledWith(
+        {
+          userId: "user123", // should be standard user's own ID
+          page: 1,
+          limit: 5,
+          startDate: undefined,
+          endDate: undefined,
+          scratchCardCampaignId: undefined,
+        },
+        false
+      );
       expect(res.status).toHaveBeenCalledWith(200);
     });
   });
