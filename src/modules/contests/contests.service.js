@@ -44,6 +44,7 @@ async function adminCreateContest(data, adminId) {
     description,
     bannerImage,
     rewardSummary,
+    metric,
     startDate,
     endDate,
     region,
@@ -56,6 +57,7 @@ async function adminCreateContest(data, adminId) {
     description,
     bannerImage,
     rewardSummary,
+    metric,
     startDate: new Date(startDate),
     endDate: new Date(endDate),
     region: region || null,
@@ -360,32 +362,47 @@ async function userListContests(query = {}, userId) {
   // Sync statuses before returning
   const now = new Date();
   await Contest.updateMany(
-    { startDate: { $gt: now }, status: { $ne: CONTEST_STATUS.UPCOMING } },
+    {
+      startDate: { $gt: now },
+      status: {
+        $nin: [
+          CONTEST_STATUS.UPCOMING,
+          CONTEST_STATUS.COMPLETED,
+          CONTEST_STATUS.CANCELLED,
+        ],
+      },
+    },
     { $set: { status: CONTEST_STATUS.UPCOMING } },
   );
   await Contest.updateMany(
     {
       startDate: { $lte: now },
       endDate: { $gte: now },
-      status: { $ne: CONTEST_STATUS.ACTIVE },
+      status: {
+        $nin: [
+          CONTEST_STATUS.ACTIVE,
+          CONTEST_STATUS.COMPLETED,
+          CONTEST_STATUS.CANCELLED,
+        ],
+      },
     },
     { $set: { status: CONTEST_STATUS.ACTIVE } },
   );
-  await Contest.updateMany(
-    { endDate: { $lt: now }, status: { $ne: CONTEST_STATUS.COMPLETED } },
-    { $set: { status: CONTEST_STATUS.COMPLETED } },
-  );
 
-  const filter = { active: true };
+  const filter = {};
   if (query.status) {
     filter.status = query.status;
     if (query.status === CONTEST_STATUS.ONGOING) {
+      filter.active = true;
       filter.endDate = { $gte: new Date() };
     } else if (query.status === CONTEST_STATUS.UPCOMING) {
+      filter.active = true;
       filter.startDate = { $gte: new Date() };
     } else if (query.status === CONTEST_STATUS.COMPLETED) {
       filter.status = CONTEST_STATUS.COMPLETED;
     }
+  } else {
+    filter.active = true;
   }
 
   const [contests, total] = await Promise.all([
