@@ -1,4 +1,22 @@
 const mongoose = require("mongoose");
+const {
+  ALLOWED_PLACEMENTS,
+  ALLOWED_TYPES,
+  ALLOWED_ACTIONS,
+  ALLOWED_POPUP_TYPES,
+  ALLOWED_FREQUENCIES,
+} = require("../constants/content");
+
+const contentImagesSchema = new mongoose.Schema(
+  {
+    mobile: { type: String, default: "" },
+    tablet: { type: String, default: "" },
+    web: { type: String, default: "" },
+    thumbnail: { type: String, default: "" },
+    icon: { type: String, default: "" },
+  },
+  { _id: false },
+);
 
 const contentSchema = new mongoose.Schema(
   {
@@ -7,34 +25,18 @@ const contentSchema = new mongoose.Schema(
     description: { type: String, default: "" },
     type: {
       type: String,
-      enum: ["BANNER", "ANNOUNCEMENT", "CAMPAIGN", "POPUP", "INFORMATION_CARD"],
+      enum: ALLOWED_TYPES,
       required: true,
     },
-    placements: [{ type: String }],
+    placements: [{ type: String, enum: ALLOWED_PLACEMENTS }],
     images: {
-      mobile: { type: String, default: "" },
-      tablet: { type: String, default: "" },
-      web: { type: String, default: "" },
-      thumbnail: { type: String, default: "" },
-      icon: { type: String, default: "" },
+      type: contentImagesSchema,
+      default: () => ({}),
     },
     detailImages: [{ type: String }],
     action: {
       type: String,
-      enum: [
-        "OPEN_PRODUCT",
-        "OPEN_CATEGORY",
-        "OPEN_REWARDS",
-        "OPEN_PRODUCT_SELECTOR",
-        "OPEN_COVERAGE_CALCULATOR",
-        "OPEN_SCAN",
-        "OPEN_EXTERNAL_URL",
-        "OPEN_INTERNAL_PAGE",
-        "OPEN_CAMPAIGN_DETAILS",
-        "OPEN_BOTTOM_SHEET",
-        "OPEN_POPUP_MODAL",
-        "DO_NOTHING",
-      ],
+      enum: ALLOWED_ACTIONS,
       default: "DO_NOTHING",
     },
     actionData: { type: mongoose.Schema.Types.Mixed },
@@ -47,15 +49,11 @@ const contentSchema = new mongoose.Schema(
     showOnce: { type: Boolean, default: false },
     frequency: {
       type: String,
-      enum: ["ONCE", "SESSION", "EVERYTIME"],
+      enum: ALLOWED_FREQUENCIES,
     },
     popupType: {
       type: String,
-      enum: [
-        "FULLSCREEN",
-        "BOTTOM_SHEET",
-        null,
-      ],
+      enum: [...ALLOWED_POPUP_TYPES, null],
       default: null,
     },
     ruleSetId: {

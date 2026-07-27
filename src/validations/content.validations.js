@@ -1,3 +1,11 @@
+const {
+  ALLOWED_PLACEMENTS,
+  ALLOWED_TYPES,
+  ALLOWED_ACTIONS,
+  ALLOWED_POPUP_TYPES,
+  ALLOWED_FREQUENCIES,
+} = require("../constants/content");
+
 const createContentRequestType = {
   type: "object",
   properties: {
@@ -6,9 +14,9 @@ const createContentRequestType = {
     description: { type: "string" },
     type: {
       type: "string",
-      enum: ["BANNER", "ANNOUNCEMENT", "CAMPAIGN", "POPUP", "INFORMATION_CARD"],
+      enum: ALLOWED_TYPES,
     },
-    placements: { type: "array", items: { type: "string" } },
+    placements: { type: "array", items: { type: "string", enum: ALLOWED_PLACEMENTS } },
     images: {
       type: "object",
       properties: {
@@ -23,20 +31,7 @@ const createContentRequestType = {
     detailImages: { type: "array", items: { type: "string" } },
     action: {
       type: "string",
-      enum: [
-        "OPEN_PRODUCT",
-        "OPEN_CATEGORY",
-        "OPEN_REWARDS",
-        "OPEN_PRODUCT_SELECTOR",
-        "OPEN_COVERAGE_CALCULATOR",
-        "OPEN_SCAN",
-        "OPEN_EXTERNAL_URL",
-        "OPEN_INTERNAL_PAGE",
-        "OPEN_CAMPAIGN_DETAILS",
-        "OPEN_BOTTOM_SHEET",
-        "OPEN_POPUP_MODAL",
-        "DO_NOTHING",
-      ],
+      enum: ALLOWED_ACTIONS,
     },
     actionData: {},
     active: { type: "boolean" },
@@ -46,8 +41,8 @@ const createContentRequestType = {
     endDate: { type: ["string", "null"], format: "date-time" },
     dismissible: { type: "boolean" },
     showOnce: { type: "boolean" },
-    frequency: { type: "string", enum: ["ONCE", "SESSION", "EVERYTIME"] },
-    popupType: { type: ["string", "null"], enum: ["FULLSCREEN", "BOTTOM_SHEET", null] },
+    frequency: { type: "string", enum: ALLOWED_FREQUENCIES },
+    popupType: { type: ["string", "null"], enum: [...ALLOWED_POPUP_TYPES, null] },
     ruleSetId: { type: ["string", "null"] },
     tags: { type: "array", items: { type: "string" } },
     bodyText: { type: "string" },
@@ -65,11 +60,11 @@ const updateContentRequestType = {
     title: { type: "string", minLength: 1 },
     subtitle: { type: "string" },
     description: { type: "string" },
-    contenttype: {
+    type: {
       type: "string",
-      enum: ["BANNER", "ANNOUNCEMENT", "CAMPAIGN", "POPUP", "INFORMATION_CARD"],
+      enum: ALLOWED_TYPES,
     },
-    placements: { type: "array", items: { type: "string" } },
+    placements: { type: "array", items: { type: "string", enum: ALLOWED_PLACEMENTS } },
     images: {
       type: "object",
       properties: {
@@ -84,20 +79,7 @@ const updateContentRequestType = {
     detailImages: { type: "array", items: { type: "string" } },
     action: {
       type: "string",
-      enum: [
-        "OPEN_PRODUCT",
-        "OPEN_CATEGORY",
-        "OPEN_REWARDS",
-        "OPEN_PRODUCT_SELECTOR",
-        "OPEN_COVERAGE_CALCULATOR",
-        "OPEN_SCAN",
-        "OPEN_EXTERNAL_URL",
-        "OPEN_INTERNAL_PAGE",
-        "OPEN_CAMPAIGN_DETAILS",
-        "OPEN_BOTTOM_SHEET",
-        "OPEN_POPUP_MODAL",
-        "DO_NOTHING",
-      ],
+      enum: ALLOWED_ACTIONS,
     },
     actionData: {},
     active: { type: "boolean" },
@@ -107,8 +89,8 @@ const updateContentRequestType = {
     endDate: { type: ["string", "null"], format: "date-time" },
     dismissible: { type: "boolean" },
     showOnce: { type: "boolean" },
-    frequency: { type: "string", enum: ["ONCE", "SESSION", "EVERYTIME"] },
-    popupType: { type: ["string", "null"], enum: ["FULLSCREEN", "BOTTOM_SHEET", null] },
+    frequency: { type: "string", enum: ALLOWED_FREQUENCIES },
+    popupType: { type: ["string", "null"], enum: [...ALLOWED_POPUP_TYPES, null] },
     ruleSetId: { type: ["string", "null"] },
     tags: { type: "array", items: { type: "string" } },
     bodyText: { type: "string" },
@@ -119,7 +101,7 @@ const updateContentRequestType = {
     maxViews: { type: "number" },
     forceActive: { type: "boolean" },
   },
-  additionalProperties: true,
+  additionalProperties: false,
 };
 
 module.exports = {

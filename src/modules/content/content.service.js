@@ -1,7 +1,7 @@
 const Content = require("../../schemas/content.schema");
 const User = require("../../schemas/user.schema");
 const AppError = require("../../utils/appError");
-const { ALLOWED_PLACEMENTS } = require("./content.constants");
+const { ALLOWED_PLACEMENTS } = require("../../constants/content");
 const { RuleSet } = require("../../schemas/rule-set.schema");
 const ruleSetEvaluator = require("../rule-set/rule-set.evaluator");
 
