@@ -9,6 +9,7 @@ const CONTEST_STATUS = {
 const REWARD_TYPE = {
   POINTS: "points",
   GIFT: "gift",
+  COIN: "coin",
 };
 
 const ENTRY_REWARD_STATUS = {

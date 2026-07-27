@@ -312,7 +312,6 @@ describe("Weighted Rewards Calculation", () => {
     expect(response.data.totalPointsAwarded).toBe(5);
   });
   it("should fallback to POINTS if gift award fails (e.g. duplicate or out of stock)", async () => {
-
     Gift.exists.mockResolvedValue(true);
     Gift.countDocuments.mockResolvedValue(1);
     Gift.findById.mockResolvedValue({

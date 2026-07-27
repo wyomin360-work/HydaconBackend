@@ -6,8 +6,11 @@ const Gift = require("./src/schemas/gift.schema");
 
 async function run() {
   await mongoose.connect(process.env.MONGODB_URL);
-  
-  const cards = await ScratchCard.find({ rewardType: "GIFT", userId: "6a0fddac6b304d5ac015b2dc" })
+
+  const cards = await ScratchCard.find({
+    rewardType: "GIFT",
+    userId: "6a0fddac6b304d5ac015b2dc",
+  })
     .populate("redeemId")
     .populate("giftId")
     .lean();
@@ -27,7 +30,7 @@ async function run() {
   process.exit(0);
 }
 
-run().catch(e => {
+run().catch((e) => {
   console.error(e);
   process.exit(1);
 });

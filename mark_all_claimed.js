@@ -10,9 +10,11 @@ async function run() {
   // 1. Mark all Redeems as claimed
   const redeemResult = await Redeem.updateMany(
     { scratchCardRewardType: "GIFT", scratchCardGiftClaimed: false },
-    { $set: { scratchCardGiftClaimed: true } }
+    { $set: { scratchCardGiftClaimed: true } },
   );
-  console.log(`Updated ${redeemResult.modifiedCount} Redeem records to scratchCardGiftClaimed = true`);
+  console.log(
+    `Updated ${redeemResult.modifiedCount} Redeem records to scratchCardGiftClaimed = true`,
+  );
 
   // 2. Clear rewardedUsers from all Gifts and reset reservedQuantity
   const gifts = await Gift.find({ "rewardedUsers.0": { $exists: true } });
@@ -23,15 +25,19 @@ async function run() {
     gift.reservedQuantity = Math.max(0, gift.reservedQuantity - numToClear);
     await gift.save();
     totalCleared += numToClear;
-    console.log(`Cleared ${numToClear} pending rewards from Gift: ${gift.name}`);
+    console.log(
+      `Cleared ${numToClear} pending rewards from Gift: ${gift.name}`,
+    );
   }
-  console.log(`Total pending reward entries cleared from Gifts: ${totalCleared}`);
+  console.log(
+    `Total pending reward entries cleared from Gifts: ${totalCleared}`,
+  );
 
   console.log("Done.");
   process.exit(0);
 }
 
-run().catch(err => {
+run().catch((err) => {
   console.error(err);
   process.exit(1);
 });

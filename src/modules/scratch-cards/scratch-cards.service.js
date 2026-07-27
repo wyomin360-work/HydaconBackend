@@ -21,7 +21,14 @@ const {
  * @returns {Promise<object>}
  */
 async function listScratchCards(data, isAdmin = false) {
-  const { userId, page = 1, limit = 15, startDate, endDate, scratchCardCampaignId } = data;
+  const {
+    userId,
+    page = 1,
+    limit = 15,
+    startDate,
+    endDate,
+    scratchCardCampaignId,
+  } = data;
   const skip = (page - 1) * limit;
 
   const query = {};
@@ -34,9 +41,10 @@ async function listScratchCards(data, isAdmin = false) {
   }
 
   if (scratchCardCampaignId) {
-
-    const redeems = await Redeem.find({ scratchCardCampaignId }).select("_id").lean();
-    const redeemIds = redeems.map(r => r._id);
+    const redeems = await Redeem.find({ scratchCardCampaignId })
+      .select("_id")
+      .lean();
+    const redeemIds = redeems.map((r) => r._id);
     query.redeemId = { $in: redeemIds };
   }
 

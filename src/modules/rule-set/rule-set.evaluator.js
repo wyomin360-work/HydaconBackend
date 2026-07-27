@@ -197,8 +197,12 @@ const extractActualValue = async (rule, user, context, session) => {
     case RuleType.CURRENT_CATEGORY: {
       if (!context.productId) return null;
       const Product = mongoose.model("Product");
-      const product = await Product.findById(context.productId).session(session);
-      return product && product.categoryId ? product.categoryId.toString() : null;
+      const product = await Product.findById(context.productId).session(
+        session,
+      );
+      return product && product.categoryId
+        ? product.categoryId.toString()
+        : null;
     }
 
     case RuleType.PRODUCT_SCAN: {

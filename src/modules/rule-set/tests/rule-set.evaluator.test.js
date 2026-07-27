@@ -25,9 +25,12 @@ jest.mock("mongoose", () => {
       return models[modelName];
     }),
     Types: {
-      ObjectId: Object.assign(jest.fn(() => "mockedObjectId"), {
-        isValid: jest.fn().mockReturnValue(true),
-      }),
+      ObjectId: Object.assign(
+        jest.fn(() => "mockedObjectId"),
+        {
+          isValid: jest.fn().mockReturnValue(true),
+        },
+      ),
     },
   };
 

@@ -8,8 +8,7 @@ function registerScratchCardsCron() {
       console.log(
         "🎁 Running Expired Scratch Card & Gift Stock Release Task...",
       );
-      const result =
-        await scratchCardsService.releaseExpiredScratchCardGifts();
+      const result = await scratchCardsService.releaseExpiredScratchCardGifts();
       if (result?.processed > 0) {
         console.log(
           `[Cron] Released reserved gift stock for ${result.processed} expired scratch cards.`,

@@ -17,6 +17,8 @@ const prizeSchema = new mongoose.Schema(
     },
     // For bonus-point prizes
     points: { type: Number, default: 0 },
+    // For coin prizes
+    coins: { type: Number, default: 0 },
     // For physical-gift prizes
     giftId: { type: mongoose.Schema.Types.ObjectId, ref: "Gift" },
     giftName: { type: String },

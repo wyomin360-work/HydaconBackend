@@ -370,7 +370,7 @@ async function matchActiveCampaign(user, userId, actualProductId) {
       userId,
       actualProductId,
     );
-    console.log("isCampagiin eligible",eligible)
+    console.log("isCampagiin eligible", eligible);
     if (eligible) return campaign;
   }
   return null;
@@ -607,7 +607,12 @@ async function resolveScratchCardReward({
     // Resolve the user's current tier ID (needed for legacy fallback)
     let userTierId = null;
 
-    console.log("resolveScratchCardReward",{activeSeason,userId,actualProductId,redeemData})
+    console.log("resolveScratchCardReward", {
+      activeSeason,
+      userId,
+      actualProductId,
+      redeemData,
+    });
     if (activeSeason) {
       const userProgress = await loyaltyService.getOrCreateUserProgress(userId);
       if (userProgress)
@@ -818,13 +823,13 @@ function buildRedeemResponse(
       rewardType: finalRewardType,
       gift: newRedeem.scratchCardGiftId
         ? {
-          id: newRedeem.scratchCardGiftId,
-          name: chosenGift?.name,
-          image: chosenGift?.image,
-          giftType: chosenGift?.giftType,
-          // Physical gifts: user must provide a shipping address via POST /gifts/user/redeem
-          requiresClaim: chosenGift?.giftType === "physical",
-        }
+            id: newRedeem.scratchCardGiftId,
+            name: chosenGift?.name,
+            image: chosenGift?.image,
+            giftType: chosenGift?.giftType,
+            // Physical gifts: user must provide a shipping address via POST /gifts/user/redeem
+            requiresClaim: chosenGift?.giftType === "physical",
+          }
         : null,
       pointsRewarded: weightedPoints,
       bonusPoints: finalBonusPoints,

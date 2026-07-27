@@ -1,8 +1,10 @@
+const mongoose = require("mongoose");
 const { Contest } = require("../../schemas/contest.schema");
 const { ContestEntry } = require("../../schemas/contest-entry.schema");
 const User = require("../../schemas/user.schema");
 const Gift = require("../../schemas/gift.schema");
 const GiftRedemption = require("../../schemas/gift-redemption.schema");
+const giftService = require("../gift/gift.service");
 const { RuleSet } = require("../../schemas/rule-set.schema");
 const ContestTransaction = require("../../schemas/contest-transaction.schema");
 const {
@@ -190,85 +192,141 @@ async function adminFinaliseContest(contestId, adminId) {
     sendFailResponse("Only ongoing contests can be finalised", 400);
   }
 
-  // Mark as completed and deactivate
-  contest.status = CONTEST_STATUS.COMPLETED;
-  contest.active = false;
-  contest.isFinalizedManually = true;
-  if (adminId) contest.finalizedBy = adminId;
-  contest.finalizedAt = new Date();
-  await contest.save();
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-  // Fetch all entries ordered by qualificationPoints DESC
-  const entries = await ContestEntry.find({ contestId })
-    .populate("user")
-    .sort({ qualificationPoints: -1 });
+  try {
+    // Mark as completed and deactivate
+    contest.status = CONTEST_STATUS.COMPLETED;
+    contest.active = false;
+    contest.isFinalizedManually = true;
+    if (adminId) contest.finalizedBy = adminId;
+    contest.finalizedAt = new Date();
+    await contest.save({ session });
 
-  for (let i = 0; i < entries.length; i++) {
-    const entry = entries[i];
-    entry.rank = i + 1;
+    // Fetch all entries ordered by qualificationPoints DESC
+    const entries = await ContestEntry.find({ contestId })
+      .populate("user")
+      .sort({ qualificationPoints: -1 })
+      .session(session);
 
-    // Find matching prize
-    const prize = contest.prizes.find((p) => p.rank === i + 1);
-    if (prize) {
-      if (prize.rewardType === REWARD_TYPE.POINTS && prize.points > 0) {
-        // Award BONUS points only — deliberately NOT calling loyaltyService.processQrScanPoints
-        // so these points do NOT affect tier qualification
-        const user = await User.findById(entry.userId);
-        if (user) {
-          user.totalPoints += prize.points;
-          user.lifetimePoints = (user.lifetimePoints || 0) + prize.points;
-          await user.save();
-        }
-        entry.bonusPointsAwarded = prize.points;
-        entry.rewardType = REWARD_TYPE.POINTS;
-      }
-      if (prize.rewardType === REWARD_TYPE.GIFT) {
-        entry.rewardType = REWARD_TYPE.GIFT;
-        if (prize.giftId && !entry.giftRedemptionId) {
-          const gift = await Gift.findById(prize.giftId);
-          if (gift) {
-            const isVoucher = gift.giftType === "voucher";
-            const giftRedemption = await GiftRedemption.create({
-              userId: entry.userId,
-              giftId: gift._id,
-              coinsUsed: 0,
-              giftType: gift.giftType,
-              status: isVoucher
-                ? GIFT_REDEMPTION_STATUS.DELIVERED
-                : GIFT_REDEMPTION_STATUS.PROCESSING,
-              isReward: true,
-              rewardCause: REWARD_CAUSE.CONTEST,
-              rewardCauseId: contest._id,
-              rewardCauseTitle: `Contest Win: ${contest.name} (Rank #${entry.rank})`,
-              ...(isVoucher && {
-                voucherCode: gift.voucherCode || undefined,
-                voucherFileUrl: gift.voucherFileUrl || undefined,
-                voucherSent: true,
-              }),
-            });
-            entry.giftRedemptionId = giftRedemption._id;
+    const notificationsToSend = [];
+
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      entry.rank = i + 1;
+
+      // Find matching prize
+      const prize = contest.prizes.find((p) => p.rank === i + 1);
+      if (prize) {
+        if (prize.rewardType === REWARD_TYPE.POINTS && prize.points > 0) {
+          const user = await User.findById(entry.userId).session(session);
+          if (user) {
+            user.totalPoints += prize.points;
+            user.lifetimePoints = (user.lifetimePoints || 0) + prize.points;
+            await user.save({ session });
+          }
+          entry.bonusPointsAwarded = prize.points;
+          entry.rewardType = REWARD_TYPE.POINTS;
+          entry.rewardStatus = ENTRY_REWARD_STATUS.CREDITED;
+        } else if (prize.rewardType === REWARD_TYPE.COIN && prize.coins > 0) {
+          const user = await User.findById(entry.userId).session(session);
+          if (user) {
+            user.hydaconCoins = (user.hydaconCoins || 0) + prize.coins;
+            user.lifetimeHydaconCoins =
+              (user.lifetimeHydaconCoins || 0) + prize.coins;
+            await user.save({ session });
+          }
+          entry.bonusCoinsAwarded = prize.coins;
+          entry.rewardType = REWARD_TYPE.COIN;
+          entry.rewardStatus = ENTRY_REWARD_STATUS.CREDITED;
+        } else if (prize.rewardType === REWARD_TYPE.GIFT) {
+          entry.rewardType = REWARD_TYPE.GIFT;
+          if (prize.giftId) {
+            const gift = await Gift.findById(prize.giftId).session(session);
+            if (gift) {
+              const isVoucher = gift.giftType === "voucher";
+              if (isVoucher) {
+                const giftRedemption = await GiftRedemption.create(
+                  [
+                    {
+                      userId: entry.userId,
+                      giftId: gift._id,
+                      coinsUsed: 0,
+                      giftType: gift.giftType,
+                      status: GIFT_REDEMPTION_STATUS.DELIVERED,
+                      isReward: true,
+                      rewardCause: REWARD_CAUSE.CONTEST,
+                      rewardCauseId: contest._id,
+                      rewardCauseTitle: `Contest Win: ${contest.name} (Rank #${entry.rank})`,
+                      voucherCode: gift.voucherCode || undefined,
+                      voucherFileUrl: gift.voucherFileUrl || undefined,
+                      voucherSent: true,
+                    },
+                  ],
+                  { session },
+                );
+                entry.giftRedemptionId = giftRedemption[0]._id;
+                entry.rewardStatus = ENTRY_REWARD_STATUS.CREDITED;
+              } else {
+                // Physical gift: defer claim, add to rewardedUsers list and reserve stock
+                const awardResult = await giftService.awardPhysicalGiftToUser(
+                  entry.userId,
+                  gift,
+                  {
+                    rewardCause: REWARD_CAUSE.CONTEST,
+                    rewardCauseId: contest._id,
+                    rewardCauseTitle: `Contest Win: ${contest.name} (Rank #${entry.rank})`,
+                  },
+                  session,
+                );
+                if (awardResult.success) {
+                  entry.rewardStatus = ENTRY_REWARD_STATUS.PENDING;
+                } else {
+                  console.error(
+                    "Failed to award physical gift to user:",
+                    awardResult.message,
+                  );
+                  entry.rewardStatus = ENTRY_REWARD_STATUS.PENDING;
+                }
+              }
+            }
           }
         }
       }
-      entry.rewardStatus = ENTRY_REWARD_STATUS.CREDITED;
-    }
-    await entry.save();
+      await entry.save({ session });
 
-    // Push notification to winner
-    const user = entry.user;
-    if (user?.fcmTokens?.length && user?.enableNotification && prize) {
-      const prizeText =
-        prize.rewardType === REWARD_TYPE.POINTS
-          ? `${prize.points} Bonus Points`
-          : `a ${prize.giftName || "prize"}`;
-      await sendFcmNotifications(
-        user.fcmTokens,
-        formatNotification(APP_NOTIFICATIONS.contests.contestWon.title, {
-          contestName: contest.name,
-        }),
-        formatNotification(APP_NOTIFICATIONS.contests.contestWon.body, {
+      // Push notification to winner (executed after committing to prevent transaction delays/timeouts)
+      const user = entry.user;
+      if (user?.fcmTokens?.length && user?.enableNotification && prize) {
+        const prizeText =
+          prize.rewardType === REWARD_TYPE.POINTS
+            ? `${prize.points} Bonus Points`
+            : prize.rewardType === REWARD_TYPE.COIN
+              ? `${prize.coins} Hydacon Coins`
+              : `a ${prize.giftName || "prize"}`;
+        notificationsToSend.push({
+          fcmTokens: user.fcmTokens,
+          title: APP_NOTIFICATIONS.contests.contestWon.title,
+          body: APP_NOTIFICATIONS.contests.contestWon.body,
           prizeText,
           contestName: contest.name,
+        });
+      }
+    }
+
+    await session.commitTransaction();
+
+    // Send notifications after transaction commits successfully
+    for (const notif of notificationsToSend) {
+      sendFcmNotifications(
+        notif.fcmTokens,
+        formatNotification(notif.title, {
+          contestName: notif.contestName,
+        }),
+        formatNotification(notif.body, {
+          prizeText: notif.prizeText,
+          contestName: notif.contestName,
         }),
         {
           type: CONTEST_FCM_TYPES.CONTEST_WON,
@@ -276,12 +334,17 @@ async function adminFinaliseContest(contestId, adminId) {
         },
       ).catch(() => {});
     }
-  }
 
-  return {
-    message: CONTEST_MESSAGES.FINALISED,
-    data: { contestFinalised: true, ranked: entries.length },
-  };
+    return {
+      message: CONTEST_MESSAGES.FINALISED,
+      data: { contestFinalised: true, ranked: entries.length },
+    };
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    await session.endSession();
+  }
 }
 
 // ─── User ────────────────────────────────────────────────────────────────────
@@ -369,7 +432,10 @@ async function userGetContestDetails(contestId, userId) {
     .populate({
       path: "user",
       select: "name profileImage currentTierId totalPoints",
-      populate: { path: "currentTierId", select: "name colorIdentity badgeUrl" },
+      populate: {
+        path: "currentTierId",
+        select: "name colorIdentity badgeUrl",
+      },
     })
     .sort({ qualificationPoints: -1 })
     .lean();
@@ -407,7 +473,10 @@ async function userGetLeaderboard(contestId) {
     .populate({
       path: "user",
       select: "name profileImage currentTierId totalPoints",
-      populate: { path: "currentTierId", select: "name colorIdentity badgeUrl" },
+      populate: {
+        path: "currentTierId",
+        select: "name colorIdentity badgeUrl",
+      },
     })
     .sort({ qualificationPoints: -1 })
     .lean();
@@ -528,9 +597,7 @@ async function syncUserContestEntries(
         const ruleSetObj =
           typeof contest.ruleSetId === "object"
             ? contest.ruleSetId
-            : await RuleSet
-                .findById(contest.ruleSetId)
-                .lean();
+            : await RuleSet.findById(contest.ruleSetId).lean();
         if (ruleSetObj) {
           const isEligible = await evaluateRuleSet(ruleSetObj, user, {
             productId,

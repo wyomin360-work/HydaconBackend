@@ -11,6 +11,7 @@ const prizeItemSchema = {
     rank: { type: "integer", minimum: 1 },
     rewardType: { type: "string", enum: Object.values(REWARD_TYPE) },
     points: { type: "integer", minimum: 0 },
+    coins: { type: "integer", minimum: 0 },
     giftId: { type: "string" },
     giftName: { type: "string" },
   },

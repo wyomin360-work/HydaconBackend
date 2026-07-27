@@ -171,8 +171,7 @@ describe("Scratch Cards Service Unit Tests", () => {
       });
       ScratchCard.updateOne.mockResolvedValue({ modifiedCount: 1 });
 
-      const result =
-        await scratchCardsService.releaseExpiredScratchCardGifts();
+      const result = await scratchCardsService.releaseExpiredScratchCardGifts();
 
       expect(ScratchCard.find).toHaveBeenCalled();
       expect(ScratchCard.updateOne).toHaveBeenCalledWith(

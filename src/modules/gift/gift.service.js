@@ -1231,21 +1231,30 @@ exports.listScratchCardRules = async () => {
       .lean();
 
     // Compute used counts for each reward
-    const redeems = await Redeem.find({ 
-      scratchCardCampaignId: { $in: rules.map(r => r._id) } 
-    }).select("scratchCardCampaignId scratchCardRewardType scratchCardGiftId").lean();
+    const redeems = await Redeem.find({
+      scratchCardCampaignId: { $in: rules.map((r) => r._id) },
+    })
+      .select("scratchCardCampaignId scratchCardRewardType scratchCardGiftId")
+      .lean();
 
     for (const rule of rules) {
-      const campaignRedeems = redeems.filter(r => r.scratchCardCampaignId?.toString() === rule._id.toString());
+      const campaignRedeems = redeems.filter(
+        (r) => r.scratchCardCampaignId?.toString() === rule._id.toString(),
+      );
       rule.totalGiven = campaignRedeems.length;
       if (rule.rewards && Array.isArray(rule.rewards)) {
         for (const reward of rule.rewards) {
           if (reward.rewardType === "GIFT") {
             reward.usedCount = campaignRedeems.filter(
-              r => r.scratchCardRewardType === "GIFT" && r.scratchCardGiftId?.toString() === reward.giftId?._id?.toString()
+              (r) =>
+                r.scratchCardRewardType === "GIFT" &&
+                r.scratchCardGiftId?.toString() ===
+                  reward.giftId?._id?.toString(),
             ).length;
           } else {
-            reward.usedCount = campaignRedeems.filter(r => r.scratchCardRewardType === reward.rewardType).length;
+            reward.usedCount = campaignRedeems.filter(
+              (r) => r.scratchCardRewardType === reward.rewardType,
+            ).length;
           }
         }
       }

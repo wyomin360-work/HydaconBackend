@@ -28,17 +28,17 @@ const contestTransactionSchema = new mongoose.Schema(
       required: true,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // Prevent duplicate transactions per contest
 contestTransactionSchema.index(
   { contestId: 1, userId: 1, transactionId: 1 },
-  { unique: true }
+  { unique: true },
 );
 
 const ContestTransaction = mongoose.model(
   "ContestTransaction",
-  contestTransactionSchema
+  contestTransactionSchema,
 );
 module.exports = ContestTransaction;

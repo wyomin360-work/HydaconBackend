@@ -41,7 +41,7 @@ describe("Scratch Cards Controller Unit Tests", () => {
           endDate: undefined,
           scratchCardCampaignId: undefined,
         },
-        true
+        true,
       );
       expect(res.status).toHaveBeenCalledWith(200);
     });
@@ -67,7 +67,7 @@ describe("Scratch Cards Controller Unit Tests", () => {
           endDate: undefined,
           scratchCardCampaignId: undefined,
         },
-        false
+        false,
       );
       expect(res.status).toHaveBeenCalledWith(200);
     });

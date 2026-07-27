@@ -27,6 +27,18 @@ jest.mock("../../rule-set/rule-set.evaluator", () => ({
 jest.mock("../../../functions/fcm", () => ({
   sendFcmNotifications: jest.fn().mockResolvedValue({ successCount: 1 }),
 }));
+jest.mock("mongoose", () => {
+  const actualMongoose = jest.requireActual("mongoose");
+  return {
+    ...actualMongoose,
+    startSession: jest.fn().mockResolvedValue({
+      startTransaction: jest.fn(),
+      commitTransaction: jest.fn(),
+      abortTransaction: jest.fn(),
+      endSession: jest.fn(),
+    }),
+  };
+});
 
 describe("Contests Service Unit Tests", () => {
   beforeEach(() => {
@@ -234,7 +246,7 @@ describe("Contests Service Unit Tests", () => {
         50, // points awarded
         "prod1",
         "tier1",
-        "txn1"
+        "txn1",
       );
 
       // Verify transaction was recorded with metricValue = 1 (for SCAN_COUNT)
@@ -245,14 +257,14 @@ describe("Contests Service Unit Tests", () => {
           transactionId: "txn1",
           metric: CONTEST_METRICS.SCAN_COUNT,
           metricValue: 1,
-        })
+        }),
       );
 
       // Verify ContestEntry points incremented by 1
       expect(ContestEntry.findOneAndUpdate).toHaveBeenCalledWith(
         { contestId: "c1", userId: "u1" },
         { $inc: { qualificationPoints: 1 } },
-        { upsert: true, new: true }
+        { upsert: true, new: true },
       );
     });
 
@@ -280,28 +292,26 @@ describe("Contests Service Unit Tests", () => {
         150, // points awarded
         "prod1",
         "tier1",
-        "txn2"
+        "txn2",
       );
 
       // Verify transaction recorded with metricValue = 150
       expect(ContestTransaction.create).toHaveBeenCalledWith(
         expect.objectContaining({
           metricValue: 150,
-        })
+        }),
       );
 
       // Verify ContestEntry points incremented by 150
       expect(ContestEntry.findOneAndUpdate).toHaveBeenCalledWith(
         { contestId: "c2", userId: "u1" },
         { $inc: { qualificationPoints: 150 } },
-        { upsert: true, new: true }
+        { upsert: true, new: true },
       );
     });
 
     it("should skip ContestEntry update if duplicate transaction occurs", async () => {
-      const mockContests = [
-        { _id: "c1", metric: CONTEST_METRICS.POINTS },
-      ];
+      const mockContests = [{ _id: "c1", metric: CONTEST_METRICS.POINTS }];
       Contest.find.mockReturnValue({
         populate: jest.fn().mockReturnThis(),
         lean: jest.fn().mockResolvedValue(mockContests),
@@ -319,7 +329,7 @@ describe("Contests Service Unit Tests", () => {
         50,
         "prod1",
         "tier1",
-        "txn3"
+        "txn3",
       );
 
       // Because transaction threw duplicate error, findOneAndUpdate should NOT be called
@@ -335,7 +345,7 @@ describe("Contests Service Unit Tests", () => {
       });
 
       await expect(
-        contestsService.adminFinaliseContest("c1", "admin1")
+        contestsService.adminFinaliseContest("c1", "admin1"),
       ).rejects.toThrow("Only ongoing contests can be finalised");
     });
 
@@ -355,7 +365,9 @@ describe("Contests Service Unit Tests", () => {
         fcmTokens: ["token1"],
         save: jest.fn().mockResolvedValue(true),
       };
-      User.findById.mockResolvedValue(mockUser);
+      User.findById.mockReturnValue({
+        session: jest.fn().mockResolvedValue(mockUser),
+      });
 
       const mockEntry = {
         _id: "e1",
@@ -367,7 +379,8 @@ describe("Contests Service Unit Tests", () => {
 
       const queryChain = {
         populate: jest.fn().mockReturnThis(),
-        sort: jest.fn().mockResolvedValue([mockEntry]),
+        sort: jest.fn().mockReturnThis(),
+        session: jest.fn().mockResolvedValue([mockEntry]),
       };
       ContestEntry.find.mockReturnValue(queryChain);
 

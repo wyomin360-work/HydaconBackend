@@ -29,6 +29,7 @@ const contestEntrySchema = new mongoose.Schema(
       default: null,
     },
     bonusPointsAwarded: { type: Number, default: 0 }, // bonus only — NOT tier points
+    bonusCoinsAwarded: { type: Number, default: 0 },
     giftRedemptionId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "GiftRedemption",
