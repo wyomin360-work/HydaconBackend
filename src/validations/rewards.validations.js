@@ -53,6 +53,29 @@ const listRewardRequestType = {
         maxPoints: { type: "number", minimum: 0 },
         expiresAfter: { type: "string", format: "date-time" },
         expiresBefore: { type: "string", format: "date-time" },
+        createdDate: { type: "string" },
+        createdAtAfter: { type: "string", format: "date-time" },
+        createdAtBefore: { type: "string", format: "date-time" },
+      },
+      additionalProperties: false,
+    },
+  },
+  required: ["page", "limit"],
+  additionalProperties: false,
+};
+
+const listGroupedRewardsRequestType = {
+  type: "object",
+  properties: {
+    page: { type: "integer", minimum: 1 },
+    limit: { type: "integer", minimum: 1 },
+    productId: { type: "string", pattern: "^[0-9a-fA-F]{24}$" },
+    startDate: { type: "string" },
+    endDate: { type: "string" },
+    filters: {
+      type: "object",
+      properties: {
+        active: { type: "boolean" },
       },
       additionalProperties: false,
     },
@@ -65,4 +88,5 @@ module.exports = {
   createRewardRequestType,
   updateRewardRequestType,
   listRewardRequestType,
+  listGroupedRewardsRequestType,
 };

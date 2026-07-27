@@ -8,6 +8,9 @@ const {
   giftUpdateRequestType,
   categoryCreateRequestType,
   categoryUpdateRequestType,
+  scratchCardConfigUpdateRequestType,
+  scratchCardRuleCreateRequestType,
+  scratchCardRuleUpdateRequestType,
 } = require("../../validations/gift.validations");
 const { paginationType } = require("../../validations/global.validations");
 const verification = require("../../middlewares/jwtVerification");
@@ -104,6 +107,11 @@ router.get(
   verification.verifyUser,
   handleError(giftController.getUserRedemptionDetails),
 );
+router.get(
+  giftPaths.userRewardedGifts,
+  verification.verifyUser,
+  handleError(giftController.getUserRewardedGifts),
+);
 
 // Redemptions
 router.post(
@@ -140,4 +148,42 @@ router.get(
   verification.verifyAdmin,
   handleError(giftController.getAnalytics),
 );
+
+// Scratch Card Configuration
+router.get(
+  giftPaths.scratchCardConfig,
+  verification.verifyAdmin,
+  handleError(giftController.getScratchCardConfig),
+);
+router.patch(
+  giftPaths.scratchCardConfig,
+  verification.verifyAdmin,
+  validateRequest(scratchCardConfigUpdateRequestType),
+  handleError(giftController.updateScratchCardConfig),
+);
+
+// Scratch Card Rules
+router.get(
+  giftPaths.scratchCardRules,
+  verification.verifyAdmin,
+  handleError(giftController.listScratchCardRules),
+);
+router.post(
+  giftPaths.scratchCardRules,
+  verification.verifyAdmin,
+  validateRequest(scratchCardRuleCreateRequestType),
+  handleError(giftController.createScratchCardRule),
+);
+router.patch(
+  giftPaths.scratchCardRuleDetail,
+  verification.verifyAdmin,
+  validateRequest(scratchCardRuleUpdateRequestType),
+  handleError(giftController.updateScratchCardRule),
+);
+router.delete(
+  giftPaths.scratchCardRuleDetail,
+  verification.verifyAdmin,
+  handleError(giftController.deleteScratchCardRule),
+);
+
 module.exports = router;

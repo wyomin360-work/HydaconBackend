@@ -6,6 +6,8 @@ const {
   REFERRAL_MILESTONE_DETAILS,
 } = require("../../constants/referrals");
 const { sendFailResponse } = require("../../utils/responseHandlers");
+const { formatNotification } = require("../../utils/heplers");
+const { APP_NOTIFICATIONS } = require("../../constants/notifications");
 const mongoose = require("mongoose");
 const { sendFcmNotifications } = require("../../functions/fcm");
 
@@ -179,8 +181,12 @@ async function evaluateReferralReward(userId, userTotalScans) {
     );
     if (!matchedReward) return;
 
-    const { referrerRewardPoints = 50, refereeRewardPoints = 50 } =
-      matchedReward;
+    const {
+      referrerRewardPoints = 50,
+      refereeRewardPoints = 50,
+      referrerRewardCoins = 0,
+      refereeRewardCoins = 0,
+    } = matchedReward;
 
     // Atomically claim the milestone — only succeeds if it hasn't been claimed yet.
     // The $ne guard + $addToSet makes this safe against retries and race conditions.
@@ -202,23 +208,31 @@ async function evaluateReferralReward(userId, userTotalScans) {
     const referrerId = user.referredBy;
 
     // Reward the referee (the user who was referred)
+    const refereeInc = {};
     if (refereeRewardPoints > 0) {
-      await User.findByIdAndUpdate(userId, {
-        $inc: {
-          totalPoints: refereeRewardPoints,
-          lifetimePoints: refereeRewardPoints,
-        },
-      });
+      refereeInc.totalPoints = refereeRewardPoints;
+      refereeInc.lifetimePoints = refereeRewardPoints;
+    }
+    if (refereeRewardCoins > 0) {
+      refereeInc.hydaconCoins = refereeRewardCoins;
+      refereeInc.lifetimeHydaconCoins = refereeRewardCoins;
+    }
+    if (Object.keys(refereeInc).length > 0) {
+      await User.findByIdAndUpdate(userId, { $inc: refereeInc });
     }
 
     // Reward the referrer (the user who shared the code)
+    const referrerInc = {};
     if (referrerRewardPoints > 0) {
-      await User.findByIdAndUpdate(referrerId, {
-        $inc: {
-          totalPoints: referrerRewardPoints,
-          lifetimePoints: referrerRewardPoints,
-        },
-      });
+      referrerInc.totalPoints = referrerRewardPoints;
+      referrerInc.lifetimePoints = referrerRewardPoints;
+    }
+    if (referrerRewardCoins > 0) {
+      referrerInc.hydaconCoins = referrerRewardCoins;
+      referrerInc.lifetimeHydaconCoins = referrerRewardCoins;
+    }
+    if (Object.keys(referrerInc).length > 0) {
+      await User.findByIdAndUpdate(referrerId, { $inc: referrerInc });
     }
   } catch (error) {
     console.error("Error evaluating referral reward:", error);
@@ -295,8 +309,12 @@ async function completeMilestone(userId, milestone) {
     try {
       await sendFcmNotifications(
         referrerUser.fcmTokens,
-        "Referral Milestone Completed! 🥳",
-        `Your friend ${user.name || user.phone || "someone"} completed: "${config.name}". You earned ${points} points!`,
+        APP_NOTIFICATIONS.referral.referrerMilestone.title,
+        formatNotification(APP_NOTIFICATIONS.referral.referrerMilestone.body, {
+          friendName: user.name || user.phone || "someone",
+          milestoneName: config.name,
+          points: points,
+        }),
         { type: "REFERRAL_MILESTONE" },
       );
     } catch (err) {
@@ -309,8 +327,10 @@ async function completeMilestone(userId, milestone) {
     try {
       await sendFcmNotifications(
         user.fcmTokens,
-        "Milestone Unlocked! 🎉",
-        `You successfully completed the milestone: "${config.name}"!`,
+        APP_NOTIFICATIONS.referral.refereeMilestone.title,
+        formatNotification(APP_NOTIFICATIONS.referral.refereeMilestone.body, {
+          milestoneName: config.name,
+        }),
         { type: "REFERRAL_MILESTONE" },
       );
     } catch (err) {
@@ -327,6 +347,37 @@ async function completeMilestone(userId, milestone) {
   };
 }
 
+/**
+ * Processes referral milestones triggered by a QR scan (e.g. FIRST_SCAN, DAILY_SCAN).
+ * Updates lastScanDate on the user and evaluates milestone rewards.
+ *
+ * @param {string} userId
+ * @param {object} user - The user document before this scan was completed
+ */
+async function handleScanReferralMilestones(userId, user) {
+  try {
+    // 1. First scan milestone
+    await completeMilestone(userId, REFERRAL_MILESTONES.FIRST_SCAN);
+
+    // 2. Daily scan milestone check
+    const todayStr = new Date().toDateString();
+    const lastScanStr = user.lastScanDate
+      ? new Date(user.lastScanDate).toDateString()
+      : "";
+    if (todayStr !== lastScanStr) {
+      await User.findByIdAndUpdate(userId, {
+        $set: { lastScanDate: new Date() },
+      });
+      await completeMilestone(userId, REFERRAL_MILESTONES.DAILY_SCAN);
+    }
+
+    // 3. Evaluate referral rewards based on new total scan count
+    await evaluateReferralReward(userId, (user.totalScans || 0) + 1);
+  } catch (err) {
+    console.error("[Referral] Error processing scan milestones:", err);
+  }
+}
+
 module.exports = {
   getMobileReferralStats,
   getMobileReferralList,
@@ -334,4 +385,5 @@ module.exports = {
   sendReminderByUserId,
   evaluateReferralReward,
   completeMilestone,
+  handleScanReferralMilestones,
 };
