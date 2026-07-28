@@ -264,7 +264,7 @@ async function adminInviteUser(eventId, userId) {
 
   if (user?.fcmTokens?.length && user?.enableNotification) {
     await sendFcmNotifications(
-      user.fcmTokens,
+      user.fcmTokens.slice(-10),
       APP_NOTIFICATIONS.events.invitation.title,
       formatNotification(APP_NOTIFICATIONS.events.invitation.body, {
         eventTitle: event.title,

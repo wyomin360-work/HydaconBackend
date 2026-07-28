@@ -1190,6 +1190,7 @@ async function userList(data) {
 
   const users =
     (await User.find(query)
+    .select('-password -fcmTokens -bankDetails -kycDocuments')
       .populate("currentTierId", "name level")
       .sort(sort)
       .skip(skip)

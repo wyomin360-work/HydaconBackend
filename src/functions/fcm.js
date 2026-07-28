@@ -2,7 +2,7 @@ const admin = require("../config/firebase.config");
 
 async function sendFcmNotifications(tokens, title, body, data) {
   const results = { success: [], errors: [] };
-
+  // console.log("FCM-FCM", tokens, title, body, data)
   if (!tokens || tokens.length === 0) {
     throw new Error("No FCM tokens provided.");
   }
