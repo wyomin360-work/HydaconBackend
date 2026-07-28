@@ -32,10 +32,23 @@ router.patch(
   handleError(controller.updateContent),
 );
 
+router.put(
+  contentPaths.ADMIN_UPDATE,
+  verification.verifyAdmin,
+  validateRequest(updateContentRequestType),
+  handleError(controller.updateContent),
+);
+
 router.delete(
   contentPaths.ADMIN_DELETE,
   verification.verifyAdmin,
   handleError(controller.deleteContent),
+);
+
+router.get(
+  contentPaths.ADMIN_DETAILS,
+  verification.verifyAdmin,
+  handleError(controller.getContentDetails),
 );
 
 // App Routes (Typically accessed by mobile app)
@@ -52,5 +65,11 @@ router.get(
 );
 
 router.get(contentPaths.APP_DETAILS, handleError(controller.getContentDetails));
+
+router.post(
+  contentPaths.APP_TRACK_VIEW,
+  verification.verifyUser,
+  handleError(controller.trackContentView),
+);
 
 module.exports = router;

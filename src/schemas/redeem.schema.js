@@ -1,4 +1,4 @@
-const { default: mongoose } = require("mongoose");
+const mongoose = require("mongoose");
 const { REDEEM_STATUS } = require("../constants/redeem");
 
 const locationSchema = new mongoose.Schema(

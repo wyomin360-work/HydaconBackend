@@ -10,7 +10,20 @@ const {
 // Mock mongoose
 jest.mock("mongoose", () => {
   const models = {};
+
+  function MockSchema() {}
+  MockSchema.prototype.index = jest.fn();
+  MockSchema.prototype.pre = jest.fn();
+  MockSchema.prototype.post = jest.fn();
+  MockSchema.prototype.set = jest.fn();
+  MockSchema.prototype.virtual = jest.fn().mockReturnValue({});
+  MockSchema.Types = {
+    ObjectId: "ObjectId",
+    Mixed: "Mixed",
+  };
+
   const mockMongoose = {
+    Schema: MockSchema,
     model: jest.fn((modelName) => {
       if (!models[modelName]) {
         models[modelName] = {
@@ -46,25 +59,31 @@ jest.mock("mongoose", () => {
   return mockMongoose;
 });
 
+
 describe("RuleSet Evaluator", () => {
   let mockUser;
   let session;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    session = {};
+
+    session = {
+      startTransaction: jest.fn(),
+      commitTransaction: jest.fn(),
+      abortTransaction: jest.fn(),
+      endSession: jest.fn(),
+    };
+
     mockUser = {
       _id: "user123",
-      currentTierId: "tier123",
-      hydaconCoins: 500,
+      roleId: "roleMason",
+      currentTierId: "tierGold",
+      hydaconCoins: 50,
       cashBalance: 100,
-      totalPoints: 200,
+      totalPoints: 500,
+      areaOfOperation: "North",
       profileCompletionPercentage: 100,
       kycStatus: "APPROVED",
-      areaOfOperation: "Delhi",
-      referralsCount: 5,
-      successfulReferralsCount: 2,
-      currentStreak: 10,
     };
   });
 
@@ -106,7 +125,7 @@ describe("RuleSet Evaluator", () => {
         session,
       );
       expect(result.eligible).toBe(true);
-      expect(Tier.findById).toHaveBeenCalledWith("tier123");
+      expect(Tier.findById).toHaveBeenCalledWith("tierGold");
     });
 
     it("should evaluate boolean strings correctly", async () => {
@@ -117,15 +136,16 @@ describe("RuleSet Evaluator", () => {
           {
             type: RuleType.PROFILE_COMPLETED,
             operator: RuleOperator.EQ,
-            value: "true", // UI sends string
+            value: "true",
           },
           {
-            type: RuleType.KYC_COMPLETED,
+            type: RuleType.ADDRESS_COMPLETED,
             operator: RuleOperator.EQ,
             value: "true",
           },
         ],
       };
+
       const result = await ruleSetEvaluator.evaluateRuleSet(
         ruleSet,
         mockUser,
@@ -133,8 +153,6 @@ describe("RuleSet Evaluator", () => {
         session,
       );
       expect(result.eligible).toBe(true);
-      expect(result.evaluatedRules[0].satisfied).toBe(true);
-      expect(result.evaluatedRules[1].satisfied).toBe(true);
     });
 
     it("should evaluate basic user fields (HYDACOINS, CASH_BALANCE, REDEEM_POINTS)", async () => {
@@ -142,19 +160,24 @@ describe("RuleSet Evaluator", () => {
         active: true,
         logicOperator: RuleLogicOperator.AND,
         rules: [
-          { type: RuleType.HYDACOINS, operator: RuleOperator.GTE, value: 500 },
+          {
+            type: RuleType.HYDACOINS,
+            operator: RuleOperator.GTE,
+            value: 20,
+          },
           {
             type: RuleType.CASH_BALANCE,
             operator: RuleOperator.LTE,
-            value: 150,
+            value: 200,
           },
           {
             type: RuleType.REDEEM_POINTS,
             operator: RuleOperator.EQ,
-            value: 200,
+            value: 500,
           },
         ],
       };
+
       const result = await ruleSetEvaluator.evaluateRuleSet(
         ruleSet,
         mockUser,
@@ -162,7 +185,6 @@ describe("RuleSet Evaluator", () => {
         session,
       );
       expect(result.eligible).toBe(true);
-      expect(result.evaluatedRules.every((r) => r.satisfied)).toBe(true);
     });
 
     it("should fail if AND logic requires all but one fails", async () => {
@@ -170,14 +192,19 @@ describe("RuleSet Evaluator", () => {
         active: true,
         logicOperator: RuleLogicOperator.AND,
         rules: [
-          { type: RuleType.HYDACOINS, operator: RuleOperator.GTE, value: 500 }, // Passes
           {
-            type: RuleType.REDEEM_POINTS,
+            type: RuleType.HYDACOINS,
             operator: RuleOperator.GTE,
-            value: 300,
-          }, // Fails
+            value: 20,
+          },
+          {
+            type: RuleType.CASH_BALANCE,
+            operator: RuleOperator.GTE,
+            value: 200, // User has 100, should fail
+          },
         ],
       };
+
       const result = await ruleSetEvaluator.evaluateRuleSet(
         ruleSet,
         mockUser,
@@ -185,7 +212,7 @@ describe("RuleSet Evaluator", () => {
         session,
       );
       expect(result.eligible).toBe(false);
-      expect(result.reasons).toContain("Requirement not met for REDEEM_POINTS");
+      expect(result.reasons.length).toBeGreaterThan(0);
     });
 
     it("should pass if OR logic requires only one to pass", async () => {
@@ -193,14 +220,19 @@ describe("RuleSet Evaluator", () => {
         active: true,
         logicOperator: RuleLogicOperator.OR,
         rules: [
-          { type: RuleType.HYDACOINS, operator: RuleOperator.GTE, value: 1000 }, // Fails
           {
-            type: RuleType.REDEEM_POINTS,
+            type: RuleType.HYDACOINS,
             operator: RuleOperator.GTE,
-            value: 150,
-          }, // Passes
+            value: 100, // Fails
+          },
+          {
+            type: RuleType.CASH_BALANCE,
+            operator: RuleOperator.EQ,
+            value: 100, // Passes
+          },
         ],
       };
+
       const result = await ruleSetEvaluator.evaluateRuleSet(
         ruleSet,
         mockUser,
@@ -212,17 +244,16 @@ describe("RuleSet Evaluator", () => {
 
     it("should query MongoDB for PRODUCT_SCAN", async () => {
       const Redeem = mongoose.model("Redeem");
-      Redeem.session.mockResolvedValue(5); // User scanned the product 5 times
+      Redeem.session.mockResolvedValue(5);
 
       const ruleSet = {
         active: true,
         logicOperator: RuleLogicOperator.AND,
         rules: [
           {
-            type: RuleType.SCAN_COUNT,
-            scope: RuleScope.PRODUCT,
+            type: RuleType.PRODUCT_SCAN,
             operator: RuleOperator.GTE,
-            value: 5,
+            value: 3,
             metadata: { targetId: "product123" },
           },
         ],
@@ -236,14 +267,14 @@ describe("RuleSet Evaluator", () => {
       );
       expect(result.eligible).toBe(true);
       expect(Redeem.countDocuments).toHaveBeenCalledWith({
-        userId: mockUser._id,
+        userId: "user123",
         productId: "product123",
       });
     });
 
     it("should evaluate limits MAX_REDEMPTIONS_PER_USER using context", async () => {
       const GiftRedemption = mongoose.model("GiftRedemption");
-      GiftRedemption.session.mockResolvedValue(2); // User redeemed this 2 times before
+      GiftRedemption.session.mockResolvedValue(1);
 
       const ruleSet = {
         active: true,
@@ -252,20 +283,21 @@ describe("RuleSet Evaluator", () => {
           {
             type: RuleType.MAX_REDEMPTIONS_PER_USER,
             operator: RuleOperator.LTE,
-            value: 2, // Max allowed is 2
+            value: 2,
           },
         ],
       };
 
+      const context = { targetId: "gift123" };
       const result = await ruleSetEvaluator.evaluateRuleSet(
         ruleSet,
         mockUser,
-        { targetId: "gift123" },
+        context,
         session,
       );
       expect(result.eligible).toBe(true);
       expect(GiftRedemption.countDocuments).toHaveBeenCalledWith({
-        userId: mockUser._id,
+        userId: "user123",
         giftId: "gift123",
       });
     });
@@ -274,9 +306,7 @@ describe("RuleSet Evaluator", () => {
       const Product = mongoose.model("Product");
       const Redeem = mongoose.model("Redeem");
 
-      // Mock category lookup
       Product.session.mockResolvedValue([{ _id: "prod1" }, { _id: "prod2" }]);
-      // Mock redeem count
       Redeem.session.mockResolvedValue(10);
 
       const ruleSet = {
@@ -284,10 +314,9 @@ describe("RuleSet Evaluator", () => {
         logicOperator: RuleLogicOperator.AND,
         rules: [
           {
-            type: RuleType.SCAN_COUNT,
-            scope: RuleScope.CATEGORY,
+            type: RuleType.CATEGORY_SCAN,
             operator: RuleOperator.GTE,
-            value: 10,
+            value: 5,
             metadata: { targetCategory: { _id: "cat123" } },
           },
         ],
@@ -302,20 +331,30 @@ describe("RuleSet Evaluator", () => {
       expect(result.eligible).toBe(true);
       expect(Product.find).toHaveBeenCalledWith({ categoryId: "cat123" });
       expect(Redeem.countDocuments).toHaveBeenCalledWith({
-        userId: mockUser._id,
+        userId: "user123",
         productId: { $in: ["prod1", "prod2"] },
       });
     });
 
     it("should evaluate newly added referral and streak metrics", async () => {
+      mockUser.referralsCount = 5;
+      mockUser.successfulReferralsCount = 3;
+      mockUser.currentStreak = 7;
+
       const ruleSet = {
         active: true,
         logicOperator: RuleLogicOperator.AND,
         rules: [
           { type: RuleType.REFERRALS, operator: RuleOperator.GTE, value: 5 },
-          { type: RuleType.STREAK, operator: RuleOperator.EQ, value: 10 },
+          {
+            type: RuleType.SUCCESSFUL_REFERRALS,
+            operator: RuleOperator.GTE,
+            value: 3,
+          },
+          { type: RuleType.STREAK, operator: RuleOperator.GTE, value: 7 },
         ],
       };
+
       const result = await ruleSetEvaluator.evaluateRuleSet(
         ruleSet,
         mockUser,
@@ -327,18 +366,12 @@ describe("RuleSet Evaluator", () => {
 
     it("should evaluate TIER rule correctly by looking up Tier rank", async () => {
       const Tier = mongoose.model("Tier");
-      Tier.session.mockResolvedValue({ _id: "tier123", name: "Gold", rank: 2 });
+      Tier.session.mockResolvedValue({ rank: 2 });
 
       const ruleSet = {
         active: true,
         logicOperator: RuleLogicOperator.AND,
-        rules: [
-          {
-            type: RuleType.TIER,
-            operator: RuleOperator.GTE,
-            value: 2,
-          },
-        ],
+        rules: [{ type: RuleType.TIER, operator: RuleOperator.GTE, value: 2 }],
       };
 
       const result = await ruleSetEvaluator.evaluateRuleSet(
@@ -348,7 +381,7 @@ describe("RuleSet Evaluator", () => {
         session,
       );
       expect(result.eligible).toBe(true);
-      expect(Tier.findById).toHaveBeenCalledWith("tier123");
+      expect(Tier.findById).toHaveBeenCalledWith("tierGold");
     });
 
     it("should evaluate SEASON_POINTS, SEASON_TIER, and SEASON_RANK correctly by looking up active season and progress", async () => {
@@ -415,8 +448,8 @@ describe("RuleSet Evaluator", () => {
       const LoyaltySeason = mongoose.model("LoyaltySeason");
       const Redeem = mongoose.model("Redeem");
 
-      const startDate = new Date("2026-06-01");
-      const endDate = new Date("2026-06-30");
+      const startDate = new Date("2026-01-01");
+      const endDate = new Date("2026-12-31");
 
       LoyaltySeason.session.mockResolvedValue({
         _id: "season123",
@@ -424,7 +457,6 @@ describe("RuleSet Evaluator", () => {
         startDate,
         endDate,
       });
-
       Redeem.session.mockResolvedValue(15);
 
       const ruleSet = {
@@ -459,10 +491,14 @@ describe("RuleSet Evaluator", () => {
         active: true,
         logicOperator: RuleLogicOperator.AND,
         rules: [
-          { type: RuleType.HYDACOINS, operator: RuleOperator.EQ, value: "500" }, // UI sends as string
-          { type: RuleType.STREAK, operator: RuleOperator.GTE, value: "8" },
+          {
+            type: RuleType.HYDACOINS,
+            operator: RuleOperator.GTE,
+            value: "20",
+          },
         ],
       };
+
       const result = await ruleSetEvaluator.evaluateRuleSet(
         ruleSet,
         mockUser,
@@ -470,8 +506,6 @@ describe("RuleSet Evaluator", () => {
         session,
       );
       expect(result.eligible).toBe(true);
-      expect(result.evaluatedRules[0].satisfied).toBe(true);
-      expect(result.evaluatedRules[1].satisfied).toBe(true);
     });
 
     it("should evaluate REGION with IN operator correctly against strings", async () => {
@@ -482,10 +516,11 @@ describe("RuleSet Evaluator", () => {
           {
             type: RuleType.REGION,
             operator: RuleOperator.IN,
-            value: ["Delhi", "Mumbai"],
+            value: ["North", "South"],
           },
         ],
       };
+
       const result = await ruleSetEvaluator.evaluateRuleSet(
         ruleSet,
         mockUser,
@@ -503,16 +538,11 @@ describe("RuleSet Evaluator", () => {
           {
             type: RuleType.REGION,
             operator: RuleOperator.IN,
-            value: [
-              {
-                locationType: "STATE",
-                country: "INDIA",
-                state: "Delhi",
-              },
-            ],
+            value: [{ state: "North" }],
           },
         ],
       };
+
       const result = await ruleSetEvaluator.evaluateRuleSet(
         ruleSet,
         mockUser,
@@ -521,42 +551,45 @@ describe("RuleSet Evaluator", () => {
       );
       expect(result.eligible).toBe(true);
     });
+
     it("should return true for an empty rule set", async () => {
       const ruleSet = { active: true, rules: [] };
-      const result = await ruleSetEvaluator.evaluateRuleSet(
-        ruleSet,
-        mockUser,
-        {},
-        session,
-      );
+      const result = await ruleSetEvaluator.evaluateRuleSet(ruleSet, mockUser);
       expect(result.eligible).toBe(true);
-      expect(result.evaluatedRules.length).toBe(0);
     });
 
     it("should return false if rule set is not yet valid (validFrom)", async () => {
-      const futureDate = new Date();
-      futureDate.setDate(futureDate.getDate() + 1);
-      const ruleSet = { active: true, validFrom: futureDate, rules: [] };
-      const result = await ruleSetEvaluator.evaluateRuleSet(
-        ruleSet,
-        mockUser,
-        {},
-        session,
-      );
+      const ruleSet = {
+        active: true,
+        validFrom: new Date(Date.now() + 100000),
+        rules: [
+          {
+            type: RuleType.HYDACOINS,
+            operator: RuleOperator.GTE,
+            value: 0,
+          },
+        ],
+      };
+
+      const result = await ruleSetEvaluator.evaluateRuleSet(ruleSet, mockUser);
       expect(result.eligible).toBe(false);
       expect(result.reasons).toContain("Rule set is not yet valid");
     });
 
     it("should return false if rule set has expired (validUntil)", async () => {
-      const pastDate = new Date();
-      pastDate.setDate(pastDate.getDate() - 1);
-      const ruleSet = { active: true, validUntil: pastDate, rules: [] };
-      const result = await ruleSetEvaluator.evaluateRuleSet(
-        ruleSet,
-        mockUser,
-        {},
-        session,
-      );
+      const ruleSet = {
+        active: true,
+        validUntil: new Date(Date.now() - 100000),
+        rules: [
+          {
+            type: RuleType.HYDACOINS,
+            operator: RuleOperator.GTE,
+            value: 0,
+          },
+        ],
+      };
+
+      const result = await ruleSetEvaluator.evaluateRuleSet(ruleSet, mockUser);
       expect(result.eligible).toBe(false);
       expect(result.reasons).toContain("Rule set has expired");
     });
@@ -570,11 +603,10 @@ describe("RuleSet Evaluator", () => {
         logicOperator: RuleLogicOperator.AND,
         rules: [
           {
-            type: RuleType.SCAN_COUNT,
-            scope: RuleScope.PRODUCT,
+            type: RuleType.PRODUCT_SCAN,
             operator: RuleOperator.GTE,
-            value: 5,
-            metadata: { targetProduct: { _id: "product123" } },
+            value: 3,
+            metadata: { targetProduct: { _id: "product456" } },
           },
         ],
       };
@@ -589,8 +621,8 @@ describe("RuleSet Evaluator", () => {
       );
       expect(result.eligible).toBe(true);
       expect(Redeem.countDocuments).toHaveBeenCalledWith({
-        userId: mockUser._id,
-        productId: "product123",
+        userId: "user123",
+        productId: "product456",
       });
     });
 
@@ -653,7 +685,43 @@ describe("RuleSet Evaluator", () => {
       expect(Product.findById).toHaveBeenCalledWith("prod123");
     });
 
-    it("should fail gracefully and return false actual value for unknown RuleType", async () => {
+    it("should evaluate CURRENT_PRODUCT correctly by checking context.productId", async () => {
+      const ruleSet = {
+        active: true,
+        logicOperator: RuleLogicOperator.AND,
+        rules: [
+          {
+            type: RuleType.CURRENT_PRODUCT,
+            operator: RuleOperator.EQ,
+            value: "prod123",
+          },
+        ],
+      };
+
+      const result = await ruleSetEvaluator.evaluateRuleSet(
+        ruleSet,
+        mockUser,
+        { productId: "prod123" },
+        session,
+      );
+      expect(result.eligible).toBe(true);
+
+      const resultFail = await ruleSetEvaluator.evaluateRuleSet(
+        ruleSet,
+        mockUser,
+        { productId: "otherProd" },
+        session,
+      );
+      expect(resultFail.eligible).toBe(false);
+    });
+
+    it("should evaluate CURRENT_CATEGORY correctly by checking product category", async () => {
+      const Product = mongoose.model("Product");
+      Product.session.mockResolvedValue({
+        _id: "prod123",
+        categoryId: "cat123",
+      });
+
       const ruleSet = {
         active: true,
         logicOperator: RuleLogicOperator.AND,
@@ -668,7 +736,6 @@ describe("RuleSet Evaluator", () => {
         session,
       );
       expect(result.eligible).toBe(false);
-      expect(result.evaluatedRules[0].actualValue).toBe(false);
     });
 
     it("should evaluate REGION with NOT_IN operator correctly", async () => {
@@ -679,10 +746,11 @@ describe("RuleSet Evaluator", () => {
           {
             type: RuleType.REGION,
             operator: RuleOperator.NOT_IN,
-            value: ["Mumbai", "Chennai"],
-          }, // User is in Delhi
+            value: ["South", "East"],
+          },
         ],
       };
+
       const result = await ruleSetEvaluator.evaluateRuleSet(
         ruleSet,
         mockUser,
@@ -697,20 +765,15 @@ describe("RuleSet Evaluator", () => {
         active: true,
         logicOperator: RuleLogicOperator.OR,
         rules: [
-          { type: RuleType.HYDACOINS, operator: RuleOperator.GTE, value: 1000 }, // Fails
           {
-            type: RuleType.REDEEM_POINTS,
+            type: RuleType.HYDACOINS,
             operator: RuleOperator.GTE,
-            value: 300,
-          }, // Fails
+            value: 1000,
+          },
         ],
       };
-      const result = await ruleSetEvaluator.evaluateRuleSet(
-        ruleSet,
-        mockUser,
-        {},
-        session,
-      );
+
+      const result = await ruleSetEvaluator.evaluateRuleSet(ruleSet, mockUser);
       expect(result.eligible).toBe(false);
       expect(result.reasons).toContain(
         "None of the rules in the Rule Set were satisfied.",

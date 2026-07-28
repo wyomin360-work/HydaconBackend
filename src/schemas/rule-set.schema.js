@@ -29,6 +29,9 @@ const RuleScope = {
 };
 
 const RuleType = {
+  // Target User Role
+  USER_ROLE: "USER_ROLE",
+
   // Tier
   TIER: "TIER",
 

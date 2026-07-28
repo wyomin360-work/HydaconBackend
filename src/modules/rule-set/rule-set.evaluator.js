@@ -1,4 +1,11 @@
 const mongoose = require("mongoose");
+const Role = require("../../schemas/role.schema");
+const Tier = require("../../schemas/tier.schema");
+const LoyaltySeason = require("../../schemas/loyalty-season.schema");
+const UserTierProgress = require("../../schemas/user-tier-progress.schema");
+const Redeem = require("../../schemas/redeem.schema");
+const Product = require("../../schemas/product.schema");
+const GiftRedemption = require("../../schemas/gift-redemption.schema");
 const {
   RuleType,
   RuleScope,
@@ -27,7 +34,6 @@ const applyScopeFilter = async (match, scope, session) => {
     startOfWeek.setHours(0, 0, 0, 0);
     match.createdAt = { $gte: startOfWeek };
   } else if (scope === RuleScope.SEASON) {
-    const LoyaltySeason = mongoose.model("LoyaltySeason");
     const activeSeason = await LoyaltySeason.findOne({ active: true }).session(
       session,
     );
@@ -43,15 +49,27 @@ const applyScopeFilter = async (match, scope, session) => {
   // TOTAL, PRODUCT, CATEGORY, or undefined – no date filter applied.
   return match;
 };
+
 const extractActualValue = async (rule, user, context, session) => {
   const { type, scope, metadata } = rule;
 
   switch (type) {
+    case RuleType.USER_ROLE: {
+      if (!user.roleId) return "";
+      let roleName = "";
+      if (typeof user.roleId === "object" && user.roleId.name) {
+        roleName = user.roleId.name;
+      } else {
+        const role = await Role.findById(user.roleId).session(session);
+        if (role) roleName = role.name;
+      }
+      return roleName.toUpperCase();
+    }
+
     case RuleType.TIER: {
       const Tier = mongoose.model("Tier");
+      let tierObj = null;
       if (scope === RuleScope.SEASON) {
-        const LoyaltySeason = mongoose.model("LoyaltySeason");
-        const UserTierProgress = mongoose.model("UserTierProgress");
         const activeSeason = await LoyaltySeason.findOne({
           active: true,
         }).session(session);
@@ -60,16 +78,27 @@ const extractActualValue = async (rule, user, context, session) => {
           userId: user._id,
           seasonId: activeSeason._id,
         }).session(session);
-        if (!progress || !progress.currentTierId) return -1;
-        const tier = await Tier.findById(progress.currentTierId).session(
-          session,
-        );
-        return tier ? tier.rank : -1;
+        if (progress && progress.currentTierId) {
+          tierObj = await Tier.findById(progress.currentTierId).session(
+            session,
+          );
+        }
       } else {
-        if (!user.currentTierId) return -1;
-        const tier = await Tier.findById(user.currentTierId).session(session);
-        return tier ? tier.rank : -1;
+        if (user.currentTierId) {
+          tierObj = await Tier.findById(user.currentTierId).session(session);
+        }
       }
+
+      if (!tierObj) return -1;
+
+      const expectedValue = rule.value;
+      const isObjectId =
+        typeof expectedValue === "string" &&
+        /^[0-9a-fA-F]{24}$/.test(expectedValue);
+      if (isObjectId) {
+        return tierObj._id.toString();
+      }
+      return tierObj.rank;
     }
 
     case RuleType.HYDACOINS:
@@ -82,7 +111,6 @@ const extractActualValue = async (rule, user, context, session) => {
       return user.totalPoints || 0;
 
     case RuleType.SCAN_COUNT: {
-      const Redeem = mongoose.model("Redeem");
       const match = { userId: user._id };
 
       if (scope === RuleScope.PRODUCT) {
@@ -92,7 +120,6 @@ const extractActualValue = async (rule, user, context, session) => {
           match.productId = metadata.targetId;
         }
       } else if (scope === RuleScope.CATEGORY) {
-        const Product = mongoose.model("Product");
         if (metadata && (metadata.targetCategory || metadata.targetId)) {
           const targetCatId = metadata.targetCategory
             ? metadata.targetCategory._id
@@ -126,9 +153,6 @@ const extractActualValue = async (rule, user, context, session) => {
     case RuleType.SEASON_POINTS:
     case RuleType.SEASON_TIER:
     case RuleType.SEASON_RANK: {
-      const LoyaltySeason = mongoose.model("LoyaltySeason");
-      const UserTierProgress = mongoose.model("UserTierProgress");
-
       const activeSeason = await LoyaltySeason.findOne({
         active: true,
       }).session(session);
@@ -152,7 +176,6 @@ const extractActualValue = async (rule, user, context, session) => {
         return progress.currentTierId.toString();
 
       if (type === RuleType.SEASON_RANK) {
-        const Tier = mongoose.model("Tier");
         const tier = await Tier.findById(progress.currentTierId).session(
           session,
         );
@@ -163,18 +186,22 @@ const extractActualValue = async (rule, user, context, session) => {
     }
 
     case RuleType.MAX_REDEMPTIONS_PER_USER: {
-      if (!context.targetId) return 0;
-      const GiftRedemption = mongoose.model("GiftRedemption");
-      const count = await GiftRedemption.countDocuments({
-        userId: user._id,
-        giftId: context.targetId,
-      }).session(session);
+      const match = { userId: user._id };
+      if (metadata && metadata.targetGift && metadata.targetGift._id) {
+        match.giftId = metadata.targetGift._id;
+      } else if (metadata && metadata.targetId) {
+        match.giftId = metadata.targetId;
+      } else if (context && context.targetId) {
+        match.giftId = context.targetId;
+      } else {
+        return 0;
+      }
+      const count = await GiftRedemption.countDocuments(match).session(session);
       return count;
     }
 
     case RuleType.MAX_GLOBAL_REDEMPTIONS: {
       if (!context.targetId) return 0;
-      const GiftRedemption = mongoose.model("GiftRedemption");
       const count = await GiftRedemption.countDocuments({
         giftId: context.targetId,
       }).session(session);
@@ -206,7 +233,6 @@ const extractActualValue = async (rule, user, context, session) => {
     }
 
     case RuleType.PRODUCT_SCAN: {
-      const Redeem = mongoose.model("Redeem");
       const match = { userId: user._id };
       if (metadata && metadata.targetProduct && metadata.targetProduct._id) {
         match.productId = metadata.targetProduct._id;
@@ -219,8 +245,6 @@ const extractActualValue = async (rule, user, context, session) => {
     }
 
     case RuleType.CATEGORY_SCAN: {
-      const Product = mongoose.model("Product");
-      const Redeem = mongoose.model("Redeem");
       const match = { userId: user._id };
       if (metadata && (metadata.targetCategory || metadata.targetId)) {
         const targetCatId = metadata.targetCategory
@@ -235,52 +259,6 @@ const extractActualValue = async (rule, user, context, session) => {
       await applyScopeFilter(match, scope, session);
       const count = await Redeem.countDocuments(match).session(session);
       return count;
-    }
-
-    case RuleType.MAX_REDEMPTIONS_PER_USER: {
-      const GiftRedemption = mongoose.model("GiftRedemption");
-      const match = { userId: user._id };
-      if (metadata && metadata.targetGift && metadata.targetGift._id) {
-        match.giftId = metadata.targetGift._id;
-      } else if (context && context.targetId) {
-        match.giftId = context.targetId;
-      }
-      const count = await GiftRedemption.countDocuments(match).session(session);
-      return count;
-    }
-
-    case RuleType.SEASON_TIER: {
-      const LoyaltySeason = mongoose.model("LoyaltySeason");
-      const UserTierProgress = mongoose.model("UserTierProgress");
-      const Tier = mongoose.model("Tier");
-      const activeSeason = await LoyaltySeason.findOne({
-        active: true,
-      }).session(session);
-      if (!activeSeason) return null;
-      const progress = await UserTierProgress.findOne({
-        userId: user._id,
-        seasonId: activeSeason._id,
-      }).session(session);
-      if (!progress) return null;
-      const tier = await Tier.findById(progress.currentTierId).session(session);
-      return tier ? tier._id : null;
-    }
-
-    case RuleType.SEASON_RANK: {
-      const LoyaltySeason = mongoose.model("LoyaltySeason");
-      const UserTierProgress = mongoose.model("UserTierProgress");
-      const Tier = mongoose.model("Tier");
-      const activeSeason = await LoyaltySeason.findOne({
-        active: true,
-      }).session(session);
-      if (!activeSeason) return -1;
-      const progress = await UserTierProgress.findOne({
-        userId: user._id,
-        seasonId: activeSeason._id,
-      }).session(session);
-      if (!progress) return -1;
-      const tier = await Tier.findById(progress.currentTierId).session(session);
-      return tier ? tier.rank : -1;
     }
 
     default:
@@ -317,6 +295,10 @@ const applyOperator = (actualValue, operator, expectedValue) => {
         typeof actualValue === "string" &&
         typeof parsedExpectedValue === "string"
       ) {
+        const normExpected = parsedExpectedValue.trim().toUpperCase();
+        if (normExpected === "BOTH" || normExpected === "ALL") {
+          return true;
+        }
         return (
           actualValue.trim().toLowerCase() ===
           parsedExpectedValue.trim().toLowerCase()
