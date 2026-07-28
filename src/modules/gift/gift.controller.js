@@ -36,7 +36,8 @@ exports.adminListGifts = async (req, res) => {
 
 exports.getGiftDetails = async (req, res) => {
   const giftId = req.params?.giftId;
-  const response = await giftService.getGiftDetails(giftId);
+  const userId = req.user?.id || req.user?._id;
+  const response = await giftService.getGiftDetails(giftId, userId);
   return sendResponse(res, response);
 };
 
@@ -119,5 +120,46 @@ exports.getUserRedemptionDetails = async (req, res) => {
     userId,
     redemptionId,
   );
+  return sendResponse(res, response);
+};
+
+exports.getUserRewardedGifts = async (req, res) => {
+  const userId = req.userId;
+  const response = await giftService.getUserRewardedGifts(userId);
+  return sendResponse(res, response);
+};
+
+// Scratch Card Configuration
+exports.getScratchCardConfig = async (req, res) => {
+  const response = await giftService.getScratchCardConfig();
+  return sendResponse(res, response);
+};
+
+exports.updateScratchCardConfig = async (req, res) => {
+  const configData = req.body;
+  const response = await giftService.updateScratchCardConfig(configData);
+  return sendResponse(res, response);
+};
+
+// Scratch Card Rules CRUD
+exports.listScratchCardRules = async (req, res) => {
+  const response = await giftService.listScratchCardRules();
+  return sendResponse(res, response);
+};
+
+exports.createScratchCardRule = async (req, res) => {
+  const response = await giftService.createScratchCardRule(req.body);
+  return sendResponse(res, response);
+};
+
+exports.updateScratchCardRule = async (req, res) => {
+  const ruleId = req.params?.ruleId;
+  const response = await giftService.updateScratchCardRule(ruleId, req.body);
+  return sendResponse(res, response);
+};
+
+exports.deleteScratchCardRule = async (req, res) => {
+  const ruleId = req.params?.ruleId;
+  const response = await giftService.deleteScratchCardRule(ruleId);
   return sendResponse(res, response);
 };

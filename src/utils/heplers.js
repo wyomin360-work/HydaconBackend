@@ -229,7 +229,6 @@ function parseUserAgent(userAgent, headers = {}) {
 
   return info;
 }
-
 const getPaginationParams = (data = {}, defaultLimit = 10) => {
   const page = data.page || 1;
   const limit = data.limit || defaultLimit;

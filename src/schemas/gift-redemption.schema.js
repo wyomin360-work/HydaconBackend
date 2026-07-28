@@ -1,5 +1,5 @@
-const { default: mongoose } = require("mongoose");
-const { GIFT_REDEMPTION_STATUS } = require("../constants/gift");
+const mongoose = require("mongoose");
+const { GIFT_REDEMPTION_STATUS, REWARD_CAUSE } = require("../constants/gift");
 
 const shippingAddressSchema = new mongoose.Schema(
   {
@@ -40,12 +40,32 @@ const giftRedemptionSchema = new mongoose.Schema(
     shippingAddress: {
       type: shippingAddressSchema,
       required: function () {
-        return this.giftType === "physical";
+        return this.giftType === "physical" && !this.isReward;
       },
     },
     trackingNumber: { type: String },
     courierDetails: { type: String },
     cancellationReason: { type: String },
+
+    // --- Reward Audit & Cause Fields ---
+    isReward: {
+      type: Boolean,
+      default: false,
+    },
+    rewardCause: {
+      type: String,
+      enum: Object.values(REWARD_CAUSE),
+      default: REWARD_CAUSE.DIRECT_PURCHASE,
+    },
+    rewardCauseId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
+    },
+    rewardCauseTitle: {
+      type: String,
+      default: null,
+    },
+
     // --- Voucher-specific fields (snapshot at time of redemption) ---
     voucherCode: { type: String },
     voucherFileUrl: { type: String },

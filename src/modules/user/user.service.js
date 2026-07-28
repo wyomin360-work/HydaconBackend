@@ -1445,6 +1445,32 @@ async function releaseBan(userId) {
   return { message: "Ban released successfully" };
 }
 
+/**
+ * Atomically increments the user's point totals, scan count, and resets failed attempts/bans.
+ * Used during successful scans to update the user document.
+ *
+ * @param {string} userId
+ * @param {number} weightedPoints
+ * @returns {Promise<object>} The updated user document
+ */
+async function creditUserScanPoints(userId, weightedPoints) {
+  return User.findByIdAndUpdate(
+    userId,
+    {
+      $inc: {
+        totalPoints: weightedPoints,
+        lifetimePoints: weightedPoints,
+        totalScans: 1,
+      },
+      $set: {
+        failedScanAttempts: 0,
+        scanBanUntil: null,
+      },
+    },
+    { new: true },
+  );
+}
+
 module.exports = {
   registerUser,
   login,
@@ -1473,4 +1499,5 @@ module.exports = {
   toggleUserStatus,
   deleteUser,
   releaseBan,
+  creditUserScanPoints,
 };

@@ -212,6 +212,21 @@ const extractActualValue = async (rule, user, context, session) => {
     case RuleType.STREAK:
       return user.currentStreak || 0;
 
+    // New rule types
+    case RuleType.CURRENT_PRODUCT:
+      return context.productId ? context.productId.toString() : null;
+
+    case RuleType.CURRENT_CATEGORY: {
+      if (!context.productId) return null;
+      const Product = mongoose.model("Product");
+      const product = await Product.findById(context.productId).session(
+        session,
+      );
+      return product && product.categoryId
+        ? product.categoryId.toString()
+        : null;
+    }
+
     case RuleType.PRODUCT_SCAN: {
       const match = { userId: user._id };
       if (metadata && metadata.targetProduct && metadata.targetProduct._id) {
@@ -425,7 +440,17 @@ exports.evaluateRuleSet = async (
         context,
         session,
       );
-      const expectedValue = rule.value;
+      let expectedValue = rule.value;
+      if (
+        (rule.type === RuleType.TIER || rule.type === RuleType.SEASON_RANK) &&
+        mongoose.Types.ObjectId.isValid(expectedValue)
+      ) {
+        const Tier = mongoose.model("Tier");
+        const targetTier = await Tier.findById(expectedValue).session(session);
+        if (targetTier) {
+          expectedValue = targetTier.rank;
+        }
+      }
       const satisfied = applyOperator(
         actualValue,
         rule.operator,
