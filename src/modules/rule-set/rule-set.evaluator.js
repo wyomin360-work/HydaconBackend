@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Role = require("../../schemas/role.schema");
 const Tier = require("../../schemas/tier.schema");
 const LoyaltySeason = require("../../schemas/loyalty-season.schema");

@@ -125,7 +125,7 @@ describe("RuleSet Evaluator", () => {
         session,
       );
       expect(result.eligible).toBe(true);
-      expect(Tier.findById).toHaveBeenCalledWith("tier123");
+      expect(Tier.findById).toHaveBeenCalledWith("tierGold");
     });
 
     it("should evaluate boolean strings correctly", async () => {
