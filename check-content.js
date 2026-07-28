@@ -11,8 +11,10 @@ async function check() {
     console.log("Connected to DB!");
     const items = await Content.find({}).lean();
     console.log("Found", items.length, "content items:");
-    items.forEach(item => {
-      console.log(`- Title: "${item.title}" | Type: ${item.type} | PopupType: ${item.popupType} | Placements: [${item.placements.join(", ")}]`);
+    items.forEach((item) => {
+      console.log(
+        `- Title: "${item.title}" | Type: ${item.type} | PopupType: ${item.popupType} | Placements: [${item.placements.join(", ")}]`,
+      );
       console.log("  Images:", JSON.stringify(item.images, null, 2));
     });
     process.exit(0);

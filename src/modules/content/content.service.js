@@ -9,7 +9,10 @@ const validatePlacements = (placements) => {
   if (!placements || !Array.isArray(placements)) return;
   for (const p of placements) {
     if (!ALLOWED_PLACEMENTS.includes(p)) {
-      throw new AppError(`Invalid placement: ${p}. Allowed: ${ALLOWED_PLACEMENTS.join(", ")}`, 400);
+      throw new AppError(
+        `Invalid placement: ${p}. Allowed: ${ALLOWED_PLACEMENTS.join(", ")}`,
+        400,
+      );
     }
   }
 };
@@ -44,7 +47,7 @@ const createContent = async (data) => {
       if (data.forceActive) {
         await Content.updateMany(
           { type: "POPUP", active: true, placements: { $in: data.placements } },
-          { active: false }
+          { active: false },
         );
       } else {
         data.active = false;
@@ -81,7 +84,7 @@ const createContent = async (data) => {
 
   const content = new Content(data);
   await content.save();
-  
+
   const result = content.toObject();
   if (hadConflict) {
     result.hadConflict = true;
@@ -97,7 +100,6 @@ const updateContent = async (id, data) => {
     throw new AppError("Content not found", 404);
   }
 
-
   // Normalize status if string ("active" / "disabled") supplied
   if (data.status !== undefined) {
     if (typeof data.status === "string") {
@@ -112,7 +114,9 @@ const updateContent = async (id, data) => {
   if (!data.media && (data.singleImage || data.galleryImages)) {
     const type = data.type || existing.type;
     if (type === "CAMPAIGN") {
-      data.media = [data.singleImage, ...(data.galleryImages || [])].filter(Boolean);
+      data.media = [data.singleImage, ...(data.galleryImages || [])].filter(
+        Boolean,
+      );
     } else if (data.singleImage) {
       data.media = [data.singleImage];
     }
@@ -135,11 +139,17 @@ const updateContent = async (id, data) => {
   if (resolvedType !== "POPUP") {
     data.popupType = null;
   }
-  const resolvedActive = data.active !== undefined ? data.active : existing.active;
+  const resolvedActive =
+    data.active !== undefined ? data.active : existing.active;
   const resolvedPlacements =
     data.placements !== undefined ? data.placements : existing.placements;
 
-  if (resolvedType === "POPUP" && resolvedActive && resolvedPlacements && resolvedPlacements.length > 0) {
+  if (
+    resolvedType === "POPUP" &&
+    resolvedActive &&
+    resolvedPlacements &&
+    resolvedPlacements.length > 0
+  ) {
     // Deactivate any other existing active popups for overlapping placements
     await Content.updateMany(
       {
@@ -148,7 +158,7 @@ const updateContent = async (id, data) => {
         active: true,
         placements: { $in: resolvedPlacements },
       },
-      { $set: { active: false } }
+      { $set: { active: false } },
     );
   }
 
@@ -174,7 +184,11 @@ const updateContent = async (id, data) => {
     }
   }
 
-  const content = await Content.findByIdAndUpdate(id, { $set: data }, { new: true, runValidators: true });
+  const content = await Content.findByIdAndUpdate(
+    id,
+    { $set: data },
+    { new: true, runValidators: true },
+  );
   return content;
 };
 
@@ -188,14 +202,16 @@ const deleteContent = async (id) => {
 
 const listContent = async (query = {}) => {
   const { page = 1, limit = 10, type, placement, active } = query;
-  
+
   const filter = {};
   if (type) filter.type = type;
   if (placement) filter.placements = placement;
   if (active !== undefined)
     filter.active = active === "true" || active === true;
 
-  let queryBuilder = Content.find(filter).populate("ruleSetId", "name").sort({ sortOrder: 1, createdAt: -1 });
+  let queryBuilder = Content.find(filter)
+    .populate("ruleSetId", "name")
+    .sort({ sortOrder: 1, createdAt: -1 });
 
   if (page && limit) {
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -206,18 +222,16 @@ const listContent = async (query = {}) => {
 
   const [data, total] = await Promise.all([
     queryBuilder,
-    Content.countDocuments(filter)
+    Content.countDocuments(filter),
   ]);
 
-  return { 
-    data, 
-    total, 
-    page: page ? parseInt(page) : 1, 
-    limit: limit ? parseInt(limit) : total 
+  return {
+    data,
+    total,
+    page: page ? parseInt(page) : 1,
+    limit: limit ? parseInt(limit) : total,
   };
 };
-
-
 
 const filterContentsByRuleSet = async (contents, user) => {
   if (!user) {
@@ -235,14 +249,17 @@ const filterContentsByRuleSet = async (contents, user) => {
         const evaluation = await ruleSetEvaluator.evaluateRuleSet(
           ruleSet,
           user,
-          { targetId: content._id }
+          { targetId: content._id },
         );
         if (evaluation.eligible) {
           filtered.push(content);
         }
       }
     } catch (err) {
-      console.error(`Error evaluating ruleset for content ${content._id}:`, err.message);
+      console.error(
+        `Error evaluating ruleset for content ${content._id}:`,
+        err.message,
+      );
     }
   }
   return filtered;
@@ -360,7 +377,6 @@ const getContentDetails = async (id) => {
   }
   return content;
 };
-
 
 module.exports = {
   createContent,

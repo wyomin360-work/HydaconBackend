@@ -16,7 +16,10 @@ const createContentRequestType = {
       type: "string",
       enum: ALLOWED_TYPES,
     },
-    placements: { type: "array", items: { type: "string", enum: ALLOWED_PLACEMENTS } },
+    placements: {
+      type: "array",
+      items: { type: "string", enum: ALLOWED_PLACEMENTS },
+    },
     images: {
       type: "object",
       properties: {
@@ -42,7 +45,10 @@ const createContentRequestType = {
     dismissible: { type: "boolean" },
     showOnce: { type: "boolean" },
     frequency: { type: "string", enum: ALLOWED_FREQUENCIES },
-    popupType: { type: ["string", "null"], enum: [...ALLOWED_POPUP_TYPES, null] },
+    popupType: {
+      type: ["string", "null"],
+      enum: [...ALLOWED_POPUP_TYPES, null],
+    },
     ruleSetId: { type: ["string", "null"] },
     tags: { type: "array", items: { type: "string" } },
     bodyText: { type: "string" },
@@ -64,7 +70,10 @@ const updateContentRequestType = {
       type: "string",
       enum: ALLOWED_TYPES,
     },
-    placements: { type: "array", items: { type: "string", enum: ALLOWED_PLACEMENTS } },
+    placements: {
+      type: "array",
+      items: { type: "string", enum: ALLOWED_PLACEMENTS },
+    },
     images: {
       type: "object",
       properties: {
@@ -90,7 +99,10 @@ const updateContentRequestType = {
     dismissible: { type: "boolean" },
     showOnce: { type: "boolean" },
     frequency: { type: "string", enum: ALLOWED_FREQUENCIES },
-    popupType: { type: ["string", "null"], enum: [...ALLOWED_POPUP_TYPES, null] },
+    popupType: {
+      type: ["string", "null"],
+      enum: [...ALLOWED_POPUP_TYPES, null],
+    },
     ruleSetId: { type: ["string", "null"] },
     tags: { type: "array", items: { type: "string" } },
     bodyText: { type: "string" },

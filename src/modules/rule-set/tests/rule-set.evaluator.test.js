@@ -313,10 +313,7 @@ describe("RuleSet Evaluator", () => {
       const Product = mongoose.model("Product");
       const Redeem = mongoose.model("Redeem");
 
-      Product.session.mockResolvedValue([
-        { _id: "prod1" },
-        { _id: "prod2" },
-      ]);
+      Product.session.mockResolvedValue([{ _id: "prod1" }, { _id: "prod2" }]);
       Redeem.session.mockResolvedValue(10);
 
       const ruleSet = {
@@ -381,9 +378,7 @@ describe("RuleSet Evaluator", () => {
       const ruleSet = {
         active: true,
         logicOperator: RuleLogicOperator.AND,
-        rules: [
-          { type: RuleType.TIER, operator: RuleOperator.GTE, value: 2 },
-        ],
+        rules: [{ type: RuleType.TIER, operator: RuleOperator.GTE, value: 2 }],
       };
 
       const result = await ruleSetEvaluator.evaluateRuleSet(

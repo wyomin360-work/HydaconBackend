@@ -5,6 +5,7 @@
 When displaying dynamic content—such as **Popups, Banners, Announcements, and Bottom Sheets**—on mobile or web applications, multiple content items may target the same user at the exact same time on the exact same placement (e.g. `HOME_PAGE_OPENING`).
 
 Without proper conflict management:
+
 - Two popups will attempt to open on top of each other, freezing or corrupting the user interface.
 - Users will experience fatigue from duplicate notifications.
 
@@ -32,17 +33,18 @@ A conflict between two CMS content items occurs ONLY when all three of the follo
 
 When an administrator creates or updates a content item (e.g., a Popup), the system evaluates its targeting rules and date ranges against existing active items.
 
-| Conflict Scenario | System Action & Priority Resolution |
-| :--- | :--- |
-| **Scenario A: Identical Specificity (`AND` vs `AND`)** | **Auto-Deactivate Older Item**. The newer popup supersedes the old one (`active = false`). |
-| **Scenario B: Mixed Specificity (`AND` vs `OR`)** | **`AND` Takes Priority in Delivery Query**. Both can stay active, but `AND` is evaluated & served first because it is more specific. |
-| **Scenario C: Universal (No RuleSet) vs Targeted/New** | **Deactivate Older Universal Item**. A targeted or newer item takes precedence over generic older content on that placement. |
+| Conflict Scenario                                      | System Action & Priority Resolution                                                                                                  |
+| :----------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------- |
+| **Scenario A: Identical Specificity (`AND` vs `AND`)** | **Auto-Deactivate Older Item**. The newer popup supersedes the old one (`active = false`).                                           |
+| **Scenario B: Mixed Specificity (`AND` vs `OR`)**      | **`AND` Takes Priority in Delivery Query**. Both can stay active, but `AND` is evaluated & served first because it is more specific. |
+| **Scenario C: Universal (No RuleSet) vs Targeted/New** | **Deactivate Older Universal Item**. A targeted or newer item takes precedence over generic older content on that placement.         |
 
 ---
 
 ### Detailed Breakdown of Scenarios
 
 ### Scenario A: Identical Specificity (`AND` vs `AND`)
+
 - **Example**:
   - **Existing Popup (`MY POPUP`)**:
     - Placement: `HOME_PAGE_OPENING`
@@ -61,6 +63,7 @@ When an administrator creates or updates a content item (e.g., a Popup), the sys
 ---
 
 ### Scenario B: Mixed Specificity (`AND` vs `OR`)
+
 - **Example**:
   - **Item 1**: RuleSet uses strict `AND` (`USER_ROLE = MASON` **AND** `TIER = SILVER`).
   - **Item 2**: RuleSet uses broad `OR` (`USER_ROLE = MASON` **OR** `TIER = SILVER`).
@@ -73,6 +76,7 @@ When an administrator creates or updates a content item (e.g., a Popup), the sys
 ---
 
 ### Scenario C: Universal Content (No RuleSet attached)
+
 - **Example**:
   - **Existing Popup**: Universal "Welcome to Hydacon" popup with **No RuleSet** (all users see it) on `HOME_PAGE_OPENING`.
   - **New Content**: A new specific Popup (or a new Universal Popup) is added for `HOME_PAGE_OPENING` during overlapping dates.
@@ -124,7 +128,9 @@ async function resolveCMSConflicts(newContent, session) {
       // Deactivate older conflicting content
       item.active = false;
       await item.save({ session });
-      console.log(`[CMS Conflict Resolution] Deactivated older content: "${item.title}" (${item._id}) in favor of "${newContent.title}"`);
+      console.log(
+        `[CMS Conflict Resolution] Deactivated older content: "${item.title}" (${item._id}) in favor of "${newContent.title}"`,
+      );
     }
   }
 }

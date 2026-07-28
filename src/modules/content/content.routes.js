@@ -69,7 +69,7 @@ router.get(contentPaths.APP_DETAILS, handleError(controller.getContentDetails));
 router.post(
   contentPaths.APP_TRACK_VIEW,
   verification.verifyUser,
-  handleError(controller.trackContentView)
+  handleError(controller.trackContentView),
 );
 
 module.exports = router;

@@ -78,7 +78,9 @@ const extractActualValue = async (rule, user, context, session) => {
           seasonId: activeSeason._id,
         }).session(session);
         if (progress && progress.currentTierId) {
-          tierObj = await Tier.findById(progress.currentTierId).session(session);
+          tierObj = await Tier.findById(progress.currentTierId).session(
+            session,
+          );
         }
       } else {
         if (user.currentTierId) {
@@ -89,7 +91,9 @@ const extractActualValue = async (rule, user, context, session) => {
       if (!tierObj) return -1;
 
       const expectedValue = rule.value;
-      const isObjectId = typeof expectedValue === "string" && /^[0-9a-fA-F]{24}$/.test(expectedValue);
+      const isObjectId =
+        typeof expectedValue === "string" &&
+        /^[0-9a-fA-F]{24}$/.test(expectedValue);
       if (isObjectId) {
         return tierObj._id.toString();
       }

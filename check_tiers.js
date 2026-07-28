@@ -1,7 +1,9 @@
 const mongoose = require("mongoose");
 require("dotenv").config({ path: "./.env" });
 
-const MONGODB_URL = process.env.MONGODB_URL || "mongodb+srv://hydaconcom_db_user:S42xKUTly8GuA33y@cluster0.xb0jt4a.mongodb.net/?appName=Cluster0";
+const MONGODB_URL =
+  process.env.MONGODB_URL ||
+  "mongodb+srv://hydaconcom_db_user:S42xKUTly8GuA33y@cluster0.xb0jt4a.mongodb.net/?appName=Cluster0";
 
 const TierSchema = require("./src/schemas/tier.schema");
 
@@ -11,7 +13,7 @@ async function run() {
 
   const tiers = await Tier.find({});
   console.log("\n--- TIERS IN DATABASE ---");
-  tiers.forEach(t => {
+  tiers.forEach((t) => {
     console.log(`ID: ${t._id}`);
     console.log(`Name: ${t.name}`);
     console.log(`Rank: ${t.rank}`);

@@ -99,24 +99,34 @@ Client Request (User Token) ──► Content Controller
 ### 2.3 Use Cases & Targeting Scenarios
 
 #### 📢 Role-Based Banners & Promotions
+
 Show tailored promotional banners on the Home Dashboard based on user type:
+
 - **Mason Only**: Banners offering double hydacoins for scanning bag QR codes (`USER_ROLE = MASON`).
 - **Contractor Only**: Banners promoting bulk purchasing tiers (`USER_ROLE = CONTRACTOR`).
 
 #### 🔔 Tier & Season Achievement Popups
+
 Trigger modal popups or bottom sheets dynamically based on user loyalty rank:
+
 - **Gold & Platinum Members Only**: Display a exclusive VIP gift popup when user's seasonal tier reaches `GOLD` (`SEASON_TIER = GOLD` or `SEASON_RANK >= 3`).
 
 #### 📍 Regional & Location-Specific Announcements
+
 Deliver targeted alerts based on geography:
+
 - **State/District Specific Announcements**: Show emergency distribution announcements or regional meeting cards to users operating in `"North"` or state `"Punjab"` (`REGION IN ["Punjab", "Haryana"]`).
 
 #### 💡 Profile & Verification Nudges
+
 Display sticky action cards or dismissible popups to guide onboarding:
+
 - **Unverified Users**: Show a bottom sheet urging users to submit documents if `KYC_COMPLETED = false` or `PROFILE_COMPLETED = false`.
 
 #### 🔥 Gamification & Engagement Milestones
+
 Congratulate and engage active users:
+
 - **Streak Celebrations**: Display a popup card when a user reaches a 7-day scan streak (`STREAK >= 7`).
 - **High Scanners**: Display exclusive reward teasers for users with over 50 scans this month (`SCAN_COUNT >= 50` with scope `MONTH`).
 
@@ -130,17 +140,17 @@ The system schemas are defined in `src/schemas/rule-set.schema.js` and `src/sche
 
 A `RuleSet` is a collection of conditions grouped by a logical operator (`AND` / `OR`).
 
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `name` | `String` (Required) | Human-readable identifier for the rule set. |
-| `description` | `String` | Brief description of purpose/intent. |
-| `active` | `Boolean` (Default: `true`) | Global toggle. Inactive rule sets immediately fail evaluation. |
-| `logicOperator` | `String` (`AND` \| `OR`) | Defines how rule conditions are combined. |
-| `rules` | `Rule[]` | Array of rule objects. |
-| `tags` | `String[]` | Organizational metadata (e.g. `["banner", "popup", "mason"]`). |
-| `version` | `Number` | Automatically incremented on updates for auditability. |
-| `validFrom` | `Date` | Evaluation start timestamp (optional). |
-| `validUntil` | `Date` | Expiration timestamp (optional). |
+| Field           | Type                        | Description                                                    |
+| :-------------- | :-------------------------- | :------------------------------------------------------------- |
+| `name`          | `String` (Required)         | Human-readable identifier for the rule set.                    |
+| `description`   | `String`                    | Brief description of purpose/intent.                           |
+| `active`        | `Boolean` (Default: `true`) | Global toggle. Inactive rule sets immediately fail evaluation. |
+| `logicOperator` | `String` (`AND` \| `OR`)    | Defines how rule conditions are combined.                      |
+| `rules`         | `Rule[]`                    | Array of rule objects.                                         |
+| `tags`          | `String[]`                  | Organizational metadata (e.g. `["banner", "popup", "mason"]`). |
+| `version`       | `Number`                    | Automatically incremented on updates for auditability.         |
+| `validFrom`     | `Date`                      | Evaluation start timestamp (optional).                         |
+| `validUntil`    | `Date`                      | Expiration timestamp (optional).                               |
 
 ### 3.2 Rule Schema
 
@@ -156,13 +166,13 @@ Each rule inside a `RuleSet` contains:
 }
 ```
 
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `type` | `RuleType` (Required) | The metric or attribute being evaluated. |
-| `scope` | `RuleScope` (Optional) | Temporal or categorical boundary (e.g. `WEEK`, `SEASON`, `PRODUCT`). |
-| `operator` | `RuleOperator` (Required) | Comparison operator (`>=`, `<=`, `=`, `!=`, `IN`, `NOT_IN`). |
-| `value` | `Mixed` (Required) | Expected value (number, string, boolean, array). |
-| `metadata` | `Mixed` | Contextual parameters (e.g. `targetProduct`, `targetCategory`, `targetGift`). |
+| Field      | Type                      | Description                                                                   |
+| :--------- | :------------------------ | :---------------------------------------------------------------------------- |
+| `type`     | `RuleType` (Required)     | The metric or attribute being evaluated.                                      |
+| `scope`    | `RuleScope` (Optional)    | Temporal or categorical boundary (e.g. `WEEK`, `SEASON`, `PRODUCT`).          |
+| `operator` | `RuleOperator` (Required) | Comparison operator (`>=`, `<=`, `=`, `!=`, `IN`, `NOT_IN`).                  |
+| `value`    | `Mixed` (Required)        | Expected value (number, string, boolean, array).                              |
+| `metadata` | `Mixed`                   | Contextual parameters (e.g. `targetProduct`, `targetCategory`, `targetGift`). |
 
 ---
 
@@ -176,11 +186,12 @@ const { eligible, reasons, evaluatedRules } = await evaluateRuleSet(
   user,
   context,
   session,
-  auditMode
+  auditMode,
 );
 ```
 
 ### 4.1 Pre-Evaluation Validity Checks
+
 1. **Activity Check**: If `ruleSet.active === false`, evaluation immediately returns `{ eligible: false, reasons: ["Rule set is not active"] }`.
 2. **Time Window Check**:
    - If `validFrom` is in the future, returns `reasons: ["Rule set is not yet valid"]`.
@@ -188,6 +199,7 @@ const { eligible, reasons, evaluatedRules } = await evaluateRuleSet(
 3. **Empty RuleSet Check**: An empty `rules` array returns `{ eligible: true, reasons: [] }`.
 
 ### 4.2 Evaluation Modes
+
 - **Audit Mode (`auditMode = true`) [Default]**: Runs all rules concurrently via `Promise.all()` to evaluate every condition. This prevents N+1 query latency while gathering full feedback/reasons on why a user failed eligibility.
 - **Fast-Fail Mode (`auditMode = false`)**: Evaluates rules sequentially. With `AND` logic, it stops on the first failed rule; with `OR` logic, it stops on the first satisfied rule.
 
@@ -196,44 +208,49 @@ const { eligible, reasons, evaluatedRules } = await evaluateRuleSet(
 ## 5. Rule Types & Supported Metrics
 
 ### 👤 User Profile & Role Attributes
-| RuleType | Description | Evaluation Logic |
-| :--- | :--- | :--- |
-| `USER_ROLE` | User's role classification | Compares against `user.roleId`. Supports special string `"BOTH"` / `"ALL"`. |
-| `REGION` | Geography / Area of Operation | Compares `user.areaOfOperation` against strings or location objects (`{ state, country, district }`). |
-| `PROFILE_COMPLETED` | Profile completeness | Checks if `user.profileCompletionPercentage === 100`. |
-| `ADDRESS_COMPLETED` | Address availability | Checks if `!!user.areaOfOperation`. |
-| `KYC_COMPLETED` | KYC Verification | Checks if `user.kycStatus === "APPROVED"`. |
+
+| RuleType            | Description                   | Evaluation Logic                                                                                      |
+| :------------------ | :---------------------------- | :---------------------------------------------------------------------------------------------------- |
+| `USER_ROLE`         | User's role classification    | Compares against `user.roleId`. Supports special string `"BOTH"` / `"ALL"`.                           |
+| `REGION`            | Geography / Area of Operation | Compares `user.areaOfOperation` against strings or location objects (`{ state, country, district }`). |
+| `PROFILE_COMPLETED` | Profile completeness          | Checks if `user.profileCompletionPercentage === 100`.                                                 |
+| `ADDRESS_COMPLETED` | Address availability          | Checks if `!!user.areaOfOperation`.                                                                   |
+| `KYC_COMPLETED`     | KYC Verification              | Checks if `user.kycStatus === "APPROVED"`.                                                            |
 
 ### 🏆 Loyalty Tiers & Seasons
-| RuleType | Description | Evaluation Logic |
-| :--- | :--- | :--- |
-| `TIER` | General / Seasonal Tier Rank | Queries `Tier` model rank for user's `currentTierId` or active season tier. |
-| `SEASON_POINTS` | Current Season Points | Queries `UserTierProgress.currentPoint` for active `LoyaltySeason`. |
-| `SEASON_TIER` | Current Season Tier ID | Queries `UserTierProgress.currentTierId` for active `LoyaltySeason`. |
-| `SEASON_RANK` | Current Season Tier Rank | Queries `Tier.rank` based on `UserTierProgress` in active `LoyaltySeason`. |
+
+| RuleType        | Description                  | Evaluation Logic                                                            |
+| :-------------- | :--------------------------- | :-------------------------------------------------------------------------- |
+| `TIER`          | General / Seasonal Tier Rank | Queries `Tier` model rank for user's `currentTierId` or active season tier. |
+| `SEASON_POINTS` | Current Season Points        | Queries `UserTierProgress.currentPoint` for active `LoyaltySeason`.         |
+| `SEASON_TIER`   | Current Season Tier ID       | Queries `UserTierProgress.currentTierId` for active `LoyaltySeason`.        |
+| `SEASON_RANK`   | Current Season Tier Rank     | Queries `Tier.rank` based on `UserTierProgress` in active `LoyaltySeason`.  |
 
 ### 💰 Balances, Counter & Gamification
-| RuleType | Description | Evaluation Logic |
-| :--- | :--- | :--- |
-| `HYDACOINS` | Hydacoin Wallet Balance | `user.hydaconCoins \|\| 0` |
-| `CASH_BALANCE` | Cash Wallet Balance | `user.cashBalance \|\| 0` |
-| `REDEEM_POINTS` | Total Point Balance | `user.totalPoints \|\| 0` |
-| `REFERRALS` | Total Referral Count | `user.referralsCount \|\| 0` |
+
+| RuleType               | Description               | Evaluation Logic                       |
+| :--------------------- | :------------------------ | :------------------------------------- |
+| `HYDACOINS`            | Hydacoin Wallet Balance   | `user.hydaconCoins \|\| 0`             |
+| `CASH_BALANCE`         | Cash Wallet Balance       | `user.cashBalance \|\| 0`              |
+| `REDEEM_POINTS`        | Total Point Balance       | `user.totalPoints \|\| 0`              |
+| `REFERRALS`            | Total Referral Count      | `user.referralsCount \|\| 0`           |
 | `SUCCESSFUL_REFERRALS` | Successful Referral Count | `user.successfulReferralsCount \|\| 0` |
-| `STREAK` | Activity Streak | `user.currentStreak \|\| 0` |
+| `STREAK`               | Activity Streak           | `user.currentStreak \|\| 0`            |
 
 ### 🔍 Scans & Temporal Activity
-| RuleType | Description | Scope Support & Filtering |
-| :--- | :--- | :--- |
-| `SCAN_COUNT` | Scans / Redemptions Count | Counts `Redeem` documents filtering by `user._id` + scope date range (`MONTH`, `WEEK`, `SEASON`). |
-| `PRODUCT_SCAN` | Product-specific Scans | Counts `Redeem` for `metadata.targetProduct._id` or `metadata.targetId`. |
-| `CATEGORY_SCAN` | Category-specific Scans | Queries `Product` IDs under category and counts `Redeem` documents matching those IDs. |
+
+| RuleType        | Description               | Scope Support & Filtering                                                                         |
+| :-------------- | :------------------------ | :------------------------------------------------------------------------------------------------ |
+| `SCAN_COUNT`    | Scans / Redemptions Count | Counts `Redeem` documents filtering by `user._id` + scope date range (`MONTH`, `WEEK`, `SEASON`). |
+| `PRODUCT_SCAN`  | Product-specific Scans    | Counts `Redeem` for `metadata.targetProduct._id` or `metadata.targetId`.                          |
+| `CATEGORY_SCAN` | Category-specific Scans   | Queries `Product` IDs under category and counts `Redeem` documents matching those IDs.            |
 
 ### ⛔ Redemption Limits
-| RuleType | Description | Evaluation Logic |
-| :--- | :--- | :--- |
+
+| RuleType                   | Description                  | Evaluation Logic                                                                     |
+| :------------------------- | :--------------------------- | :----------------------------------------------------------------------------------- |
 | `MAX_REDEMPTIONS_PER_USER` | Per-user Gift Redemption Cap | Counts `GiftRedemption` documents for `userId` + `giftId` (`metadata` or `context`). |
-| `MAX_GLOBAL_REDEMPTIONS` | Global Gift Redemption Cap | Counts total `GiftRedemption` documents globally for `giftId`. |
+| `MAX_GLOBAL_REDEMPTIONS`   | Global Gift Redemption Cap   | Counts total `GiftRedemption` documents globally for `giftId`.                       |
 
 ---
 
@@ -241,12 +258,12 @@ const { eligible, reasons, evaluatedRules } = await evaluateRuleSet(
 
 The evaluator includes `applyScopeFilter()` to apply temporal boundaries to query filters (`createdAt`):
 
-| Scope (`RuleScope`) | Applied Date Boundary |
-| :--- | :--- |
-| `MONTH` | `createdAt >= start of current month (00:00:00)` |
-| `WEEK` | `createdAt >= start of current week (Sunday 00:00:00)` |
-| `SEASON` | `createdAt >= activeSeason.startDate` AND `<= activeSeason.endDate` |
-| `TOTAL` / `PRODUCT` / `CATEGORY` | No date boundary applied. |
+| Scope (`RuleScope`)              | Applied Date Boundary                                               |
+| :------------------------------- | :------------------------------------------------------------------ |
+| `MONTH`                          | `createdAt >= start of current month (00:00:00)`                    |
+| `WEEK`                           | `createdAt >= start of current week (Sunday 00:00:00)`              |
+| `SEASON`                         | `createdAt >= activeSeason.startDate` AND `<= activeSeason.endDate` |
+| `TOTAL` / `PRODUCT` / `CATEGORY` | No date boundary applied.                                           |
 
 ---
 
@@ -267,19 +284,20 @@ Comparison behavior in `applyOperator()` handles type coercion gracefully:
 
 RuleSets can be managed by administrators via REST endpoints registered in `src/modules/rule-set/rule-set.routes.js`:
 
-| Method | Path | Action |
-| :--- | :--- | :--- |
-| `GET` | `/api/v1/rule-sets` | List all RuleSets (Supports search, pagination, active filter). |
-| `POST` | `/api/v1/rule-sets` | Create a new RuleSet. |
-| `GET` | `/api/v1/rule-sets/:id` | Fetch RuleSet details by ID. |
-| `PUT` | `/api/v1/rule-sets/:id` | Update an existing RuleSet (increments version). |
-| `DELETE` | `/api/v1/rule-sets/:id` | Delete a RuleSet. |
+| Method   | Path                    | Action                                                          |
+| :------- | :---------------------- | :-------------------------------------------------------------- |
+| `GET`    | `/api/v1/rule-sets`     | List all RuleSets (Supports search, pagination, active filter). |
+| `POST`   | `/api/v1/rule-sets`     | Create a new RuleSet.                                           |
+| `GET`    | `/api/v1/rule-sets/:id` | Fetch RuleSet details by ID.                                    |
+| `PUT`    | `/api/v1/rule-sets/:id` | Update an existing RuleSet (increments version).                |
+| `DELETE` | `/api/v1/rule-sets/:id` | Delete a RuleSet.                                               |
 
 ---
 
 ## 9. Practical Examples
 
 ### 9.1 Content Banner Audience Targeting Example (JSON)
+
 "Display this promo banner ONLY to Gold Tier Masons in North Region":
 
 ```json
@@ -342,7 +360,7 @@ async function getTargetedBanners(placement, user, session) {
       user,
       {},
       session,
-      false // Fast-fail for speedy UI response
+      false, // Fast-fail for speedy UI response
     );
 
     if (evaluation.eligible) {
