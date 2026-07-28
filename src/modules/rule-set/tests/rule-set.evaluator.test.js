@@ -59,13 +59,6 @@ jest.mock("mongoose", () => {
   return mockMongoose;
 });
 
-const ruleSetEvaluator = require("../../src/modules/rule-set/rule-set.evaluator");
-const {
-  RuleType,
-  RuleScope,
-  RuleOperator,
-  RuleLogicOperator,
-} = require("../../src/schemas/rule-set.schema");
 
 describe("RuleSet Evaluator", () => {
   let mockUser;
