@@ -13,6 +13,21 @@ async function sendFcmNotifications(tokens, title, body, data) {
     },
     token,
     data: data || {},
+    android: {
+      priority: 'high',
+      ttl: 60 * 1000, // 60 seconds — drop stale notifications
+      notification: {
+        channelId: 'common_notifications',
+        priority: 'high',
+        defaultSound: true,
+        defaultVibrateTimings: true,
+      },
+    },
+    apns: {
+      headers: {
+        'apns-priority': '10', // iOS immediate delivery
+      },
+    },
   }));
 
   try {

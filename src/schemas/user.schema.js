@@ -128,6 +128,7 @@ const userSchema = new mongoose.Schema(
     referralRewardedMilestones: { type: [Number], default: [] },
     // Tracks completed transactional referral milestones (e.g. phone transfer, QR payment)
     completedReferralMilestones: { type: [String], default: [] },
+    language: { type: String, enum: ["en_US", "ml"], default: "en_US" },
   },
   {
     timestamps: true,

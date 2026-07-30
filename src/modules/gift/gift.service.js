@@ -5,7 +5,7 @@ const GiftRedemption = require("../../schemas/gift-redemption.schema");
 const Document = require("../../schemas/document.schema");
 const User = require("../../schemas/user.schema");
 const { GIFT_REDEMPTION_STATUS } = require("../../constants/gift");
-const { APP_NOTIFICATIONS } = require("../../constants/notifications");
+const { APP_NOTIFICATIONS, getNotification } = require("../../constants/notifications");
 const { getPaginationParams, attachId } = require("../../utils/heplers");
 const { RuleSet } = require("../../schemas/rule-set.schema");
 const ruleSetEvaluator = require("../rule-set/rule-set.evaluator");
@@ -338,15 +338,16 @@ const sendVoucherNotifications = async (user, gift, redemption) => {
     // 2. Send FCM push notification
     const fcmTokens = (user.fcmTokens || []).filter(Boolean);
     if (fcmTokens.length > 0) {
-      const notif = isFile
+      const notifTemplate = isFile
         ? APP_NOTIFICATIONS.gifts.voucherFile
         : APP_NOTIFICATIONS.gifts.voucherRedeemed;
-      const notifBody = notif.body.replace("{{giftName}}", gift.name);
-      await sendFcmNotifications(fcmTokens, notif.title, notifBody, {
+      const localizedNotif = getNotification(notifTemplate, user.language);
+      const notifBody = localizedNotif.body.replace("{{giftName}}", gift.name);
+      sendFcmNotifications(fcmTokens, localizedNotif.title, notifBody, {
         type: "voucher_redeemed",
         redemptionId: String(redemption._id),
         giftId: String(gift._id),
-      });
+      }).catch((err) => console.error("[FCM] gift voucher notification failed:", err));
     }
 
     // 3. Mark voucherSent on the redemption record

@@ -1,6 +1,6 @@
 const { REDEEM_STATUS, LIGHT_CARD_COLORS } = require("../../constants/redeem");
 const { KYC_STATUS } = require("../../constants/user");
-const { APP_NOTIFICATIONS } = require("../../constants/notifications");
+const { APP_NOTIFICATIONS, getNotification } = require("../../constants/notifications");
 const { sendFcmNotifications } = require("../../functions/fcm");
 const Product = require("../../schemas/product.schema");
 const Redeem = require("../../schemas/redeem.schema");
@@ -251,14 +251,15 @@ async function createRedeem(redeemData, reqUser = null) {
     );
   }
   if (user?.fcmTokens?.length && user?.enableNotification) {
-    await sendFcmNotifications(
+    const localizedNotif = getNotification(rewardNotification.qrScanSuccess, user.language);
+    sendFcmNotifications(
       user.fcmTokens,
-      rewardNotification.qrScanSuccess.title,
-      formatNotification(rewardNotification.qrScanSuccess.body, {
+      localizedNotif.title,
+      formatNotification(localizedNotif.body, {
         coins: weightedPoints,
         productName: product?.name,
       }),
-    );
+    ).catch((err) => console.error("[FCM] redeems scan notification failed:", err));
   }
   return {
     message: "redeem successful",

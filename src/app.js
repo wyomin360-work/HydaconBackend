@@ -11,6 +11,7 @@ const logger = require("./config/pino.config");
 const errorHandler = require("./middlewares/errorHandler");
 const globalRoutes = require("./routes/global.routes");
 const AppError = require("./utils/appError");
+const translate = require("./utils/translator");
 
 const app = express();
 app.disable("etag"); // Always return 200 with body instead of 304 Not Modified
@@ -80,6 +81,23 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.get("/", (req, res) => {
   logger.info("Root endpoint hit", { route: "/" });
   res.send({ message: "Hello World" });
+});
+
+app.use((req, res, next) => {
+  const lang = req.headers["accept-language"] || "en_US";
+  const originalJson = res.json;
+  res.json = function (body) {
+    if (body) {
+      if (typeof body.message === "string") {
+        body.message = translate(body.message, lang);
+      }
+      if (body.data && typeof body.data.message === "string") {
+        body.data.message = translate(body.data.message, lang);
+      }
+    }
+    return originalJson.call(this, body);
+  };
+  next();
 });
 
 app.use("/api/v1", globalRoutes);
