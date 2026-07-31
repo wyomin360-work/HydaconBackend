@@ -30,6 +30,8 @@ const rewardRoutes = require("../modules/rewards/rewards.routes");
 const rewardsPath = require("../modules/rewards/rewards.path");
 const redeemRoutes = require("../modules/redeems/redeems.routes");
 const redeemsPath = require("../modules/redeems/redeems.path");
+const scratchCardsRoutes = require("../modules/scratch-cards/scratch-cards.routes");
+const scratchCardsPaths = require("../modules/scratch-cards/scratch-cards.paths");
 
 // -- Transactions --
 const transactionRoutes = require("../modules/transactions/transactions.routes");
@@ -40,6 +42,10 @@ const loyaltyRoutes = require("../modules/loyalty/loyalty.routes");
 const loyaltyPaths = require("../modules/loyalty/loyalty.paths");
 const campaignsRoutes = require("../modules/campaigns/campaigns.routes");
 const campaignsPaths = require("../modules/campaigns/campaigns.paths");
+const contestsPaths = require("../modules/contests/contests.paths");
+const contestsRoutes = require("../modules/contests/contests.routes");
+const eventsPaths = require("../modules/events/events.paths");
+const eventsRoutes = require("../modules/events/events.routes");
 
 // -- Gifts --
 const giftRoutes = require("../modules/gift/gift.routes");
@@ -89,6 +95,7 @@ globalRoutes.use(productPaths.root, productRoutes);
 // Rewards & Redeems
 globalRoutes.use(rewardsPath.root, verification.verifyAdmin, rewardRoutes);
 globalRoutes.use(redeemsPath.root, redeemRoutes);
+globalRoutes.use(scratchCardsPaths.root, scratchCardsRoutes);
 
 // Transactions
 globalRoutes.use(transactionsPath.root, transactionRoutes);
@@ -96,6 +103,9 @@ globalRoutes.use(transactionsPath.root, transactionRoutes);
 // Loyalty & Campaigns
 globalRoutes.use(loyaltyPaths.root, loyaltyRoutes);
 globalRoutes.use(campaignsPaths.root, campaignsRoutes);
+globalRoutes.use(giftPaths.root, giftRoutes);
+globalRoutes.use(contestsPaths.root, contestsRoutes);
+globalRoutes.use(eventsPaths.root, eventsRoutes);
 
 // Gifts
 globalRoutes.use(giftPaths.root, giftRoutes);

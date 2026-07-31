@@ -5,6 +5,7 @@ const createRedeemRequestType = {
     productId: { type: "string", pattern: "^[0-9a-fA-F]{24}$" },
     rewardId: { type: "string", pattern: "^[0-9a-fA-F]{24}$" },
     rewardUidCode: { type: "string", minLength: 1 },
+    testRewardType: { type: "string", enum: ["POINTS", "GIFT"] },
     location: {
       type: "object",
       properties: {
@@ -41,8 +42,29 @@ const redeemIdRequestType = {
   additionalProperties: false,
 };
 
+const claimGiftRequestType = {
+  type: "object",
+  properties: {
+    shippingAddress: {
+      type: "object",
+      properties: {
+        addressLine1: { type: "string", minLength: 1 },
+        addressLine2: { type: "string" },
+        city: { type: "string", minLength: 1 },
+        state: { type: "string", minLength: 1 },
+        pincode: { type: "string", minLength: 1 },
+      },
+      required: ["addressLine1", "city", "state", "pincode"],
+      additionalProperties: false,
+    },
+  },
+  required: ["shippingAddress"],
+  additionalProperties: false,
+};
+
 module.exports = {
   createRedeemRequestType,
   listRedeemsRequestType,
   redeemIdRequestType,
+  claimGiftRequestType,
 };

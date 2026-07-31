@@ -74,19 +74,37 @@ Any endpoint receiving input payloads (POST, PATCH, PUT, DELETE with body) **mus
 
 ---
 
-## 4. Use Constants and Enums Instead of Hardcoded Text
+## 4. Strict Elimination of Hardcoded Values & Push Notifications
 
-To avoid typos and simplify system updates, never use raw hardcoded strings for statuses, types, roles, payment methods, etc.
+To maintain consistency, prevent typos, and simplify global maintenance, **never use raw hardcoded values or hardcoded notification strings in business logic or database schemas**.
 
-- Define enums in `src/constants/` files (e.g., `src/constants/user.js`).
-- Reference these enums in services, controllers, validations, and database schemas.
-- In Mongoose schemas, restrict field inputs using these enums:
+### A. Constants, Enums & Magic Numbers
+
+- **No Hardcoded Strings/Numbers**: Do not hardcode status strings, event types, tab names, error messages, success responses, query limits, distance radiuses, or time intervals inside `.service.js`, `.controller.js`, or schema files.
+- **Centralized Constants**: All application-wide enums, constants, messages, and configuration limits must be defined in `src/constants/` files (e.g., `src/constants/events.js`, `src/constants/user.js`, `src/constants/common.js`).
+- **Mongoose Schema Enums**: In Mongoose schemas, restrict field inputs using imported constant enum arrays:
   ```javascript
   status: {
     type: String,
-    enum: Object.values(KYC_DOCUMENT_STATUS),
-    default: KYC_DOCUMENT_STATUS.PENDING,
+    enum: Object.values(EVENT_STATUS),
+    default: EVENT_STATUS.UPCOMING,
   }
+  ```
+
+### B. FCM Push Notifications
+
+- **No Hardcoded Notification Texts**: Never hardcode push notification titles, body text, or notification type strings directly inside service methods or controllers.
+- **Centralized Notification Store**: All FCM notification templates (titles, bodies with `{{placeholders}}`, and type identifiers) **must** be stored inside `APP_NOTIFICATIONS` in `src/constants/notifications.js`.
+- **Formatting Helper**: Use the `formatNotification(template, data)` helper from `src/utils/heplers.js` to dynamically inject parameters into notification body templates:
+  ```javascript
+  await sendFcmNotifications(
+    user.fcmTokens,
+    APP_NOTIFICATIONS.events.invitation.title,
+    formatNotification(APP_NOTIFICATIONS.events.invitation.body, {
+      eventTitle: event.title,
+    }),
+    { type: EVENT_FCM_TYPES.EVENT_INVITATION, eventId: eventId.toString() },
+  );
   ```
 
 ---
@@ -97,3 +115,48 @@ To ensure documentation matches the actual codebase:
 
 - Every new API route or payload alteration **must** be accompanied by an update to the corresponding Swagger documentation file inside `src/docs/`.
 - Ensure headers, query parameters, request body schemas, and possible HTTP status response codes (e.g., `200`, `400`, `401`, `403`, `404`) are defined clearly.
+
+---
+
+## 6. Standardized Response Handling & Error Exceptions
+
+To ensure uniform API response structures and clean control flow:
+
+- **Controller Responses**: Controllers must format successful HTTP responses using `sendResponse(res, data, statusCode)` from `src/utils/responseHandlers.js`.
+- **Service Exceptions**: Services must throw operational errors using `sendFailResponse(message, statusCode)` from `src/utils/responseHandlers.js` (which throws an `AppError`). Do not return custom error objects or interact with `res` inside service files.
+
+---
+
+## 7. Performance & Non-Blocking Async Operations
+
+- **Read-Only Mongoose Queries**: Always use `.lean()` on read-only database queries (`find`, `findById`, `findOne`) to minimize Mongoose document overhead. Use `attachId(docs)` from `src/utils/heplers.js` to format clean `id` properties.
+- **Non-Blocking Background Operations**: Non-critical background tasks (e.g., status syncing, push notifications, background metrics) must be executed asynchronously without `await` blocking the main HTTP response thread, and must include `.catch()` error handlers to prevent unhandled promise rejections.
+- **Strict Query Parameter Parsing**: Always parse and validate numerical query parameters (e.g., `page` and `limit`) using `Math.max(1, parseInt(query.page) || 1)` to prevent string concatenation bugs during query pagination (`skip`/`limit`).
+
+---
+
+## 8. Unit Testing Requirements
+
+- **Test Colocation**: To keep modules self-contained, all feature unit test suites **must** be colocated inside their respective feature module directories under a `tests/` subfolder:
+  - Service tests: `src/modules/<feature>/tests/<feature>.test.js`
+  - Controller tests: `src/modules/<feature>/tests/<feature>.controller.test.js`
+- **Other Unit Tests**: Utility and middleware unit tests are colocated under their respective directories:
+  - Middleware tests: `src/middlewares/tests/<middleware>.test.js`
+  - Function tests: `src/functions/tests/<utility>.test.js`
+- **Centralized Integration & Setup**: The root `/tests` directory is reserved strictly for global configurations (e.g. `tests/setup.js`) and cross-module integration or system-wide E2E tests.
+- **Service Tests**: Must cover success flows, boundary conditions, error throwing (`rejects.toThrow`), capacity limits, and eligibility checks using Jest mocks (`jest.mock(...)`) for Mongoose models and third-party functions.
+- **Controller Tests**: Must verify parameter extraction (req.body, req.params, req.query, req.user) and correct delegation to service methods.
+
+---
+
+## 9. Organized & Unified Imports
+
+To maintain readability and prevent node application startup crashes:
+
+- **Top-Level Imports**: All `require(...)` statements must be placed cleanly at the top of the file. Do not use inline `require(...)` statements inside functions or conditional blocks.
+- **Dependency Hierarchy**: Organize imports logically:
+  1. Node native modules (e.g., `path`, `fs`).
+  2. Third-party dependencies (e.g., `mongoose`, `express`).
+  3. Constants, schemas, and helper utilities.
+  4. Relative service dependencies.
+- **Acyclic Architecture**: Keep feature modules decoupled. Ensure dependencies between modules are strictly unidirectional to completely avoid circular import loops.

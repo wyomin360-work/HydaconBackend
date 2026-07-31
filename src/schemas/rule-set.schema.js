@@ -29,6 +29,9 @@ const RuleScope = {
 };
 
 const RuleType = {
+  // Target User Role
+  USER_ROLE: "USER_ROLE",
+
   // Tier
   TIER: "TIER",
 
@@ -39,6 +42,10 @@ const RuleType = {
   SEASON_RANK: "SEASON_RANK",
   REDEEM_POINTS: "REDEEM_POINTS",
   CASH_BALANCE: "CASH_BALANCE",
+
+  // Current Context
+  CURRENT_PRODUCT: "CURRENT_PRODUCT",
+  CURRENT_CATEGORY: "CURRENT_CATEGORY",
 
   // Scans
   SCAN_COUNT: "SCAN_COUNT",

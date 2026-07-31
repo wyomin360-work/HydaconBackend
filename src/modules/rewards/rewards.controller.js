@@ -7,6 +7,12 @@ exports.listRewards = async (req, res) => {
   return sendResponse(res, response);
 };
 
+exports.listRewardsGroupedByDate = async (req, res) => {
+  const data = req?.body;
+  const response = await rewardService.listRewardsGroupedByDate(data);
+  return sendResponse(res, response);
+};
+
 exports.rewardDetails = async (req, res) => {
   const rewardId = req.params?.rewardId;
   const response = await rewardService.rewardDetails(rewardId);

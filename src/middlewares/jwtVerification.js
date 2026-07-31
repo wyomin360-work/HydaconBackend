@@ -23,6 +23,7 @@ async function verifyUser(req, res, next) {
   if (!user) sendFailResponse("User not found", 404);
 
   req.userId = verifiedToken?.userId;
+  req.user = user;
   next();
 }
 
@@ -48,6 +49,7 @@ async function verifyAdmin(req, res, next) {
   }
 
   req.userId = verifiedToken?.adminId;
+  req.admin = admin;
   next();
 }
 
@@ -70,6 +72,7 @@ async function verifyAdminOrUser(req, res, next) {
   let entity = await Admin.findById(verifiedToken.adminId);
   if (entity) {
     req.userId = verifiedToken.adminId;
+    req.admin = entity;
     req.role = ROLES.ADMIN;
     return next();
   }
@@ -77,6 +80,7 @@ async function verifyAdminOrUser(req, res, next) {
   entity = await User.findById(verifiedToken.userId);
   if (entity) {
     req.userId = verifiedToken.userId;
+    req.user = entity;
     req.role = ROLES.USER;
     return next();
   }

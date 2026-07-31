@@ -1,4 +1,4 @@
-const { default: mongoose } = require("mongoose");
+const mongoose = require("mongoose");
 const { REDEEM_STATUS } = require("../constants/redeem");
 
 const locationSchema = new mongoose.Schema(
@@ -45,6 +45,25 @@ const redeemSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
+    scratchCardRewardType: {
+      type: String,
+      enum: ["POINTS", "GIFT", "NONE"],
+      default: "NONE",
+    },
+    scratchCardBonusPoints: { type: Number, default: 0 },
+    scratchCardGiftId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Gift",
+    },
+    scratchCardGiftClaimed: { type: Boolean, default: false },
+    scratchCardGiftRedemptionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "GiftRedemption",
+    },
+    scratchCardCampaignId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ScratchCardRule",
+    },
   },
   { timestamps: true },
 );
@@ -69,6 +88,20 @@ redeemSchema.virtual("product", {
 redeemSchema.virtual("user", {
   ref: "User",
   localField: "userId",
+  foreignField: "_id",
+  justOne: true,
+});
+
+redeemSchema.virtual("scratchCardGift", {
+  ref: "Gift",
+  localField: "scratchCardGiftId",
+  foreignField: "_id",
+  justOne: true,
+});
+
+redeemSchema.virtual("scratchCardGiftRedemption", {
+  ref: "GiftRedemption",
+  localField: "scratchCardGiftRedemptionId",
   foreignField: "_id",
   justOne: true,
 });

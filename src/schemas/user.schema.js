@@ -117,17 +117,11 @@ const userSchema = new mongoose.Schema(
 
     failedScanAttempts: { type: Number, default: 0 },
     scanBanUntil: { type: Date, default: null },
-    referralCode: { type: String, unique: true, sparse: true, default: null },
-    referredBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      default: null,
-    },
-    // Tracks which referral scan milestones have already been rewarded.
-    // Prevents double-crediting if the same scan is processed more than once.
-    referralRewardedMilestones: { type: [Number], default: [] },
-    // Tracks completed transactional referral milestones (e.g. phone transfer, QR payment)
-    completedReferralMilestones: { type: [String], default: [] },
+
+    // viewedPopups for tracking which popups have been shown in this login session
+    viewedPopups: [
+      { type: mongoose.Schema.Types.ObjectId, ref: "Content", default: [] },
+    ],
     language: { type: String, enum: ["en_US", "ml"], default: "en_US" },
   },
   {

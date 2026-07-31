@@ -6,7 +6,11 @@
     "test": "jest",
     "start:dev": "nodemon server.js",
     "start:prod": "nodemon server.js",
-    "format": "prettier --write ."
+    "seed:events": "node scripts/seed-kerala-events.js",
+    "seed:contests": "node scripts/seed-demo-contests.js",
+    "seed:scratch-cards": "node scripts/seed-demo-scratch-cards.js",
+    "format": "prettier --write .",
+    "notify:test": "node src/scripts/sendTestNotification.js"
   },
   "author": "",
   "license": "ISC",
@@ -19,6 +23,7 @@
     "ajv-formats": "^3.0.1",
     "axios": "^1.11.0",
     "bcrypt": "^6.0.0",
+    "bullmq": "^5.80.11",
     "cors": "^2.8.5",
     "crypto": "^1.0.1",
     "dotenv": "^17.2.1",
@@ -26,6 +31,7 @@
     "firebase-admin": "^13.4.0",
     "google-auth-library": "^10.3.0",
     "handlebars": "^4.7.9",
+    "ioredis": "^5.11.1",
     "jsonwebtoken": "^9.0.3",
     "jwk-to-pem": "^2.0.7",
     "moment": "^2.30.1",

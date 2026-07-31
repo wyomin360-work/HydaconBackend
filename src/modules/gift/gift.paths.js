@@ -13,6 +13,7 @@ module.exports = {
   userEligibility: "/user/eligibility/:giftId",
   userRedemptionDetails: "/user/redemptions/:redemptionId",
   userCategoryList: "/user/categories",
+  userRewardedGifts: "/user/rewarded-gifts",
   publicCategoryList: "/public/categories/list",
 
   // Category Routes (Admin)
@@ -31,4 +32,9 @@ module.exports = {
 
   // Analytics (Admin)
   adminAnalytics: "/admin/analytics",
+
+  // Scratch Card Configuration (Admin)
+  scratchCardConfig: "/admin/scratch-card-config",
+  scratchCardRules: "/admin/scratch-card-rules",
+  scratchCardRuleDetail: "/admin/scratch-card-rules/:ruleId",
 };
