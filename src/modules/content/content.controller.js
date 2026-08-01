@@ -60,6 +60,12 @@ const getContentDetails = async (req, res, next) => {
   return sendResponse(res, data);
 };
 
+const getContentDetailsAdmin = async (req, res, next) => {
+  const { id } = req.params;
+  const data = await contentService.getContentDetailsAdmin(id);
+  return sendResponse(res, data);
+};
+
 module.exports = {
   createContent,
   updateContent,
@@ -69,4 +75,5 @@ module.exports = {
   getPlacementContent,
   trackContentView,
   getContentDetails,
+  getContentDetailsAdmin,
 };

@@ -4,6 +4,7 @@ const AppError = require("../../utils/appError");
 const { ALLOWED_PLACEMENTS } = require("../../constants/content");
 const { RuleSet } = require("../../schemas/rule-set.schema");
 const ruleSetEvaluator = require("../rule-set/rule-set.evaluator");
+const ContentAnalytics = require("../../schemas/contentAnalytics.schema");
 
 const validatePlacements = (placements) => {
   if (!placements || !Array.isArray(placements)) return;
@@ -367,6 +368,18 @@ const trackContentView = async (id, userId) => {
     $addToSet: { viewedPopups: id },
   });
 
+  // Track daily views over time
+  try {
+    const todayStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    await ContentAnalytics.findOneAndUpdate(
+      { contentId: id, date: todayStr },
+      { $inc: { views: 1 } },
+      { upsert: true, new: true },
+    );
+  } catch (err) {
+    console.error("[ContentService] Error updating content daily analytics:", err);
+  }
+
   return { message: "Content view tracked successfully", viewed: true };
 };
 
@@ -378,6 +391,55 @@ const getContentDetails = async (id) => {
   return content;
 };
 
+const getContentDetailsAdmin = async (id) => {
+  const content = await Content.findById(id).populate("ruleSetId", "name").lean();
+  if (!content) {
+    throw new AppError("Content not found", 404);
+  }
+
+  // Calculate start & end
+  const start = content.startDate ? new Date(content.startDate) : new Date(content.createdAt);
+  const now = new Date();
+  const end = (content.endDate && new Date(content.endDate) < now) ? new Date(content.endDate) : now;
+
+  // Format as YYYY-MM-DD
+  const startStr = start.toISOString().slice(0, 10);
+  const endStr = end.toISOString().slice(0, 10);
+
+  // Fetch daily analytics rows between start and end
+  const rows = await ContentAnalytics.find({
+    contentId: id,
+    date: { $gte: startStr, $lte: endStr },
+  })
+    .sort({ date: 1 })
+    .lean();
+
+  const byDate = {};
+  rows.forEach((r) => {
+    byDate[r.date] = r;
+  });
+
+  // Gap-fill all days between start and end
+  const diffTime = Math.abs(end.getTime() - start.getTime());
+  const diffDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+
+  const dailyViews = [];
+  for (let i = 0; i < diffDays; i++) {
+    const d = new Date(start);
+    d.setDate(d.getDate() + i);
+    const key = d.toISOString().slice(0, 10);
+    dailyViews.push({
+      date: key,
+      views: byDate[key]?.views ?? 0,
+    });
+  }
+
+  return {
+    ...content,
+    viewsOverTime: dailyViews,
+  };
+};
+
 module.exports = {
   createContent,
   updateContent,
@@ -387,5 +449,6 @@ module.exports = {
   getPlacementContent,
   trackContentView,
   getContentDetails,
+  getContentDetailsAdmin,
   ALLOWED_PLACEMENTS,
 };
