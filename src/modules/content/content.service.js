@@ -202,7 +202,10 @@ const deleteContent = async (id) => {
 };
 
 const listContent = async (query = {}) => {
-  const { page = 1, limit = 10, type, placement, active } = query;
+  const { type, placement, active } = query;
+  const isAll = query.isAll === "true" || query.isAll === true || query.limit === "all" || query.limit === "0" || query.limit === 0;
+  const page = parseInt(query.page) || 1;
+  const limit = isAll ? 0 : parseInt(query.limit || 10);
 
   const filter = {};
   if (type) filter.type = type;
@@ -214,11 +217,9 @@ const listContent = async (query = {}) => {
     .populate("ruleSetId", "name")
     .sort({ sortOrder: 1, createdAt: -1 });
 
-  if (page && limit) {
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    queryBuilder = queryBuilder.skip(skip).limit(parseInt(limit));
-  } else if (limit) {
-    queryBuilder = queryBuilder.limit(parseInt(limit));
+  if (limit > 0) {
+    const skip = (page - 1) * limit;
+    queryBuilder = queryBuilder.skip(skip).limit(limit);
   }
 
   const [data, total] = await Promise.all([
