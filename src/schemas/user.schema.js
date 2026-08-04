@@ -122,6 +122,7 @@ const userSchema = new mongoose.Schema(
     viewedPopups: [
       { type: mongoose.Schema.Types.ObjectId, ref: "Content", default: [] },
     ],
+    language: { type: String, enum: ["en_US", "ml"], default: "en_US" },
   },
   {
     timestamps: true,

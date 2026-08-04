@@ -59,7 +59,6 @@ jest.mock("mongoose", () => {
   return mockMongoose;
 });
 
-
 describe("RuleSet Evaluator", () => {
   let mockUser;
   let session;

@@ -22,7 +22,10 @@ const {
   LOYALTY_TRANSACTION_TYPES,
   LOYALTY_TRANSACTION_SOURCES,
 } = require("../../constants/loyalty");
-const { APP_NOTIFICATIONS } = require("../../constants/notifications");
+const {
+  APP_NOTIFICATIONS,
+  getNotification,
+} = require("../../constants/notifications");
 const { formatNotification } = require("../../utils/heplers");
 
 function normalizeDateRange(startDate, endDate) {
@@ -431,21 +434,23 @@ async function evaluateTierUpgrade(userId, seasonId) {
 
       // Dispatch FCM Push Notification
       if (user.fcmTokens?.length && user.enableNotification) {
-        try {
-          await sendFcmNotifications(
-            user.fcmTokens,
-            APP_NOTIFICATIONS.loyalty.tierUpgraded.title,
-            formatNotification(APP_NOTIFICATIONS.loyalty.tierUpgraded.body, {
-              oldTierName,
-              newTierName: newTier.name,
-            }),
-          );
-        } catch (error) {
+        const localizedNotif = getNotification(
+          APP_NOTIFICATIONS.loyalty.tierUpgraded,
+          user.language,
+        );
+        sendFcmNotifications(
+          user.fcmTokens,
+          localizedNotif.title,
+          formatNotification(localizedNotif.body, {
+            oldTierName,
+            newTierName: newTier.name,
+          }),
+        ).catch((error) =>
           console.error(
             "⚠️ Failed to send tier upgrade FCM notification:",
             error,
-          );
-        }
+          ),
+        );
       }
     }
 
@@ -1409,8 +1414,9 @@ async function recalculateSeasonTiers(seasonId) {
           ? APP_NOTIFICATIONS.loyalty.tierUpgraded
           : APP_NOTIFICATIONS.loyalty.tierUpdated;
 
-        const title = notifTemplate.title;
-        const body = formatNotification(notifTemplate.body, {
+        const localizedNotif = getNotification(notifTemplate, user.language);
+        const title = localizedNotif.title;
+        const body = formatNotification(localizedNotif.body, {
           oldTierName: notif.oldTierName,
           newTierName: notif.newTierName,
         });

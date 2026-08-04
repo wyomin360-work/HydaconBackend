@@ -25,9 +25,10 @@ const { sendFcmNotifications } = require("../functions/fcm");
 
 // ─── CLI args ────────────────────────────────────────────────────────────────
 const userId = process.argv[2] || "6968705505595e474928a310";
-const title  = process.argv[3] || "Test Notification 🔔";
-const body   = process.argv[4] || "This is a test push notification from Lubus Backend.";
-const data   = { type: "test", sentAt: new Date().toISOString() };
+const title = process.argv[3] || "Test Notification 🔔";
+const body =
+  process.argv[4] || "This is a test push notification from Lubus Backend.";
+const data = { type: "test", sentAt: new Date().toISOString() };
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -51,12 +52,16 @@ async function main() {
 
   if (!user.fcmTokens || user.fcmTokens.length === 0) {
     console.warn("\n⚠️  No FCM tokens registered for this user.");
-    console.warn("   Make sure the mobile app has called PUT /api/auth/fcm-token at least once.");
+    console.warn(
+      "   Make sure the mobile app has called PUT /api/auth/fcm-token at least once.",
+    );
     process.exit(1);
   }
 
   // 3. Send notification
-  console.log(`\n📤 Sending notification to ${user.fcmTokens.length} token(s)…`);
+  console.log(
+    `\n📤 Sending notification to ${user.fcmTokens.length} token(s)…`,
+  );
   console.log(`   Title : ${title}`);
   console.log(`   Body  : ${body}`);
 

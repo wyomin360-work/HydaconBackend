@@ -43,6 +43,7 @@ const userProfileUpdateRequestType = {
     experience: { type: "number" },
     areaOfOperation: { type: "string" },
     profilePhoto: { type: ["string", "null"] },
+    language: { type: "string", enum: ["en_US", "ml"] },
   },
   additionalProperties: false,
 };

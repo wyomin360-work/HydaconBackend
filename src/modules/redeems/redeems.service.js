@@ -1,7 +1,5 @@
 const { REDEEM_STATUS, LIGHT_CARD_COLORS } = require("../../constants/redeem");
 const { KYC_STATUS } = require("../../constants/user");
-const { APP_NOTIFICATIONS } = require("../../constants/notifications");
-const { sendFcmNotifications } = require("../../functions/fcm");
 const AppConfig = require("../../schemas/app-config.schema");
 const Product = require("../../schemas/product.schema");
 const Redeem = require("../../schemas/redeem.schema");

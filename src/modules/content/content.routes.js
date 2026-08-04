@@ -48,7 +48,7 @@ router.delete(
 router.get(
   contentPaths.ADMIN_DETAILS,
   verification.verifyAdmin,
-  handleError(controller.getContentDetails),
+  handleError(controller.getContentDetailsAdmin),
 );
 
 // App Routes (Typically accessed by mobile app)

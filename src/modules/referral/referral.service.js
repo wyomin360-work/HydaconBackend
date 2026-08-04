@@ -7,9 +7,12 @@ const {
 } = require("../../constants/referrals");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const { formatNotification } = require("../../utils/heplers");
-const { APP_NOTIFICATIONS } = require("../../constants/notifications");
 const mongoose = require("mongoose");
 const { sendFcmNotifications } = require("../../functions/fcm");
+const {
+  APP_NOTIFICATIONS,
+  getNotification,
+} = require("../../constants/notifications");
 
 // ─────────────────────────────────────────────
 // getMobileReferralStats
@@ -299,7 +302,7 @@ async function completeMilestone(userId, milestone) {
 
   // Referrer notification
   const referrerUser = await User.findById(referrerId)
-    .select("fcmTokens enableNotification")
+    .select("fcmTokens enableNotification language")
     .lean();
   if (
     referrerUser &&
@@ -307,14 +310,19 @@ async function completeMilestone(userId, milestone) {
     referrerUser.enableNotification
   ) {
     try {
+      const localizedNotif = getNotification(
+        APP_NOTIFICATIONS.milestones.referrerCompleted,
+        referrerUser.language,
+      );
+      const body = formatNotification(localizedNotif.body, {
+        friendName: user.name || user.phone || "someone",
+        milestoneName: config.name,
+        points: points,
+      });
       await sendFcmNotifications(
         referrerUser.fcmTokens,
-        APP_NOTIFICATIONS.referral.referrerMilestone.title,
-        formatNotification(APP_NOTIFICATIONS.referral.referrerMilestone.body, {
-          friendName: user.name || user.phone || "someone",
-          milestoneName: config.name,
-          points: points,
-        }),
+        localizedNotif.title,
+        body,
         { type: "REFERRAL_MILESTONE" },
       );
     } catch (err) {
@@ -325,14 +333,16 @@ async function completeMilestone(userId, milestone) {
   // Referee (referred user) notification
   if (user.fcmTokens?.length && user.enableNotification) {
     try {
-      await sendFcmNotifications(
-        user.fcmTokens,
-        APP_NOTIFICATIONS.referral.refereeMilestone.title,
-        formatNotification(APP_NOTIFICATIONS.referral.refereeMilestone.body, {
-          milestoneName: config.name,
-        }),
-        { type: "REFERRAL_MILESTONE" },
+      const localizedNotif = getNotification(
+        APP_NOTIFICATIONS.milestones.refereeCompleted,
+        user.language,
       );
+      const body = formatNotification(localizedNotif.body, {
+        milestoneName: config.name,
+      });
+      await sendFcmNotifications(user.fcmTokens, localizedNotif.title, body, {
+        type: "REFERRAL_MILESTONE",
+      });
     } catch (err) {
       console.error("FCM error for referee:", err);
     }

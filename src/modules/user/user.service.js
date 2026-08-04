@@ -1,4 +1,5 @@
 const User = require("../../schemas/user.schema");
+const PointConversion = require("../../schemas/point-conversion.schema");
 const ServiceRequest = require("../../schemas/service-request.schema");
 const RefreshToken = require("../../schemas/refreshtoken.schema");
 const { checkS3FileExists, deleteS3File } = require("../../utils/s3");
@@ -35,6 +36,10 @@ const { AuthTypes } = require("../../constants/user");
 const { encrypt, decrypt } = require("../../utils/encryption");
 const { validateIFSC } = require("../../functions/razorPay");
 const { sendFcmNotifications } = require("../../functions/fcm");
+const {
+  APP_NOTIFICATIONS,
+  getNotification,
+} = require("../../constants/notifications");
 const { sendSms } = require("../../functions/sms");
 const { sendMail } = require("../../functions/nodemailer");
 const AppConfig = require("../../schemas/app-config.schema");
@@ -161,6 +166,18 @@ async function login(userData) {
     email: userExist?.email,
   });
 
+  if (userExist?.fcmTokens?.length && userExist?.enableNotification) {
+    const localizedNotif = getNotification(
+      APP_NOTIFICATIONS.auth.login,
+      userExist.language,
+    );
+    sendFcmNotifications(
+      userExist.fcmTokens,
+      localizedNotif.title,
+      localizedNotif.body,
+    ).catch((err) => console.error("[FCM] login notification failed:", err));
+  }
+
   const { password: pw, ...rest } = attachId(userExist);
 
   return {
@@ -254,6 +271,20 @@ async function providerAuth(data) {
       email: userExist?.email,
     });
 
+    if (userExist?.fcmTokens?.length && userExist?.enableNotification) {
+      const localizedNotif = getNotification(
+        APP_NOTIFICATIONS.auth.login,
+        userExist.language,
+      );
+      sendFcmNotifications(
+        userExist.fcmTokens,
+        localizedNotif.title,
+        localizedNotif.body,
+      ).catch((err) =>
+        console.error("[FCM] provider login notification failed:", err),
+      );
+    }
+
     const { password: pw, ...rest } = attachId(userExist);
 
     return {
@@ -267,10 +298,22 @@ async function providerAuth(data) {
 // Logout User
 // ----------------------
 async function logout(userId) {
+  const user = await User.findById(userId);
+  if (user && user.fcmTokens?.length && user.enableNotification) {
+    const localizedNotif = getNotification(
+      APP_NOTIFICATIONS.auth.logout,
+      user.language,
+    );
+    sendFcmNotifications(
+      user.fcmTokens,
+      localizedNotif.title,
+      localizedNotif.body,
+    ).catch((err) => console.error("[FCM] logout notification failed:", err));
+  }
   await RefreshToken.findOneAndDelete({ userId: userId });
   await User.findByIdAndUpdate(
     userId,
-    { $addToSet: { fcmTokens: [] } },
+    { $set: { fcmTokens: [] } },
     { new: true },
   );
   return { message: "Logged Out successfully", data: { loggedOut: true } };
@@ -359,6 +402,20 @@ async function verifyOtp(data) {
       userId: user._id,
       email: user.email,
     });
+
+    if (user?.fcmTokens?.length && user?.enableNotification) {
+      const localizedNotif = getNotification(
+        APP_NOTIFICATIONS.auth.login,
+        user.language,
+      );
+      sendFcmNotifications(
+        user.fcmTokens,
+        localizedNotif.title,
+        localizedNotif.body,
+      ).catch((err) =>
+        console.error("[FCM] OTP login notification failed:", err),
+      );
+    }
 
     const { password: pw, ...rest } = attachId(user.toObject());
 
@@ -976,6 +1033,7 @@ async function updateUserProfile(data, userId) {
   if (data.areaOfOperation !== undefined)
     user.areaOfOperation = data.areaOfOperation;
   if (data.profilePhoto !== undefined) user.profilePhoto = data.profilePhoto;
+  if (data.language !== undefined) user.language = data.language;
 
   await user.save();
 
@@ -992,12 +1050,17 @@ async function updateUserProfile(data, userId) {
 // Update User settings
 // ----------------------
 async function updatePreferences(data, userId) {
-  const { enableNotification } = data;
-  const user = await User.findByIdAndUpdate(userId, { enableNotification });
+  const { enableNotification, language } = data;
+  const updateData = {};
+  if (enableNotification !== undefined)
+    updateData.enableNotification = enableNotification;
+  if (language !== undefined) updateData.language = language;
+
+  const user = await User.findByIdAndUpdate(userId, updateData, { new: true });
   if (!user) sendFailResponse("User not found");
   return {
     message: "Settings Updated Successfully",
-    data: { userPreferenceUpdated: true },
+    data: { userPreferenceUpdated: true, language: user.language },
   };
 }
 
@@ -1190,7 +1253,7 @@ async function userList(data) {
 
   const users =
     (await User.find(query)
-    .select('-password -fcmTokens -bankDetails -kycDocuments')
+      .select("-password -fcmTokens -bankDetails -kycDocuments")
       .populate("currentTierId", "name level")
       .sort(sort)
       .skip(skip)
@@ -1420,7 +1483,18 @@ async function convertPointsToCoins(userId, data) {
 
       await user.save({ session });
 
-      // Optionally create a transaction log here if a schema existed for point->coin conversion.
+      await PointConversion.create(
+        [
+          {
+            userId: user._id,
+            pointsConverted: points,
+            conversionRatio: ratio,
+            coinsReceived: coinsToAdd,
+          },
+        ],
+        { session },
+      );
+
       result = attachId(user.toObject());
     });
 
@@ -1433,6 +1507,33 @@ async function convertPointsToCoins(userId, data) {
   } finally {
     await session.endSession();
   }
+}
+
+async function getConversionHistory(userId) {
+  const user = await User.findById(userId);
+  if (!user) sendFailResponse("User not found");
+
+  const history = await PointConversion.find({ userId })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const totalPointsConverted = history.reduce(
+    (sum, item) => sum + (item.pointsConverted || 0),
+    0,
+  );
+  const totalCoinsEarned = history.reduce(
+    (sum, item) => sum + (item.coinsReceived || 0),
+    0,
+  );
+
+  return {
+    data: {
+      history: history.map((item) => attachId(item)),
+      totalPointsConverted,
+      totalCoinsEarned,
+      totalConversions: history.length,
+    },
+  };
 }
 
 async function releaseBan(userId) {
@@ -1497,6 +1598,7 @@ module.exports = {
   uploadProfilePhoto,
   flagUser,
   convertPointsToCoins,
+  getConversionHistory,
   toggleUserStatus,
   deleteUser,
   releaseBan,
