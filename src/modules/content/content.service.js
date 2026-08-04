@@ -203,7 +203,12 @@ const deleteContent = async (id) => {
 
 const listContent = async (query = {}) => {
   const { type, placement, active } = query;
-  const isAll = query.isAll === "true" || query.isAll === true || query.limit === "all" || query.limit === "0" || query.limit === 0;
+  const isAll =
+    query.isAll === "true" ||
+    query.isAll === true ||
+    query.limit === "all" ||
+    query.limit === "0" ||
+    query.limit === 0;
   const page = parseInt(query.page) || 1;
   const limit = isAll ? 0 : parseInt(query.limit || 10);
 
@@ -378,7 +383,10 @@ const trackContentView = async (id, userId) => {
       { upsert: true, new: true },
     );
   } catch (err) {
-    console.error("[ContentService] Error updating content daily analytics:", err);
+    console.error(
+      "[ContentService] Error updating content daily analytics:",
+      err,
+    );
   }
 
   return { message: "Content view tracked successfully", viewed: true };
@@ -393,15 +401,22 @@ const getContentDetails = async (id) => {
 };
 
 const getContentDetailsAdmin = async (id) => {
-  const content = await Content.findById(id).populate("ruleSetId", "name").lean();
+  const content = await Content.findById(id)
+    .populate("ruleSetId", "name")
+    .lean();
   if (!content) {
     throw new AppError("Content not found", 404);
   }
 
   // Calculate start & end
-  const start = content.startDate ? new Date(content.startDate) : new Date(content.createdAt);
+  const start = content.startDate
+    ? new Date(content.startDate)
+    : new Date(content.createdAt);
   const now = new Date();
-  const end = (content.endDate && new Date(content.endDate) < now) ? new Date(content.endDate) : now;
+  const end =
+    content.endDate && new Date(content.endDate) < now
+      ? new Date(content.endDate)
+      : now;
 
   // Format as YYYY-MM-DD
   const startStr = start.toISOString().slice(0, 10);

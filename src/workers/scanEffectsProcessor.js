@@ -6,7 +6,10 @@ const loyaltyService = require("../modules/loyalty/loyalty.service");
 const rewardsService = require("../modules/rewards/rewards.service");
 const { sendFcmNotifications } = require("../functions/fcm");
 const { formatNotification } = require("../utils/heplers");
-const { APP_NOTIFICATIONS, getNotification } = require("../constants/notifications");
+const {
+  APP_NOTIFICATIONS,
+  getNotification,
+} = require("../constants/notifications");
 
 /**
  * Orchestrates all post-transaction side effects in a background job.
@@ -60,7 +63,10 @@ async function processScanSideEffects(data) {
   // 5. Send FCM Notification (Fire-and-forget)
   if (user && user.fcmTokens?.length && user.enableNotification) {
     const rewardNotification = APP_NOTIFICATIONS.rewards;
-    const localizedNotif = getNotification(rewardNotification.qrScanSuccess, user.language);
+    const localizedNotif = getNotification(
+      rewardNotification.qrScanSuccess,
+      user.language,
+    );
     sendFcmNotifications(
       user.fcmTokens,
       localizedNotif.title,

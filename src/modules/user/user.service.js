@@ -36,7 +36,10 @@ const { AuthTypes } = require("../../constants/user");
 const { encrypt, decrypt } = require("../../utils/encryption");
 const { validateIFSC } = require("../../functions/razorPay");
 const { sendFcmNotifications } = require("../../functions/fcm");
-const { APP_NOTIFICATIONS, getNotification } = require("../../constants/notifications");
+const {
+  APP_NOTIFICATIONS,
+  getNotification,
+} = require("../../constants/notifications");
 const { sendSms } = require("../../functions/sms");
 const { sendMail } = require("../../functions/nodemailer");
 const AppConfig = require("../../schemas/app-config.schema");
@@ -164,10 +167,15 @@ async function login(userData) {
   });
 
   if (userExist?.fcmTokens?.length && userExist?.enableNotification) {
-    const localizedNotif = getNotification(APP_NOTIFICATIONS.auth.login, userExist.language);
-    sendFcmNotifications(userExist.fcmTokens, localizedNotif.title, localizedNotif.body).catch((err) =>
-      console.error("[FCM] login notification failed:", err)
+    const localizedNotif = getNotification(
+      APP_NOTIFICATIONS.auth.login,
+      userExist.language,
     );
+    sendFcmNotifications(
+      userExist.fcmTokens,
+      localizedNotif.title,
+      localizedNotif.body,
+    ).catch((err) => console.error("[FCM] login notification failed:", err));
   }
 
   const { password: pw, ...rest } = attachId(userExist);
@@ -264,9 +272,16 @@ async function providerAuth(data) {
     });
 
     if (userExist?.fcmTokens?.length && userExist?.enableNotification) {
-      const localizedNotif = getNotification(APP_NOTIFICATIONS.auth.login, userExist.language);
-      sendFcmNotifications(userExist.fcmTokens, localizedNotif.title, localizedNotif.body).catch((err) =>
-        console.error("[FCM] provider login notification failed:", err)
+      const localizedNotif = getNotification(
+        APP_NOTIFICATIONS.auth.login,
+        userExist.language,
+      );
+      sendFcmNotifications(
+        userExist.fcmTokens,
+        localizedNotif.title,
+        localizedNotif.body,
+      ).catch((err) =>
+        console.error("[FCM] provider login notification failed:", err),
       );
     }
 
@@ -285,10 +300,15 @@ async function providerAuth(data) {
 async function logout(userId) {
   const user = await User.findById(userId);
   if (user && user.fcmTokens?.length && user.enableNotification) {
-    const localizedNotif = getNotification(APP_NOTIFICATIONS.auth.logout, user.language);
-    sendFcmNotifications(user.fcmTokens, localizedNotif.title, localizedNotif.body).catch((err) =>
-      console.error("[FCM] logout notification failed:", err)
+    const localizedNotif = getNotification(
+      APP_NOTIFICATIONS.auth.logout,
+      user.language,
     );
+    sendFcmNotifications(
+      user.fcmTokens,
+      localizedNotif.title,
+      localizedNotif.body,
+    ).catch((err) => console.error("[FCM] logout notification failed:", err));
   }
   await RefreshToken.findOneAndDelete({ userId: userId });
   await User.findByIdAndUpdate(
@@ -384,9 +404,16 @@ async function verifyOtp(data) {
     });
 
     if (user?.fcmTokens?.length && user?.enableNotification) {
-      const localizedNotif = getNotification(APP_NOTIFICATIONS.auth.login, user.language);
-      sendFcmNotifications(user.fcmTokens, localizedNotif.title, localizedNotif.body).catch((err) =>
-        console.error("[FCM] OTP login notification failed:", err)
+      const localizedNotif = getNotification(
+        APP_NOTIFICATIONS.auth.login,
+        user.language,
+      );
+      sendFcmNotifications(
+        user.fcmTokens,
+        localizedNotif.title,
+        localizedNotif.body,
+      ).catch((err) =>
+        console.error("[FCM] OTP login notification failed:", err),
       );
     }
 
@@ -1025,7 +1052,8 @@ async function updateUserProfile(data, userId) {
 async function updatePreferences(data, userId) {
   const { enableNotification, language } = data;
   const updateData = {};
-  if (enableNotification !== undefined) updateData.enableNotification = enableNotification;
+  if (enableNotification !== undefined)
+    updateData.enableNotification = enableNotification;
   if (language !== undefined) updateData.language = language;
 
   const user = await User.findByIdAndUpdate(userId, updateData, { new: true });
@@ -1225,7 +1253,7 @@ async function userList(data) {
 
   const users =
     (await User.find(query)
-    .select('-password -fcmTokens -bankDetails -kycDocuments')
+      .select("-password -fcmTokens -bankDetails -kycDocuments")
       .populate("currentTierId", "name level")
       .sort(sort)
       .skip(skip)

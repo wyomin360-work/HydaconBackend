@@ -24,5 +24,8 @@ const contentAnalyticsSchema = new mongoose.Schema(
 // Compound unique index so upserts are safe
 contentAnalyticsSchema.index({ contentId: 1, date: 1 }, { unique: true });
 
-const ContentAnalytics = mongoose.model("ContentAnalytics", contentAnalyticsSchema);
+const ContentAnalytics = mongoose.model(
+  "ContentAnalytics",
+  contentAnalyticsSchema,
+);
 module.exports = ContentAnalytics;

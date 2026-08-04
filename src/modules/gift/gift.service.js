@@ -12,7 +12,10 @@ const {
   SCRATCH_CARD_MESSAGES,
   SCRATCH_CARD_ERRORS,
 } = require("../../constants/gift");
-const { APP_NOTIFICATIONS, getNotification } = require("../../constants/notifications");
+const {
+  APP_NOTIFICATIONS,
+  getNotification,
+} = require("../../constants/notifications");
 const { getPaginationParams, attachId } = require("../../utils/heplers");
 const { RuleSet } = require("../../schemas/rule-set.schema");
 const ruleSetEvaluator = require("../rule-set/rule-set.evaluator");
@@ -424,7 +427,9 @@ const sendVoucherNotifications = async (user, gift, redemption) => {
         type: "voucher_redeemed",
         redemptionId: String(redemption._id),
         giftId: String(gift._id),
-      }).catch((err) => console.error("[FCM] gift voucher notification failed:", err));
+      }).catch((err) =>
+        console.error("[FCM] gift voucher notification failed:", err),
+      );
     }
 
     // 3. Mark voucherSent on the redemption record

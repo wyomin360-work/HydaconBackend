@@ -4,7 +4,10 @@ const path = require("path");
 const sharp = require("sharp");
 const fs = require("fs");
 const { sendFcmNotifications } = require("../../functions/fcm");
-const { APP_NOTIFICATIONS, getNotification } = require("../../constants/notifications");
+const {
+  APP_NOTIFICATIONS,
+  getNotification,
+} = require("../../constants/notifications");
 const { formatNotification } = require("../../utils/heplers");
 const {
   KYC_STATUS,
@@ -326,11 +329,14 @@ async function reviewKycDocument(
   if (user.fcmTokens?.length && user.enableNotification) {
     try {
       if (user.kycStatus === KYC_STATUS.APPROVED) {
-        const localizedNotif = getNotification(APP_NOTIFICATIONS.kyc.approved, user.language);
+        const localizedNotif = getNotification(
+          APP_NOTIFICATIONS.kyc.approved,
+          user.language,
+        );
         const title = localizedNotif.title;
         const body = localizedNotif.body;
         sendFcmNotifications(user.fcmTokens, title, body).catch((err) =>
-          console.error("[FCM] KYC approved notification failed:", err)
+          console.error("[FCM] KYC approved notification failed:", err),
         );
         try {
           await referralService.completeMilestone(
@@ -341,13 +347,16 @@ async function reviewKycDocument(
           console.error("Error triggering KYC milestone:", milestoneErr);
         }
       } else if (user.kycStatus === KYC_STATUS.REJECTED) {
-        const localizedNotif = getNotification(APP_NOTIFICATIONS.kyc.rejected, user.language);
+        const localizedNotif = getNotification(
+          APP_NOTIFICATIONS.kyc.rejected,
+          user.language,
+        );
         const title = localizedNotif.title;
         const body = formatNotification(localizedNotif.body, {
           reason: rejectionReason || "Information mismatch",
         });
         sendFcmNotifications(user.fcmTokens, title, body).catch((err) =>
-          console.error("[FCM] KYC rejected notification failed:", err)
+          console.error("[FCM] KYC rejected notification failed:", err),
         );
       }
     } catch (notificationErr) {

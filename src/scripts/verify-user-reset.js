@@ -11,7 +11,9 @@ const TARGET_EMAIL = "jose.jobiin@gmail.com";
 
 async function verifyUser() {
   await mongoose.connect(process.env.MONGODB_URL);
-  const user = await User.findOne({ email: TARGET_EMAIL }).populate("currentTierId");
+  const user = await User.findOne({ email: TARGET_EMAIL }).populate(
+    "currentTierId",
+  );
   console.log("User doc state:", {
     email: user.email,
     totalPoints: user.totalPoints,
@@ -21,12 +23,17 @@ async function verifyUser() {
     currentTier: user.currentTierId ? user.currentTierId.name : null,
   });
 
-  const progress = await UserTierProgress.find({ userId: user._id }).populate("currentTierId");
-  console.log("UserTierProgress docs:", progress.map(p => ({
-    seasonId: p.seasonId,
-    currentPoint: p.currentPoint,
-    currentTier: p.currentTierId ? p.currentTierId.name : null,
-  })));
+  const progress = await UserTierProgress.find({ userId: user._id }).populate(
+    "currentTierId",
+  );
+  console.log(
+    "UserTierProgress docs:",
+    progress.map((p) => ({
+      seasonId: p.seasonId,
+      currentPoint: p.currentPoint,
+      currentTier: p.currentTierId ? p.currentTierId.name : null,
+    })),
+  );
 
   await mongoose.disconnect();
 }
