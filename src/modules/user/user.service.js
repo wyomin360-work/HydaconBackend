@@ -1,4 +1,5 @@
 const User = require("../../schemas/user.schema");
+const PointConversion = require("../../schemas/point-conversion.schema");
 const ServiceRequest = require("../../schemas/service-request.schema");
 const RefreshToken = require("../../schemas/refreshtoken.schema");
 const { checkS3FileExists, deleteS3File } = require("../../utils/s3");
@@ -1454,7 +1455,18 @@ async function convertPointsToCoins(userId, data) {
 
       await user.save({ session });
 
-      // Optionally create a transaction log here if a schema existed for point->coin conversion.
+      await PointConversion.create(
+        [
+          {
+            userId: user._id,
+            pointsConverted: points,
+            conversionRatio: ratio,
+            coinsReceived: coinsToAdd,
+          },
+        ],
+        { session },
+      );
+
       result = attachId(user.toObject());
     });
 
@@ -1467,6 +1479,33 @@ async function convertPointsToCoins(userId, data) {
   } finally {
     await session.endSession();
   }
+}
+
+async function getConversionHistory(userId) {
+  const user = await User.findById(userId);
+  if (!user) sendFailResponse("User not found");
+
+  const history = await PointConversion.find({ userId })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const totalPointsConverted = history.reduce(
+    (sum, item) => sum + (item.pointsConverted || 0),
+    0,
+  );
+  const totalCoinsEarned = history.reduce(
+    (sum, item) => sum + (item.coinsReceived || 0),
+    0,
+  );
+
+  return {
+    data: {
+      history: history.map((item) => attachId(item)),
+      totalPointsConverted,
+      totalCoinsEarned,
+      totalConversions: history.length,
+    },
+  };
 }
 
 async function releaseBan(userId) {
@@ -1531,6 +1570,7 @@ module.exports = {
   uploadProfilePhoto,
   flagUser,
   convertPointsToCoins,
+  getConversionHistory,
   toggleUserStatus,
   deleteUser,
   releaseBan,

@@ -34,4 +34,5 @@ module.exports = {
     delete: "/bank-details/delete",
   },
   convertPoints: "/convert-points",
+  conversionHistory: "/convert-points/history",
 };

@@ -178,6 +178,12 @@ exports.convertPoints = async (req, res, next) => {
   return sendResponse(res, response);
 };
 
+exports.conversionHistory = async (req, res, next) => {
+  const userId = req?.userId;
+  const response = await userService.getConversionHistory(userId);
+  return sendResponse(res, response);
+};
+
 exports.toggleUserStatus = async (req, res, next) => {
   const targetUserId = req?.params?.id;
   const data = req?.body;

@@ -172,6 +172,12 @@ router.post(
   handleError(controller.convertPoints),
 );
 
+router.get(
+  userPaths.conversionHistory,
+  verification.verifyUser,
+  handleError(controller.conversionHistory),
+);
+
 router.patch(
   userPaths.toggleStatus,
   verification.verifyAdmin,
