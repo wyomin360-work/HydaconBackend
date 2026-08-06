@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { WITHDRAWAL_STATUS } = require("../constants/withdrawals");
 
 const withdrawalSchema = new mongoose.Schema(
   {
@@ -18,8 +19,8 @@ const withdrawalSchema = new mongoose.Schema(
     status: {
       type: String,
       required: true,
-      enum: ["PENDING", "PROCESSING", "COMPLETED", "FAILED", "CANCELLED", "REVERSED"],
-      default: "PENDING",
+      enum: Object.values(WITHDRAWAL_STATUS),
+      default: WITHDRAWAL_STATUS.PENDING,
       index: true,
     },
     razorpayPayoutId: { type: String, default: null, index: true },

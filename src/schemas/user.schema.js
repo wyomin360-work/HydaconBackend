@@ -1,4 +1,5 @@
 const { default: mongoose } = require("mongoose");
+require("./user-bank-account.schema");
 const { hashData, calculateProfileCompletion } = require("../utils/heplers");
 const {
   AuthTypes,

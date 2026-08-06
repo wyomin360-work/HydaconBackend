@@ -13,6 +13,7 @@ const { sendFcmNotifications } = require("../../functions/fcm");
 const { APP_NOTIFICATIONS, getNotification } = require("../../constants/notifications");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const { attachId, formatNotification } = require("../../utils/heplers");
+const { WITHDRAWAL_STATUS } = require("../../constants/withdrawals");
 
 /**
  * User initiates a withdrawal request.
@@ -73,7 +74,7 @@ async function createWithdrawal(userId, data) {
             coinAmount,
             cashAmount,
             bankAccountId: bankAccount._id,
-            status: "PENDING",
+            status: WITHDRAWAL_STATUS.PENDING,
           },
         ],
         { session }
@@ -243,11 +244,11 @@ async function getWithdrawalsSummary() {
 
   const counts = {
     ALL: 0,
-    PENDING: 0,
-    PROCESSING: 0,
-    COMPLETED: 0,
-    FAILED: 0,
-    CANCELLED: 0,
+    [WITHDRAWAL_STATUS.PENDING]: 0,
+    [WITHDRAWAL_STATUS.PROCESSING]: 0,
+    [WITHDRAWAL_STATUS.COMPLETED]: 0,
+    [WITHDRAWAL_STATUS.FAILED]: 0,
+    [WITHDRAWAL_STATUS.CANCELLED]: 0,
     REVERSED: 0,
   };
 
@@ -275,7 +276,7 @@ async function approveWithdrawal(adminId, withdrawalId) {
     sendFailResponse("Withdrawal request not found");
   }
 
-  if (withdrawal.status !== "PENDING") {
+  if (withdrawal.status !== WITHDRAWAL_STATUS.PENDING) {
     sendFailResponse(`Cannot approve a withdrawal with ${withdrawal.status} status`);
   }
 
@@ -328,7 +329,7 @@ async function approveWithdrawal(adminId, withdrawalId) {
     const payout = await createRazorpayPayout(fundAccountId, amountInPaise, referenceId, narration);
 
     // Update Withdrawal status to PROCESSING
-    withdrawal.status = "PROCESSING";
+    withdrawal.status = WITHDRAWAL_STATUS.PROCESSING;
     withdrawal.razorpayPayoutId = payout.id;
     withdrawal.approvedBy = adminId;
     withdrawal.approvedAt = new Date();
@@ -371,8 +372,8 @@ async function cancelWithdrawal(adminId, withdrawalId, data) {
     sendFailResponse("Withdrawal request not found");
   }
 
-  if (withdrawal.status !== "PENDING") {
-    sendFailResponse(`Cannot cancel a withdrawal in ${withdrawal.status} status`);
+  if (withdrawal.status !== WITHDRAWAL_STATUS.PENDING) {
+    sendFailResponse("Only PENDING withdrawals can be approved");
   }
 
   const user = withdrawal.userId;
@@ -387,9 +388,9 @@ async function cancelWithdrawal(adminId, withdrawalId, data) {
       user.hydaconCoins = user.hydaconCoins + withdrawal.coinAmount;
       await user.save({ session });
 
-      // Cancel withdrawal request
-      withdrawal.status = "CANCELLED";
-      withdrawal.remarks = remarks;
+      // Update withdrawal to CANCELLED
+      withdrawal.status = WITHDRAWAL_STATUS.CANCELLED;
+      withdrawal.remarks = data.remarks || "Cancelled by admin";
       withdrawal.approvedBy = adminId; // tracks who cancelled it
       withdrawal.approvedAt = new Date();
       await withdrawal.save({ session });

@@ -1,26 +1,26 @@
 const mongoose = require("mongoose");
-const service = require("../../src/modules/withdrawals/withdrawals.service");
-const userService = require("../../src/modules/user/user.service");
-const webhookService = require("../../src/modules/webhooks/webhooks.service");
-const User = require("../../src/schemas/user.schema");
-const UserBankAccount = require("../../src/schemas/user-bank-account.schema");
-const Withdrawal = require("../../src/schemas/withdrawal.schema");
-const AppConfig = require("../../src/schemas/app-config.schema");
-const Role = require("../../src/schemas/role.schema");
-const { decrypt } = require("../../src/utils/encryption");
+const service = require("../../../modules/withdrawals/withdrawals.service");
+const userService = require("../../../modules/user/user.service");
+const webhookService = require("../../../modules/webhooks/webhooks.service");
+const User = require("../../../schemas/user.schema");
+const UserBankAccount = require("../../../schemas/user-bank-account.schema");
+const Withdrawal = require("../../../schemas/withdrawal.schema");
+const AppConfig = require("../../../schemas/app-config.schema");
+const Role = require("../../../schemas/role.schema");
+const { decrypt } = require("../../../utils/encryption");
 
 // Mock the external Razorpay functions
-jest.mock("../../src/functions/razorPay", () => ({
+jest.mock("../../../functions/razorPay", () => ({
   validateIFSC: jest.fn().mockResolvedValue({ BANK: "HDFC Bank", BRANCH: "MUMBAI" }),
 }));
 
-jest.mock("../../src/functions/razorpayx", () => ({
+jest.mock("../../../functions/razorpayx", () => ({
   createRazorpayContact: jest.fn().mockResolvedValue({ id: "cont_test123" }),
   createRazorpayFundAccount: jest.fn().mockResolvedValue({ id: "fa_test123" }),
   createRazorpayPayout: jest.fn().mockResolvedValue({ id: "pout_test123" }),
 }));
 
-jest.mock("../../src/functions/fcm", () => ({
+jest.mock("../../../functions/fcm", () => ({
   sendFcmNotifications: jest.fn().mockResolvedValue({ success: true }),
 }));
 

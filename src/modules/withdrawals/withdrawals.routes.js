@@ -3,6 +3,12 @@ const paths = require("./withdrawals.path");
 const verification = require("../../middlewares/jwtVerification");
 const { handleError } = require("../../utils/heplers");
 const controller = require("./withdrawals.controller");
+const validateRequest = require("../../middlewares/validator");
+const {
+  createWithdrawalRequestType,
+  cancelWithdrawalRequestType,
+  listWithdrawalsRequestType,
+} = require("../../validations/withdrawals.validations");
 
 const router = express.Router();
 
@@ -11,6 +17,7 @@ const router = express.Router();
 router.post(
   paths.createWithdrawal,
   verification.verifyUser,
+  validateRequest(createWithdrawalRequestType),
   handleError(controller.createWithdrawal)
 );
 
@@ -24,6 +31,7 @@ router.get(
 router.post(
   paths.adminList,
   verification.verifyAdmin,
+  validateRequest(listWithdrawalsRequestType),
   handleError(controller.listWithdrawals)
 );
 
@@ -48,6 +56,7 @@ router.post(
 router.post(
   paths.adminCancel,
   verification.verifyAdmin,
+  validateRequest(cancelWithdrawalRequestType),
   handleError(controller.cancelWithdrawal)
 );
 
