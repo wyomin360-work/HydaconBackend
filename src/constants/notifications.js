@@ -116,6 +116,16 @@ const APP_NOTIFICATIONS = {
         body: "പണം പിൻവലിക്കാനുള്ള നിങ്ങളുടെ അഭ്യർത്ഥന റദ്ദാക്കിയിരിക്കുന്നു, കാരണം അറിയാൻ ഇടപാട് വിവരങ്ങൾ പരിശോധിക്കുക",
       },
     },
+    reversed: {
+      en_US: {
+        title: "Reversed ↩️",
+        body: "Your withdrawal of ₹{{amount}} was reversed by the bank. Coins have been credited back.",
+      },
+      ml: {
+        title: "തിരിച്ചുനൽകി ↩️",
+        body: "നിങ്ങൾ പിൻവലിച്ച ₹{{amount}} ബാങ്ക് തിരിച്ചയച്ചു. കോയിനുകൾ തിരികെ നൽകിയിട്ടുണ്ട്.",
+      },
+    },
     approved: {
       en_US: {
         title: "Almost There ⏳",

@@ -81,6 +81,7 @@ const userSchema = new mongoose.Schema(
       type: bankDetailsSchema,
       default: () => ({}),
     },
+    razorpayContactId: { type: String, default: null },
     roleId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Role",
