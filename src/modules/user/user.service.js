@@ -1,4 +1,5 @@
 const User = require("../../schemas/user.schema");
+const UserBankAccount = require("../../schemas/user-bank-account.schema");
 const PointConversion = require("../../schemas/point-conversion.schema");
 const ServiceRequest = require("../../schemas/service-request.schema");
 const RefreshToken = require("../../schemas/refreshtoken.schema");
@@ -1056,28 +1057,28 @@ async function addFcmToken(data, userId) {
 // User Bank Details
 // ----------------------
 async function getUserBankDetails(userId) {
-  const user = await User.findById(userId).lean();
-  if (!user) sendFailResponse("User not found");
-
-  if (!user.bankDetails?.accountNumber || !user.bankDetails?.ifscCode)
-    sendFailResponse("Bank details are not added yet");
+  const bankAccount = await UserBankAccount.findOne({ userId, isActive: true }).lean();
+  if (!bankAccount) sendFailResponse("Bank details are not added yet");
 
   const accountNumber = decrypt(
-    user.bankDetails.accountNumber,
-    user.bankDetails?.accountIv,
+    bankAccount.accountNumber,
+    bankAccount.accountIv,
   );
   const ifscCode = decrypt(
-    user.bankDetails?.ifscCode,
-    user.bankDetails?.ifscIv,
+    bankAccount.ifscCode,
+    bankAccount.ifscIv,
   );
 
   if (!accountNumber || !ifscCode)
     sendFailResponse("Unable to get user bank details");
-  const { accountIv, ifscIv, ...rest } = user?.bankDetails;
+
   return {
-    ...rest,
     accountNumber: accountNumber,
     ifscCode: ifscCode,
+    userName: bankAccount.accountHolderName,
+    bankName: bankAccount.bankName,
+    branchName: bankAccount.branchName,
+    razorpayFundAccountId: bankAccount.razorpayFundAccountId,
   };
 }
 
@@ -1089,7 +1090,9 @@ async function addUserBankDetails(data, userId) {
 
   const user = await User.findById(userId);
   if (!user) sendFailResponse("User not found");
-  if (user.bankDetails?.accountNumber)
+  
+  const existingAccount = await UserBankAccount.findOne({ userId, isActive: true });
+  if (existingAccount)
     sendFailResponse(
       "user have already added account details , please update existing if need to change account",
     );
@@ -1103,17 +1106,18 @@ async function addUserBankDetails(data, userId) {
   if (!encryptedAccountNumber || !encryptedIfscCode)
     sendFailResponse("Unable to process bank details , try again");
 
-  await User.findByIdAndUpdate(userId, {
-    bankDetails: {
-      accountNumber: encryptedAccountNumber.encryptedData,
-      accountIv: encryptedAccountNumber.iv,
-      ifscCode: encryptedIfscCode.encryptedData,
-      ifscIv: encryptedIfscCode.iv,
-      userName,
-      branchName: bankInfo?.BRANCH,
-      bankName: bankInfo?.BANK,
-    },
+  await UserBankAccount.create({
+    userId,
+    accountHolderName: userName || user.name || "Unknown",
+    accountNumber: encryptedAccountNumber.encryptedData,
+    accountIv: encryptedAccountNumber.iv,
+    ifscCode: encryptedIfscCode.encryptedData,
+    ifscIv: encryptedIfscCode.iv,
+    branchName: bankInfo?.BRANCH || "Unknown Branch",
+    bankName: bankInfo?.BANK || "Unknown Bank",
+    isActive: true,
   });
+
   return {
     message: "Bank details been added successfully",
     data: { addedBankDetails: true },
@@ -1124,11 +1128,10 @@ async function addUserBankDetails(data, userId) {
 // Update Bank Details
 // ----------------------
 async function updateBankDetails(data, userId) {
-  const { accountNumber, ifscCode, userName, bankName, branchName } = data;
-  const user = await User.findById(userId);
-  if (!user) sendFailResponse("User not found");
-  if (!user.bankDetails?.accountNumber)
-    sendFailResponse("Bank details are not added yet");
+  const { accountNumber, ifscCode, userName } = data;
+  
+  const existingAccount = await UserBankAccount.findOne({ userId, isActive: true });
+  if (!existingAccount) sendFailResponse("Bank details are not added yet");
 
   const bankInfo = await validateIFSC(ifscCode);
   if (!bankInfo) sendFailResponse("Invalid ifscCode");
@@ -1139,17 +1142,22 @@ async function updateBankDetails(data, userId) {
   if (!encryptedAccountNumber || !encryptedIfscCode)
     sendFailResponse("Unable to process bank details , try again");
 
-  await User.findByIdAndUpdate(userId, {
-    bankDetails: {
-      accountNumber: encryptedAccountNumber.encryptedData,
-      accountIv: encryptedAccountNumber.iv,
-      ifscCode: encryptedIfscCode.encryptedData,
-      ifscIv: encryptedIfscCode.iv,
-      userName,
-      branchName: bankInfo?.BRANCH,
-      bankName: bankInfo?.BANK,
-    },
+  // Deactivate old account
+  await UserBankAccount.updateMany({ userId, isActive: true }, { isActive: false });
+
+  // Create new active account
+  await UserBankAccount.create({
+    userId,
+    accountHolderName: userName || "Unknown",
+    accountNumber: encryptedAccountNumber.encryptedData,
+    accountIv: encryptedAccountNumber.iv,
+    ifscCode: encryptedIfscCode.encryptedData,
+    ifscIv: encryptedIfscCode.iv,
+    branchName: bankInfo?.BRANCH || "Unknown Branch",
+    bankName: bankInfo?.BANK || "Unknown Bank",
+    isActive: true,
   });
+
   return {
     message: "Bank details been updated successfully",
     data: { updatedBankDetails: true },
@@ -1160,13 +1168,11 @@ async function updateBankDetails(data, userId) {
 // Delete Bank Details
 // ----------------------
 async function deleteBankDetails(userId) {
-  const user = await User.findById(userId);
-  if (!user) sendFailResponse("User not found");
-  if (!user.bankDetails?.accountNumber)
-    sendFailResponse("Bank details not found");
-  await User.findByIdAndUpdate(userId, {
-    bankDetails: {},
-  });
+  const existingAccount = await UserBankAccount.findOne({ userId, isActive: true });
+  if (!existingAccount) sendFailResponse("Bank details not found");
+  
+  await UserBankAccount.updateMany({ userId, isActive: true }, { isActive: false });
+
   return {
     message: "Bank details been deleted successfully",
     data: { deletedBankDetails: true },

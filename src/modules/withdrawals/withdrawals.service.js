@@ -13,7 +13,6 @@ const { sendFcmNotifications } = require("../../functions/fcm");
 const { APP_NOTIFICATIONS, getNotification } = require("../../constants/notifications");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const { attachId, formatNotification } = require("../../utils/heplers");
-const { configureBankAccount, getBankAccount } = require("./bank-account.service");
 
 /**
  * User initiates a withdrawal request.
@@ -422,8 +421,7 @@ async function cancelWithdrawal(adminId, withdrawalId, data) {
 }
 
 module.exports = {
-  configureBankAccount,
-  getBankAccount,
+
   createWithdrawal,
   getWithdrawalHistory,
   listWithdrawals,

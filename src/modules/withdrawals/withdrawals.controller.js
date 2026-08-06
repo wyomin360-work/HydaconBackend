@@ -1,18 +1,7 @@
 const { sendResponse } = require("../../utils/responseHandlers");
 const service = require("./withdrawals.service");
 
-exports.configureBankAccount = async (req, res, next) => {
-  const userId = req.userId;
-  const data = req.body;
-  const result = await service.configureBankAccount(userId, data);
-  return sendResponse(res, result);
-};
 
-exports.getBankAccount = async (req, res, next) => {
-  const userId = req.userId;
-  const result = await service.getBankAccount(userId);
-  return sendResponse(res, result);
-};
 
 exports.createWithdrawal = async (req, res, next) => {
   const userId = req.userId;

@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const service = require("../../src/modules/withdrawals/withdrawals.service");
+const userService = require("../../src/modules/user/user.service");
 const webhookService = require("../../src/modules/webhooks/webhooks.service");
 const User = require("../../src/schemas/user.schema");
 const UserBankAccount = require("../../src/schemas/user-bank-account.schema");
@@ -84,13 +85,12 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
 
   test("1. Configure User Bank Account (Encrypted)", async () => {
     const data = {
-      accountHolderName: "John Doe",
+      userName: "John Doe",
       accountNumber: "1234567890",
-      confirmAccountNumber: "1234567890",
       ifscCode: "HDFC0000053",
     };
 
-    const res = await service.configureBankAccount(userId, data);
+    const res = await userService.addUserBankDetails(data, userId);
     expect(res.message).toContain("successfully");
 
     const savedAccount = await UserBankAccount.findOne({ userId, isActive: true });
@@ -104,12 +104,11 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
 
   test("2. Create Withdrawal - PENDING status & Coin Deduction", async () => {
     // Configure bank account first
-    await service.configureBankAccount(userId, {
-      accountHolderName: "John Doe",
+    await userService.addUserBankDetails({
+      userName: "John Doe",
       accountNumber: "1234567890",
-      confirmAccountNumber: "1234567890",
       ifscCode: "HDFC0000053",
-    });
+    }, userId);
 
     // Request withdrawal of 100 coins (worth 200 rupees)
     const withdrawalRes = await service.createWithdrawal(userId, { coinAmount: 100 });
@@ -122,12 +121,11 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
   });
 
   test("3. Approve Withdrawal - Create Contact, Fund Account, & Payout", async () => {
-    await service.configureBankAccount(userId, {
-      accountHolderName: "John Doe",
+    await userService.addUserBankDetails({
+      userName: "John Doe",
       accountNumber: "1234567890",
-      confirmAccountNumber: "1234567890",
       ifscCode: "HDFC0000053",
-    });
+    }, userId);
 
     const withdrawalRes = await service.createWithdrawal(userId, { coinAmount: 100 });
     const withdrawalId = withdrawalRes.data.id;
@@ -151,12 +149,11 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
   });
 
   test("4. Cancel Withdrawal - Refund Coins & CANCELLED status", async () => {
-    await service.configureBankAccount(userId, {
-      accountHolderName: "John Doe",
+    await userService.addUserBankDetails({
+      userName: "John Doe",
       accountNumber: "1234567890",
-      confirmAccountNumber: "1234567890",
       ifscCode: "HDFC0000053",
-    });
+    }, userId);
 
     const withdrawalRes = await service.createWithdrawal(userId, { coinAmount: 100 });
     const withdrawalId = withdrawalRes.data.id;
@@ -172,12 +169,11 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
   });
 
   test("5. Webhook - payout.processed updates status to COMPLETED & totals", async () => {
-    await service.configureBankAccount(userId, {
-      accountHolderName: "John Doe",
+    await userService.addUserBankDetails({
+      userName: "John Doe",
       accountNumber: "1234567890",
-      confirmAccountNumber: "1234567890",
       ifscCode: "HDFC0000053",
-    });
+    }, userId);
 
     const withdrawalRes = await service.createWithdrawal(userId, { coinAmount: 100 });
     const withdrawalId = withdrawalRes.data.id;
@@ -214,12 +210,11 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
   });
 
   test("6. Webhook - payout.failed/reversed refunds coins", async () => {
-    await service.configureBankAccount(userId, {
-      accountHolderName: "John Doe",
+    await userService.addUserBankDetails({
+      userName: "John Doe",
       accountNumber: "1234567890",
-      confirmAccountNumber: "1234567890",
       ifscCode: "HDFC0000053",
-    });
+    }, userId);
 
     const withdrawalRes = await service.createWithdrawal(userId, { coinAmount: 100 });
     const withdrawalId = withdrawalRes.data.id;

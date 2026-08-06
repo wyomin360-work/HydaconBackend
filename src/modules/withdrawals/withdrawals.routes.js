@@ -7,17 +7,6 @@ const controller = require("./withdrawals.controller");
 const router = express.Router();
 
 // User routes
-router.post(
-  paths.createBankAccount,
-  verification.verifyUser,
-  handleError(controller.configureBankAccount)
-);
-
-router.get(
-  paths.getBankAccount,
-  verification.verifyUser,
-  handleError(controller.getBankAccount)
-);
 
 router.post(
   paths.createWithdrawal,
