@@ -10,7 +10,8 @@ exports.createWithdrawal = async (req, res, next) => {
 
 exports.getWithdrawalHistory = async (req, res, next) => {
   const userId = req.userId;
-  const result = await service.getWithdrawalHistory(userId);
+  const data = req.query || {};
+  const result = await service.getWithdrawalHistory(userId, data);
   return sendResponse(res, result);
 };
 

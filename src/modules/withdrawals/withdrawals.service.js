@@ -126,19 +126,33 @@ async function createWithdrawal(userId, data) {
 /**
  * List withdrawal history for a user.
  */
-async function getWithdrawalHistory(userId) {
+async function getWithdrawalHistory(userId, data = {}) {
+  const { page = 1, limit = 10 } = data;
+  const skip = (page - 1) * limit;
+
   const list = await Withdrawal.find({ userId })
     .populate("bankAccountId", "bankName branchName accountHolderName")
     .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
     .lean();
 
-  return list.map((w) => ({
-    ...w,
-    id: w._id,
-    bankName: w.bankAccountId?.bankName,
-    branchName: w.bankAccountId?.branchName,
-    accountHolderName: w.bankAccountId?.accountHolderName,
-  }));
+  const total = await Withdrawal.countDocuments({ userId });
+  const totalPages = Math.ceil(total / limit);
+
+  return {
+    withdrawals: list.map((w) => ({
+      ...w,
+      id: w._id,
+      bankName: w.bankAccountId?.bankName,
+      branchName: w.bankAccountId?.branchName,
+      accountHolderName: w.bankAccountId?.accountHolderName,
+    })),
+    total,
+    page: Number(page),
+    limit: Number(limit),
+    totalPages,
+  };
 }
 
 /**
