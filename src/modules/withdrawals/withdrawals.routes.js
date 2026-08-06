@@ -18,13 +18,19 @@ router.post(
   paths.createWithdrawal,
   verification.verifyUser,
   validateRequest(createWithdrawalRequestType),
-  handleError(controller.createWithdrawal)
+  handleError(controller.createWithdrawal),
 );
 
 router.get(
   paths.history,
   verification.verifyUser,
-  handleError(controller.getWithdrawalHistory)
+  handleError(controller.getWithdrawalHistory),
+);
+
+router.get(
+  paths.details,
+  verification.verifyUser,
+  handleError(controller.getWithdrawalDetailsUser),
 );
 
 // Admin routes
@@ -32,32 +38,32 @@ router.post(
   paths.adminList,
   verification.verifyAdmin,
   validateRequest(listWithdrawalsRequestType),
-  handleError(controller.listWithdrawals)
+  handleError(controller.listWithdrawals),
 );
 
 router.get(
   paths.adminSummary,
   verification.verifyAdmin,
-  handleError(controller.getWithdrawalsSummary)
+  handleError(controller.getWithdrawalsSummary),
 );
 
 router.get(
   paths.adminDetails,
   verification.verifyAdmin,
-  handleError(controller.getWithdrawalDetails)
+  handleError(controller.getWithdrawalDetails),
 );
 
 router.post(
   paths.adminApprove,
   verification.verifyAdmin,
-  handleError(controller.approveWithdrawal)
+  handleError(controller.approveWithdrawal),
 );
 
 router.post(
   paths.adminCancel,
   verification.verifyAdmin,
   validateRequest(cancelWithdrawalRequestType),
-  handleError(controller.cancelWithdrawal)
+  handleError(controller.cancelWithdrawal),
 );
 
 module.exports = router;

@@ -4,7 +4,10 @@ const {
   SORT_OPTIONS,
   PAYMENT_METHODS,
 } = require("../../constants/transactions");
-const { APP_NOTIFICATIONS, getNotification } = require("../../constants/notifications");
+const {
+  APP_NOTIFICATIONS,
+  getNotification,
+} = require("../../constants/notifications");
 const Admin = require("../../schemas/admin.schema");
 const AppConfig = require("../../schemas/app-config.schema");
 const Transactions = require("../../schemas/transaction.schema");
@@ -246,14 +249,19 @@ async function createTransaction(data, userId) {
   user.totalPoints = userRemainingPoints;
   await user.save();
   if (user?.fcmTokens?.length && user?.enableNotification) {
-    const localizedNotif = getNotification(withdrawNotification.initiated, user.language);
+    const localizedNotif = getNotification(
+      withdrawNotification.initiated,
+      user.language,
+    );
     sendFcmNotifications(
       user.fcmTokens,
       localizedNotif.title,
       formatNotification(localizedNotif.body, {
         amount: amount,
       }),
-    ).catch((err) => console.error("[FCM] withdraw initiated notification failed:", err));
+    ).catch((err) =>
+      console.error("[FCM] withdraw initiated notification failed:", err),
+    );
   }
   return {
     message: "Withdraw request created",
@@ -290,7 +298,10 @@ async function updateTransaction(data, transactionId) {
 
     transaction.status = PAYMENT_STATUS.CANCELLED;
     transaction.cancellationReason = data?.cancellationReason;
-    const localizedNotif = getNotification(withdrawNotification.cancelled, user.language);
+    const localizedNotif = getNotification(
+      withdrawNotification.cancelled,
+      user.language,
+    );
     notificationTitle = localizedNotif.title;
     notificationBody = localizedNotif.body;
     // await User.findByIdAndUpdate(transaction?.userId, { $set: { totalPoints: '$totalPoints' + transaction?.po} })
@@ -300,7 +311,10 @@ async function updateTransaction(data, transactionId) {
 
     transaction.status = PAYMENT_STATUS.FAILED;
     transaction.failureReason = data?.failureReason;
-    const localizedNotif = getNotification(withdrawNotification.failed, user.language);
+    const localizedNotif = getNotification(
+      withdrawNotification.failed,
+      user.language,
+    );
     notificationTitle = localizedNotif.title;
     notificationBody = localizedNotif.body;
   } else if (status === PAYMENT_STATUS.PAID) {
@@ -310,7 +324,10 @@ async function updateTransaction(data, transactionId) {
     transaction.transactionId = data?.transactionId;
     transaction.paidAt = new Date();
     user.totalWithdraw = user.totalWithdraw + transaction.amount;
-    const localizedNotif = getNotification(withdrawNotification.success, user.language);
+    const localizedNotif = getNotification(
+      withdrawNotification.success,
+      user.language,
+    );
     notificationTitle = localizedNotif.title;
     notificationBody = formatNotification(localizedNotif.body, {
       amount: transaction.amount,
@@ -323,7 +340,9 @@ async function updateTransaction(data, transactionId) {
       user.fcmTokens,
       notificationTitle,
       notificationBody,
-    ).catch((err) => console.error("[FCM] withdraw status update notification failed:", err));
+    ).catch((err) =>
+      console.error("[FCM] withdraw status update notification failed:", err),
+    );
   }
   return {
     message: "Transaction status updated",

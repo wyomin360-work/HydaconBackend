@@ -35,7 +35,7 @@ const withdrawalSchema = new mongoose.Schema(
     failureReason: { type: String, default: null },
     remarks: { type: String, default: null },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 withdrawalSchema.set("toJSON", { virtuals: true });

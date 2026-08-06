@@ -22,7 +22,10 @@ const {
   LOYALTY_TRANSACTION_TYPES,
   LOYALTY_TRANSACTION_SOURCES,
 } = require("../../constants/loyalty");
-const { APP_NOTIFICATIONS, getNotification } = require("../../constants/notifications");
+const {
+  APP_NOTIFICATIONS,
+  getNotification,
+} = require("../../constants/notifications");
 const { formatNotification } = require("../../utils/heplers");
 
 function normalizeDateRange(startDate, endDate) {
@@ -431,7 +434,10 @@ async function evaluateTierUpgrade(userId, seasonId) {
 
       // Dispatch FCM Push Notification
       if (user.fcmTokens?.length && user.enableNotification) {
-        const localizedNotif = getNotification(APP_NOTIFICATIONS.loyalty.tierUpgraded, user.language);
+        const localizedNotif = getNotification(
+          APP_NOTIFICATIONS.loyalty.tierUpgraded,
+          user.language,
+        );
         sendFcmNotifications(
           user.fcmTokens,
           localizedNotif.title,
@@ -443,7 +449,7 @@ async function evaluateTierUpgrade(userId, seasonId) {
           console.error(
             "⚠️ Failed to send tier upgrade FCM notification:",
             error,
-          )
+          ),
         );
       }
     }

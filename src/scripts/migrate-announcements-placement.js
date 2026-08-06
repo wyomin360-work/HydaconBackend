@@ -22,12 +22,15 @@ async function migrateAnnouncements() {
 
   for (const doc of contents) {
     const updatedPlacements = doc.placements.map((p) =>
-      p === "HOME_ANNOUNCEMENT_FEED" ? "ANNOUNCEMENTS" : p
+      p === "HOME_ANNOUNCEMENT_FEED" ? "ANNOUNCEMENTS" : p,
     );
     // Remove duplicates
     doc.placements = Array.from(new Set(updatedPlacements));
     await doc.save();
-    console.log(`Updated content "${doc.title}" (${doc._id}) placements to:`, doc.placements);
+    console.log(
+      `Updated content "${doc.title}" (${doc._id}) placements to:`,
+      doc.placements,
+    );
   }
 
   await mongoose.disconnect();

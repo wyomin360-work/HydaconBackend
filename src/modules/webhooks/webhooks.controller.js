@@ -8,7 +8,10 @@ exports.handleRazorpayXWebhook = async (req, res, next) => {
     const body = req.body;
 
     const result = await service.processWebhook(headers, rawBody, body);
-    return sendResponse(res, { message: "Webhook processed successfully", ...result });
+    return sendResponse(res, {
+      message: "Webhook processed successfully",
+      ...result,
+    });
   } catch (error) {
     console.error("Webhook processing error:", error);
     // Respond with 400 to indicate failure to verify/process, but keep standard format

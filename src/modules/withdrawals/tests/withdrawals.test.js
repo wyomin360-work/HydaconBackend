@@ -11,7 +11,9 @@ const { decrypt } = require("../../../utils/encryption");
 
 // Mock the external Razorpay functions
 jest.mock("../../../functions/razorPay", () => ({
-  validateIFSC: jest.fn().mockResolvedValue({ BANK: "HDFC Bank", BRANCH: "MUMBAI" }),
+  validateIFSC: jest
+    .fn()
+    .mockResolvedValue({ BANK: "HDFC Bank", BRANCH: "MUMBAI" }),
 }));
 
 jest.mock("../../../functions/razorpayx", () => ({
@@ -34,7 +36,8 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
     userId = new mongoose.Types.ObjectId();
     adminId = new mongoose.Types.ObjectId();
 
-    const dbUrl = process.env.MONGODB_URL || "mongodb://localhost:27017/hydacon_test";
+    const dbUrl =
+      process.env.MONGODB_URL || "mongodb://localhost:27017/hydacon_test";
     let testDbUrl = dbUrl;
     if (dbUrl.includes("?")) {
       const parts = dbUrl.split("?");
@@ -93,25 +96,36 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
     const res = await userService.addUserBankDetails(data, userId);
     expect(res.message).toContain("successfully");
 
-    const savedAccount = await UserBankAccount.findOne({ userId, isActive: true });
+    const savedAccount = await UserBankAccount.findOne({
+      userId,
+      isActive: true,
+    });
     expect(savedAccount).toBeDefined();
     expect(savedAccount.accountHolderName).toBe("John Doe");
-    
+
     // Test decryption
-    const decryptedAccount = decrypt(savedAccount.accountNumber, savedAccount.accountIv);
+    const decryptedAccount = decrypt(
+      savedAccount.accountNumber,
+      savedAccount.accountIv,
+    );
     expect(decryptedAccount).toBe("1234567890");
   });
 
   test("2. Create Withdrawal - PENDING status & Coin Deduction", async () => {
     // Configure bank account first
-    await userService.addUserBankDetails({
-      userName: "John Doe",
-      accountNumber: "1234567890",
-      ifscCode: "HDFC0000053",
-    }, userId);
+    await userService.addUserBankDetails(
+      {
+        userName: "John Doe",
+        accountNumber: "1234567890",
+        ifscCode: "HDFC0000053",
+      },
+      userId,
+    );
 
     // Request withdrawal of 100 coins (worth 200 rupees)
-    const withdrawalRes = await service.createWithdrawal(userId, { coinAmount: 100 });
+    const withdrawalRes = await service.createWithdrawal(userId, {
+      cashAmount: 200,
+    });
     expect(withdrawalRes.data.status).toBe("PENDING");
     expect(withdrawalRes.data.cashAmount).toBe(200);
 
@@ -121,13 +135,18 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
   });
 
   test("3. Approve Withdrawal - Create Contact, Fund Account, & Payout", async () => {
-    await userService.addUserBankDetails({
-      userName: "John Doe",
-      accountNumber: "1234567890",
-      ifscCode: "HDFC0000053",
-    }, userId);
+    await userService.addUserBankDetails(
+      {
+        userName: "John Doe",
+        accountNumber: "1234567890",
+        ifscCode: "HDFC0000053",
+      },
+      userId,
+    );
 
-    const withdrawalRes = await service.createWithdrawal(userId, { coinAmount: 100 });
+    const withdrawalRes = await service.createWithdrawal(userId, {
+      cashAmount: 200,
+    });
     const withdrawalId = withdrawalRes.data.id;
 
     // Approve the withdrawal
@@ -140,7 +159,10 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
     expect(user.razorpayContactId).toBe("cont_test123");
 
     // Verify Bank Account has Fund Account ID
-    const bankAccount = await UserBankAccount.findOne({ userId, isActive: true });
+    const bankAccount = await UserBankAccount.findOne({
+      userId,
+      isActive: true,
+    });
     expect(bankAccount.razorpayFundAccountId).toBe("fa_test123");
 
     // Verify Withdrawal is in PROCESSING state
@@ -149,17 +171,24 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
   });
 
   test("4. Cancel Withdrawal - Refund Coins & CANCELLED status", async () => {
-    await userService.addUserBankDetails({
-      userName: "John Doe",
-      accountNumber: "1234567890",
-      ifscCode: "HDFC0000053",
-    }, userId);
+    await userService.addUserBankDetails(
+      {
+        userName: "John Doe",
+        accountNumber: "1234567890",
+        ifscCode: "HDFC0000053",
+      },
+      userId,
+    );
 
-    const withdrawalRes = await service.createWithdrawal(userId, { coinAmount: 100 });
+    const withdrawalRes = await service.createWithdrawal(userId, {
+      cashAmount: 200,
+    });
     const withdrawalId = withdrawalRes.data.id;
 
     // Cancel withdrawal
-    const cancelRes = await service.cancelWithdrawal(adminId, withdrawalId, { remarks: "User requested cancel" });
+    const cancelRes = await service.cancelWithdrawal(adminId, withdrawalId, {
+      remarks: "User requested cancel",
+    });
     expect(cancelRes.data.status).toBe("CANCELLED");
     expect(cancelRes.data.refundedCoins).toBe(100);
 
@@ -169,17 +198,25 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
   });
 
   test("5. Webhook - payout.processed updates status to COMPLETED & totals", async () => {
-    await userService.addUserBankDetails({
-      userName: "John Doe",
-      accountNumber: "1234567890",
-      ifscCode: "HDFC0000053",
-    }, userId);
+    await userService.addUserBankDetails(
+      {
+        userName: "John Doe",
+        accountNumber: "1234567890",
+        ifscCode: "HDFC0000053",
+      },
+      userId,
+    );
 
-    const withdrawalRes = await service.createWithdrawal(userId, { coinAmount: 100 });
+    const withdrawalRes = await service.createWithdrawal(userId, {
+      cashAmount: 200,
+    });
     const withdrawalId = withdrawalRes.data.id;
 
     // Set payout ID
-    await Withdrawal.findByIdAndUpdate(withdrawalId, { status: "PROCESSING", razorpayPayoutId: "pout_processed_123" });
+    await Withdrawal.findByIdAndUpdate(withdrawalId, {
+      status: "PROCESSING",
+      razorpayPayoutId: "pout_processed_123",
+    });
 
     // Mock Webhook request
     const payload = {
@@ -210,17 +247,25 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
   });
 
   test("6. Webhook - payout.failed/reversed refunds coins", async () => {
-    await userService.addUserBankDetails({
-      userName: "John Doe",
-      accountNumber: "1234567890",
-      ifscCode: "HDFC0000053",
-    }, userId);
+    await userService.addUserBankDetails(
+      {
+        userName: "John Doe",
+        accountNumber: "1234567890",
+        ifscCode: "HDFC0000053",
+      },
+      userId,
+    );
 
-    const withdrawalRes = await service.createWithdrawal(userId, { coinAmount: 100 });
+    const withdrawalRes = await service.createWithdrawal(userId, {
+      cashAmount: 200,
+    });
     const withdrawalId = withdrawalRes.data.id;
 
     // Set payout ID
-    await Withdrawal.findByIdAndUpdate(withdrawalId, { status: "PROCESSING", razorpayPayoutId: "pout_failed_123" });
+    await Withdrawal.findByIdAndUpdate(withdrawalId, {
+      status: "PROCESSING",
+      razorpayPayoutId: "pout_failed_123",
+    });
 
     // Mock Failed Webhook request
     const failedPayload = {
@@ -237,13 +282,19 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
       },
     };
 
-    const webhookRes = await webhookService.processWebhook({}, "", failedPayload);
+    const webhookRes = await webhookService.processWebhook(
+      {},
+      "",
+      failedPayload,
+    );
     expect(webhookRes.status).toBe("success");
 
     // Verify Withdrawal is FAILED
     const withdrawal = await Withdrawal.findById(withdrawalId);
     expect(withdrawal.status).toBe("FAILED");
-    expect(withdrawal.failureReason).toBe("Insufficient balance in master account");
+    expect(withdrawal.failureReason).toBe(
+      "Insufficient balance in master account",
+    );
 
     // Verify coins refunded to user
     const user = await User.findById(userId);

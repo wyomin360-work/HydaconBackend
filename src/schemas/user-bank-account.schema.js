@@ -18,7 +18,7 @@ const userBankAccountSchema = new mongoose.Schema(
     razorpayFundAccountId: { type: String, default: null },
     isActive: { type: Boolean, default: true },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 userBankAccountSchema.set("toJSON", { virtuals: true });
@@ -31,6 +31,9 @@ userBankAccountSchema.virtual("user", {
   justOne: true,
 });
 
-const UserBankAccount = mongoose.model("UserBankAccount", userBankAccountSchema);
+const UserBankAccount = mongoose.model(
+  "UserBankAccount",
+  userBankAccountSchema,
+);
 
 module.exports = UserBankAccount;

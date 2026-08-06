@@ -26,7 +26,9 @@ async function resetUserFull() {
   // Find base tier (rank 0 or lowest rank tier)
   const baseTier = await Tier.findOne().sort({ rank: 1 });
   if (baseTier) {
-    console.log(`🏷️  Found base tier: ${baseTier.name} (rank: ${baseTier.rank}, ID: ${baseTier._id})`);
+    console.log(
+      `🏷️  Found base tier: ${baseTier.name} (rank: ${baseTier.rank}, ID: ${baseTier._id})`,
+    );
   } else {
     console.log("⚠️  No tiers found in DB!");
   }
@@ -44,13 +46,17 @@ async function resetUserFull() {
         lifetimeHydaconCoins: 0,
         currentTierId: baseTierId,
       },
-    }
+    },
   );
-  console.log(`✅ User points, coins reset to 0, and currentTierId set to ${baseTier ? baseTier.name : "null"}`);
+  console.log(
+    `✅ User points, coins reset to 0, and currentTierId set to ${baseTier ? baseTier.name : "null"}`,
+  );
 
   // Delete/Reset UserTierProgress
   const userTierProgresses = await UserTierProgress.find({ userId: user._id });
-  console.log(`📊 Found ${userTierProgresses.length} UserTierProgress record(s)`);
+  console.log(
+    `📊 Found ${userTierProgresses.length} UserTierProgress record(s)`,
+  );
 
   if (baseTierId) {
     await UserTierProgress.updateMany(
@@ -63,9 +69,11 @@ async function resetUserFull() {
           lastCelebratedTierId: baseTierId,
           lastEvaluatedAt: new Date(),
         },
-      }
+      },
     );
-    console.log("✅ Reset UserTierProgress records to base tier & 0 currentPoints");
+    console.log(
+      "✅ Reset UserTierProgress records to base tier & 0 currentPoints",
+    );
   } else {
     await UserTierProgress.deleteMany({ userId: user._id });
     console.log("🗑️  Deleted UserTierProgress records");

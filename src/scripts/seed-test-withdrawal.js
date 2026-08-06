@@ -16,12 +16,16 @@ async function run() {
 
   let user = await User.findOne({ email: TARGET_EMAIL });
   if (!user) {
-    console.log(`👤 User with email ${TARGET_EMAIL} not found, searching for any user...`);
+    console.log(
+      `👤 User with email ${TARGET_EMAIL} not found, searching for any user...`,
+    );
     user = await User.findOne();
   }
 
   if (!user) {
-    console.error("❌ No users found in database. Please register a user first.");
+    console.error(
+      "❌ No users found in database. Please register a user first.",
+    );
     await mongoose.disconnect();
     process.exit(1);
   }
@@ -53,7 +57,9 @@ async function run() {
     branchName: "MUMBAI SANDOZ HOUSE",
     isActive: true,
   });
-  console.log(`🏦 Created active UserBankAccount record ID: ${bankAccount._id}`);
+  console.log(
+    `🏦 Created active UserBankAccount record ID: ${bankAccount._id}`,
+  );
 
   // Create PENDING withdrawal
   const withdrawal = await Withdrawal.create({
@@ -64,7 +70,9 @@ async function run() {
     status: "PENDING",
     remarks: "Initial test withdrawal request",
   });
-  console.log(`💸 Created PENDING Withdrawal request ID: ${withdrawal._id} for ₹200`);
+  console.log(
+    `💸 Created PENDING Withdrawal request ID: ${withdrawal._id} for ₹200`,
+  );
 
   await mongoose.disconnect();
   console.log("🔌 Database disconnected. Seed complete.");

@@ -1,9 +1,9 @@
 const createWithdrawalRequestType = {
   type: "object",
   properties: {
-    coinAmount: { type: "number", minimum: 1 },
+    cashAmount: { type: "number", minimum: 1 },
   },
-  required: ["coinAmount"],
+  required: ["cashAmount"],
   additionalProperties: false,
 };
 
@@ -21,6 +21,7 @@ const listWithdrawalsRequestType = {
     page: { type: "number", minimum: 1 },
     limit: { type: "number", minimum: 1 },
     status: { type: "string" },
+    search: { type: "string" },
   },
   additionalProperties: false,
 };

@@ -14,7 +14,9 @@ async function check() {
 
   const admins = await Admin.find({});
   console.log(`Found ${admins.length} Admins:`);
-  admins.forEach(a => console.log(`- ID: ${a._id}, Email: ${a.email}, Role: ${a.role}`));
+  admins.forEach((a) =>
+    console.log(`- ID: ${a._id}, Email: ${a.email}, Role: ${a.role}`),
+  );
 
   const users = await User.find({});
   console.log(`Found ${users.length} Users`);
@@ -27,7 +29,7 @@ async function check() {
     const token = jwt.sign(
       { adminId: admin._id, email: admin.email, role: "admin" },
       process.env.JWT_SECRET,
-      { expiresIn: "1d" }
+      { expiresIn: "1d" },
     );
     console.log(`Generated Admin Token for ${admin.email}:`);
     console.log(`Bearer ${token}`);

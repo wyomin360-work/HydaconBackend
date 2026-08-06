@@ -37,7 +37,10 @@ const { AuthTypes } = require("../../constants/user");
 const { encrypt, decrypt } = require("../../utils/encryption");
 const { validateIFSC } = require("../../functions/razorPay");
 const { sendFcmNotifications } = require("../../functions/fcm");
-const { APP_NOTIFICATIONS, getNotification } = require("../../constants/notifications");
+const {
+  APP_NOTIFICATIONS,
+  getNotification,
+} = require("../../constants/notifications");
 const { sendSms } = require("../../functions/sms");
 const { sendMail } = require("../../functions/nodemailer");
 const AppConfig = require("../../schemas/app-config.schema");
@@ -165,10 +168,15 @@ async function login(userData) {
   });
 
   if (userExist?.fcmTokens?.length && userExist?.enableNotification) {
-    const localizedNotif = getNotification(APP_NOTIFICATIONS.auth.login, userExist.language);
-    sendFcmNotifications(userExist.fcmTokens, localizedNotif.title, localizedNotif.body).catch((err) =>
-      console.error("[FCM] login notification failed:", err)
+    const localizedNotif = getNotification(
+      APP_NOTIFICATIONS.auth.login,
+      userExist.language,
     );
+    sendFcmNotifications(
+      userExist.fcmTokens,
+      localizedNotif.title,
+      localizedNotif.body,
+    ).catch((err) => console.error("[FCM] login notification failed:", err));
   }
 
   const { password: pw, ...rest } = attachId(userExist);
@@ -265,9 +273,16 @@ async function providerAuth(data) {
     });
 
     if (userExist?.fcmTokens?.length && userExist?.enableNotification) {
-      const localizedNotif = getNotification(APP_NOTIFICATIONS.auth.login, userExist.language);
-      sendFcmNotifications(userExist.fcmTokens, localizedNotif.title, localizedNotif.body).catch((err) =>
-        console.error("[FCM] provider login notification failed:", err)
+      const localizedNotif = getNotification(
+        APP_NOTIFICATIONS.auth.login,
+        userExist.language,
+      );
+      sendFcmNotifications(
+        userExist.fcmTokens,
+        localizedNotif.title,
+        localizedNotif.body,
+      ).catch((err) =>
+        console.error("[FCM] provider login notification failed:", err),
       );
     }
 
@@ -286,10 +301,15 @@ async function providerAuth(data) {
 async function logout(userId) {
   const user = await User.findById(userId);
   if (user && user.fcmTokens?.length && user.enableNotification) {
-    const localizedNotif = getNotification(APP_NOTIFICATIONS.auth.logout, user.language);
-    sendFcmNotifications(user.fcmTokens, localizedNotif.title, localizedNotif.body).catch((err) =>
-      console.error("[FCM] logout notification failed:", err)
+    const localizedNotif = getNotification(
+      APP_NOTIFICATIONS.auth.logout,
+      user.language,
     );
+    sendFcmNotifications(
+      user.fcmTokens,
+      localizedNotif.title,
+      localizedNotif.body,
+    ).catch((err) => console.error("[FCM] logout notification failed:", err));
   }
   await RefreshToken.findOneAndDelete({ userId: userId });
   await User.findByIdAndUpdate(
@@ -385,9 +405,16 @@ async function verifyOtp(data) {
     });
 
     if (user?.fcmTokens?.length && user?.enableNotification) {
-      const localizedNotif = getNotification(APP_NOTIFICATIONS.auth.login, user.language);
-      sendFcmNotifications(user.fcmTokens, localizedNotif.title, localizedNotif.body).catch((err) =>
-        console.error("[FCM] OTP login notification failed:", err)
+      const localizedNotif = getNotification(
+        APP_NOTIFICATIONS.auth.login,
+        user.language,
+      );
+      sendFcmNotifications(
+        user.fcmTokens,
+        localizedNotif.title,
+        localizedNotif.body,
+      ).catch((err) =>
+        console.error("[FCM] OTP login notification failed:", err),
       );
     }
 
@@ -1026,7 +1053,8 @@ async function updateUserProfile(data, userId) {
 async function updatePreferences(data, userId) {
   const { enableNotification, language } = data;
   const updateData = {};
-  if (enableNotification !== undefined) updateData.enableNotification = enableNotification;
+  if (enableNotification !== undefined)
+    updateData.enableNotification = enableNotification;
   if (language !== undefined) updateData.language = language;
 
   const user = await User.findByIdAndUpdate(userId, updateData, { new: true });
@@ -1057,17 +1085,17 @@ async function addFcmToken(data, userId) {
 // User Bank Details
 // ----------------------
 async function getUserBankDetails(userId) {
-  const bankAccount = await UserBankAccount.findOne({ userId, isActive: true }).lean();
+  const bankAccount = await UserBankAccount.findOne({
+    userId,
+    isActive: true,
+  }).lean();
   if (!bankAccount) sendFailResponse("Bank details are not added yet");
 
   const accountNumber = decrypt(
     bankAccount.accountNumber,
     bankAccount.accountIv,
   );
-  const ifscCode = decrypt(
-    bankAccount.ifscCode,
-    bankAccount.ifscIv,
-  );
+  const ifscCode = decrypt(bankAccount.ifscCode, bankAccount.ifscIv);
 
   if (!accountNumber || !ifscCode)
     sendFailResponse("Unable to get user bank details");
@@ -1090,8 +1118,11 @@ async function addUserBankDetails(data, userId) {
 
   const user = await User.findById(userId);
   if (!user) sendFailResponse("User not found");
-  
-  const existingAccount = await UserBankAccount.findOne({ userId, isActive: true });
+
+  const existingAccount = await UserBankAccount.findOne({
+    userId,
+    isActive: true,
+  });
   if (existingAccount)
     sendFailResponse(
       "user have already added account details , please update existing if need to change account",
@@ -1129,8 +1160,11 @@ async function addUserBankDetails(data, userId) {
 // ----------------------
 async function updateBankDetails(data, userId) {
   const { accountNumber, ifscCode, userName } = data;
-  
-  const existingAccount = await UserBankAccount.findOne({ userId, isActive: true });
+
+  const existingAccount = await UserBankAccount.findOne({
+    userId,
+    isActive: true,
+  });
   if (!existingAccount) sendFailResponse("Bank details are not added yet");
 
   const bankInfo = await validateIFSC(ifscCode);
@@ -1143,7 +1177,10 @@ async function updateBankDetails(data, userId) {
     sendFailResponse("Unable to process bank details , try again");
 
   // Deactivate old account
-  await UserBankAccount.updateMany({ userId, isActive: true }, { isActive: false });
+  await UserBankAccount.updateMany(
+    { userId, isActive: true },
+    { isActive: false },
+  );
 
   // Create new active account
   await UserBankAccount.create({
@@ -1168,10 +1205,16 @@ async function updateBankDetails(data, userId) {
 // Delete Bank Details
 // ----------------------
 async function deleteBankDetails(userId) {
-  const existingAccount = await UserBankAccount.findOne({ userId, isActive: true });
+  const existingAccount = await UserBankAccount.findOne({
+    userId,
+    isActive: true,
+  });
   if (!existingAccount) sendFailResponse("Bank details not found");
-  
-  await UserBankAccount.updateMany({ userId, isActive: true }, { isActive: false });
+
+  await UserBankAccount.updateMany(
+    { userId, isActive: true },
+    { isActive: false },
+  );
 
   return {
     message: "Bank details been deleted successfully",
@@ -1231,7 +1274,7 @@ async function userList(data) {
 
   const users =
     (await User.find(query)
-    .select('-password -fcmTokens -bankDetails -kycDocuments')
+      .select("-password -fcmTokens -bankDetails -kycDocuments")
       .populate("currentTierId", "name level")
       .sort(sort)
       .skip(skip)

@@ -7,7 +7,9 @@ const ACCOUNT_NUMBER = process.env.RAZORPAYX_ACCOUNT_NUMBER;
 
 const getAuthHeaders = () => {
   if (!KEY_ID || !KEY_SECRET) {
-    throw new Error("RazorpayX key ID or key secret is not configured in environment variables");
+    throw new Error(
+      "RazorpayX key ID or key secret is not configured in environment variables",
+    );
   }
   const token = Buffer.from(`${KEY_ID}:${KEY_SECRET}`).toString("base64");
   return {
@@ -35,8 +37,14 @@ async function createRazorpayContact(user) {
     });
     return response.data;
   } catch (error) {
-    console.error("Error creating RazorpayX contact:", error?.response?.data || error.message);
-    throw new Error(error?.response?.data?.error?.description || "Failed to create RazorpayX contact");
+    console.error(
+      "Error creating RazorpayX contact:",
+      error?.response?.data || error.message,
+    );
+    throw new Error(
+      error?.response?.data?.error?.description ||
+        "Failed to create RazorpayX contact",
+    );
   }
 }
 
@@ -61,17 +69,30 @@ async function createRazorpayFundAccount(contactId, bankDetails) {
     });
     return response.data;
   } catch (error) {
-    console.error("Error creating RazorpayX fund account:", error?.response?.data || error.message);
-    throw new Error(error?.response?.data?.error?.description || "Failed to create RazorpayX fund account");
+    console.error(
+      "Error creating RazorpayX fund account:",
+      error?.response?.data || error.message,
+    );
+    throw new Error(
+      error?.response?.data?.error?.description ||
+        "Failed to create RazorpayX fund account",
+    );
   }
 }
 
 /**
  * Creates a payout on RazorpayX.
  */
-async function createRazorpayPayout(fundAccountId, amountInPaise, referenceId, narration) {
+async function createRazorpayPayout(
+  fundAccountId,
+  amountInPaise,
+  referenceId,
+  narration,
+) {
   if (!ACCOUNT_NUMBER) {
-    throw new Error("RazorpayX account number is not configured in environment variables");
+    throw new Error(
+      "RazorpayX account number is not configured in environment variables",
+    );
   }
   try {
     const body = {
@@ -85,7 +106,11 @@ async function createRazorpayPayout(fundAccountId, amountInPaise, referenceId, n
       reference_id: referenceId,
       narration: narration || "Hydacon Payout",
     };
-    const bodyHash = crypto.createHash("md5").update(JSON.stringify(body)).digest("hex").substring(0, 8);
+    const bodyHash = crypto
+      .createHash("md5")
+      .update(JSON.stringify(body))
+      .digest("hex")
+      .substring(0, 8);
     const idempotencyKey = `${referenceId}_${bodyHash}`;
 
     const response = await axios({
@@ -99,8 +124,14 @@ async function createRazorpayPayout(fundAccountId, amountInPaise, referenceId, n
     });
     return response.data;
   } catch (error) {
-    console.error("Error creating RazorpayX payout:", error?.response?.data || error.message);
-    throw new Error(error?.response?.data?.error?.description || "Failed to create RazorpayX payout");
+    console.error(
+      "Error creating RazorpayX payout:",
+      error?.response?.data || error.message,
+    );
+    throw new Error(
+      error?.response?.data?.error?.description ||
+        "Failed to create RazorpayX payout",
+    );
   }
 }
 

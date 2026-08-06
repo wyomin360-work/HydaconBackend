@@ -4,6 +4,7 @@ module.exports = {
   getBankAccount: "/bank-accounts",
   createWithdrawal: "/create",
   history: "/history",
+  details: "/details/:id",
   adminList: "/admin/list",
   adminDetails: "/admin/details/:id",
   adminSummary: "/admin/summary",

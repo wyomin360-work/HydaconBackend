@@ -107,7 +107,11 @@ function formatNotification(template, data) {
   });
 }
 
-const calculateProfileCompletion = (user, roleName = "", hasBankDetails = false) => {
+const calculateProfileCompletion = (
+  user,
+  roleName = "",
+  hasBankDetails = false,
+) => {
   let totalFields = 10;
   let filledFields = 0;
 

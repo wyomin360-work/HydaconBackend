@@ -3,7 +3,10 @@ const mongoose = require("mongoose");
 const Withdrawal = require("../../schemas/withdrawal.schema");
 const User = require("../../schemas/user.schema");
 const { sendFcmNotifications } = require("../../functions/fcm");
-const { APP_NOTIFICATIONS, getNotification } = require("../../constants/notifications");
+const {
+  APP_NOTIFICATIONS,
+  getNotification,
+} = require("../../constants/notifications");
 const { formatNotification } = require("../../utils/heplers");
 
 /**
@@ -16,7 +19,10 @@ function verifySignature(rawBody, signature, secret) {
   const hmac = crypto.createHmac("sha256", secret);
   hmac.update(rawBody);
   const digest = hmac.digest("hex");
-  return crypto.timingSafeEqual(Buffer.from(digest, "ascii"), Buffer.from(signature, "ascii"));
+  return crypto.timingSafeEqual(
+    Buffer.from(digest, "ascii"),
+    Buffer.from(signature, "ascii"),
+  );
 }
 
 /**
@@ -31,7 +37,9 @@ async function processWebhook(headers, rawBody, body) {
       throw new Error("Invalid webhook signature");
     }
   } else {
-    console.warn("⚠️ RAZORPAYX_WEBHOOK_SECRET is not configured. Webhook signature verification was bypassed.");
+    console.warn(
+      "⚠️ RAZORPAYX_WEBHOOK_SECRET is not configured. Webhook signature verification was bypassed.",
+    );
   }
 
   const { event, payload } = body;
@@ -51,11 +59,15 @@ async function processWebhook(headers, rawBody, body) {
   }
 
   if (!withdrawal) {
-    withdrawal = await Withdrawal.findOne({ razorpayPayoutId: payoutId }).populate("userId");
+    withdrawal = await Withdrawal.findOne({
+      razorpayPayoutId: payoutId,
+    }).populate("userId");
   }
 
   if (!withdrawal) {
-    console.error(`Withdrawal not found for webhook reference_id: ${referenceId}, payout_id: ${payoutId}`);
+    console.error(
+      `Withdrawal not found for webhook reference_id: ${referenceId}, payout_id: ${payoutId}`,
+    );
     return { status: "error", reason: "withdrawal not found" };
   }
 
@@ -65,11 +77,15 @@ async function processWebhook(headers, rawBody, body) {
     return { status: "error", reason: "user not found" };
   }
 
-  console.log(`Processing Webhook Event: ${event} for Withdrawal: ${withdrawal._id}`);
+  console.log(
+    `Processing Webhook Event: ${event} for Withdrawal: ${withdrawal._id}`,
+  );
 
   // Prevent processing if status is already in terminal states (COMPLETED, CANCELLED)
   if (["COMPLETED", "CANCELLED"].includes(withdrawal.status)) {
-    console.log(`Withdrawal ${withdrawal._id} is already in terminal status: ${withdrawal.status}`);
+    console.log(
+      `Withdrawal ${withdrawal._id} is already in terminal status: ${withdrawal.status}`,
+    );
     return { status: "success", info: "already completed/cancelled" };
   }
 
@@ -96,18 +112,26 @@ async function processWebhook(headers, rawBody, body) {
           await withdrawal.save({ session });
 
           // Add to user's total withdraw cash amount
-          user.totalWithdraw = (user.totalWithdraw || 0) + withdrawal.cashAmount;
+          user.totalWithdraw =
+            (user.totalWithdraw || 0) + withdrawal.cashAmount;
           await user.save({ session });
         });
 
         // Send FCM notification
         if (user.fcmTokens?.length && user.enableNotification) {
-          const localizedNotif = getNotification(APP_NOTIFICATIONS.withdraw.success, user.language);
+          const localizedNotif = getNotification(
+            APP_NOTIFICATIONS.withdraw.success,
+            user.language,
+          );
           sendFcmNotifications(
             user.fcmTokens,
             localizedNotif.title,
-            formatNotification(localizedNotif.body, { amount: withdrawal.cashAmount })
-          ).catch((err) => console.error("[FCM] Webhook processed notification failed:", err));
+            formatNotification(localizedNotif.body, {
+              amount: withdrawal.cashAmount,
+            }),
+          ).catch((err) =>
+            console.error("[FCM] Webhook processed notification failed:", err),
+          );
         }
       } catch (err) {
         console.error("Failed to commit payout.processed transaction:", err);
@@ -134,12 +158,17 @@ async function processWebhook(headers, rawBody, body) {
 
         // Send FCM notification
         if (user.fcmTokens?.length && user.enableNotification) {
-          const localizedNotif = getNotification(APP_NOTIFICATIONS.withdraw.failed, user.language);
+          const localizedNotif = getNotification(
+            APP_NOTIFICATIONS.withdraw.failed,
+            user.language,
+          );
           sendFcmNotifications(
             user.fcmTokens,
             localizedNotif.title,
-            localizedNotif.body
-          ).catch((err) => console.error("[FCM] Webhook failed notification failed:", err));
+            localizedNotif.body,
+          ).catch((err) =>
+            console.error("[FCM] Webhook failed notification failed:", err),
+          );
         }
       } catch (err) {
         console.error("Failed to commit payout.failed transaction:", err);
@@ -151,7 +180,8 @@ async function processWebhook(headers, rawBody, body) {
     }
 
     case "payout.reversed": {
-      const failureReason = payoutEntity.failure_reason || "Payout reversed by bank";
+      const failureReason =
+        payoutEntity.failure_reason || "Payout reversed by bank";
       const session = await mongoose.startSession();
       try {
         await session.withTransaction(async () => {
@@ -168,13 +198,18 @@ async function processWebhook(headers, rawBody, body) {
         if (user.fcmTokens?.length && user.enableNotification) {
           const withdrawNotification = APP_NOTIFICATIONS.withdraw;
           // Use custom reversed notification if defined, otherwise fall back to failed
-          const reversedNotif = withdrawNotification.reversed || withdrawNotification.failed;
+          const reversedNotif =
+            withdrawNotification.reversed || withdrawNotification.failed;
           const localizedNotif = getNotification(reversedNotif, user.language);
           sendFcmNotifications(
             user.fcmTokens,
             localizedNotif.title,
-            formatNotification(localizedNotif.body, { amount: withdrawal.cashAmount })
-          ).catch((err) => console.error("[FCM] Webhook reversed notification failed:", err));
+            formatNotification(localizedNotif.body, {
+              amount: withdrawal.cashAmount,
+            }),
+          ).catch((err) =>
+            console.error("[FCM] Webhook reversed notification failed:", err),
+          );
         }
       } catch (err) {
         console.error("Failed to commit payout.reversed transaction:", err);

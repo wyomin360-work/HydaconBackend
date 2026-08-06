@@ -162,21 +162,21 @@ const APP_NOTIFICATIONS = {
     referrerCompleted: {
       en_US: {
         title: "Referral Milestone Completed! 🥳",
-        body: "Your friend {{friendName}} completed: \"{{milestoneName}}\". You earned {{points}} points!",
+        body: 'Your friend {{friendName}} completed: "{{milestoneName}}". You earned {{points}} points!',
       },
       ml: {
         title: "റഫറൽ നാഴികക്കല്ല് പൂർത്തിയായി! 🥳",
-        body: "നിങ്ങളുടെ സുഹൃത്ത് {{friendName}} \"{{milestoneName}}\" പൂർത്തിയാക്കി. നിങ്ങൾക്ക് {{points}} പോയിന്റുകൾ ലഭിച്ചു!",
+        body: 'നിങ്ങളുടെ സുഹൃത്ത് {{friendName}} "{{milestoneName}}" പൂർത്തിയാക്കി. നിങ്ങൾക്ക് {{points}} പോയിന്റുകൾ ലഭിച്ചു!',
       },
     },
     refereeCompleted: {
       en_US: {
         title: "Milestone Unlocked! 🎉",
-        body: "You successfully completed the milestone: \"{{milestoneName}}\"!",
+        body: 'You successfully completed the milestone: "{{milestoneName}}"!',
       },
       ml: {
         title: "നാഴികക്കല്ല് അൺലോക്ക് ചെയ്തു! 🎉",
-        body: "നിങ്ങൾ \"{{milestoneName}}\" എന്ന നാഴികക്കല്ല് വിജയകരമായി പൂർത്തിയാക്കി!",
+        body: 'നിങ്ങൾ "{{milestoneName}}" എന്ന നാഴികക്കല്ല് വിജയകരമായി പൂർത്തിയാക്കി!',
       },
     },
   },
@@ -321,7 +321,9 @@ const APP_NOTIFICATIONS = {
  */
 function getNotification(notificationObj, lang = "en_US") {
   const language = ["en_US", "ml"].includes(lang) ? lang : "en_US";
-  return notificationObj[language] || notificationObj["en_US"] || notificationObj;
+  return (
+    notificationObj[language] || notificationObj["en_US"] || notificationObj
+  );
 }
 
 module.exports = { APP_NOTIFICATIONS, getNotification };

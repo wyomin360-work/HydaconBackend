@@ -11,7 +11,10 @@ describe("User Profile Completion Percentage Calculation", () => {
     // Mock Role.findById to return custom roles
     mockRoleFindById = jest.spyOn(mongoose.model("Role"), "findById");
     // Mock UserBankAccount.findOne to mock bank details existence
-    mockUserBankAccountFindOne = jest.spyOn(mongoose.model("UserBankAccount"), "findOne");
+    mockUserBankAccountFindOne = jest.spyOn(
+      mongoose.model("UserBankAccount"),
+      "findOne",
+    );
   });
 
   afterAll(() => {
@@ -28,7 +31,7 @@ describe("User Profile Completion Percentage Calculation", () => {
       name: "Contractor",
     });
     mockUserBankAccountFindOne.mockReturnValue({
-      lean: jest.fn().mockResolvedValue({ _id: "bank_id" })
+      lean: jest.fn().mockResolvedValue({ _id: "bank_id" }),
     });
 
     const user = new User({
@@ -55,7 +58,7 @@ describe("User Profile Completion Percentage Calculation", () => {
       name: "Retailer",
     });
     mockUserBankAccountFindOne.mockReturnValue({
-      lean: jest.fn().mockResolvedValue({ _id: "bank_id" })
+      lean: jest.fn().mockResolvedValue({ _id: "bank_id" }),
     });
 
     const user = new User({
@@ -82,7 +85,7 @@ describe("User Profile Completion Percentage Calculation", () => {
       name: "Retailer",
     });
     mockUserBankAccountFindOne.mockReturnValue({
-      lean: jest.fn().mockResolvedValue({ _id: "bank_id" })
+      lean: jest.fn().mockResolvedValue({ _id: "bank_id" }),
     });
 
     const user = new User({
@@ -110,7 +113,7 @@ describe("User Profile Completion Percentage Calculation", () => {
       name: "Mason",
     });
     mockUserBankAccountFindOne.mockReturnValue({
-      lean: jest.fn().mockResolvedValue(null) // No bank details
+      lean: jest.fn().mockResolvedValue(null), // No bank details
     });
 
     const user = new User({

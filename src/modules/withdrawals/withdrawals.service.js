@@ -10,7 +10,10 @@ const {
   createRazorpayPayout,
 } = require("../../functions/razorpayx");
 const { sendFcmNotifications } = require("../../functions/fcm");
-const { APP_NOTIFICATIONS, getNotification } = require("../../constants/notifications");
+const {
+  APP_NOTIFICATIONS,
+  getNotification,
+} = require("../../constants/notifications");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const { attachId, formatNotification } = require("../../utils/heplers");
 const { WITHDRAWAL_STATUS } = require("../../constants/withdrawals");
@@ -19,26 +22,10 @@ const { WITHDRAWAL_STATUS } = require("../../constants/withdrawals");
  * User initiates a withdrawal request.
  */
 async function createWithdrawal(userId, data) {
-  const { coinAmount } = data;
+  const { cashAmount } = data;
 
-  if (!coinAmount || coinAmount <= 0) {
-    sendFailResponse("Invalid coin amount requested");
-  }
-
-  const user = await User.findById(userId);
-  if (!user) {
-    sendFailResponse("User not found");
-  }
-
-  // Validate active bank account configured
-  const bankAccount = await UserBankAccount.findOne({ userId, isActive: true });
-  if (!bankAccount) {
-    sendFailResponse("No active bank account configured. Please configure a bank account first.");
-  }
-
-  // Validate sufficient coins balance
-  if (user.hydaconCoins < coinAmount) {
-    sendFailResponse("Insufficient Hydacoins balance");
+  if (!cashAmount || cashAmount <= 0) {
+    sendFailResponse("Invalid withdrawal amount requested");
   }
 
   // Load config settings
@@ -48,14 +35,36 @@ async function createWithdrawal(userId, data) {
     sendFailResponse("Failed to load coin configuration settings");
   }
 
-  const cashAmount = coinAmount * coinConfig.coinValue;
+  const coinAmount = Math.ceil(cashAmount / (coinConfig.coinValue || 1));
+
+  const user = await User.findById(userId);
+  if (!user) {
+    sendFailResponse("User not found");
+  }
+
+  // Validate active bank account configured
+  const bankAccount = await UserBankAccount.findOne({ userId, isActive: true });
+  if (!bankAccount) {
+    sendFailResponse(
+      "No active bank account configured. Please configure a bank account first.",
+    );
+  }
+
+  // Validate sufficient coins balance
+  if (user.hydaconCoins < coinAmount) {
+    sendFailResponse("Insufficient Hydacoins balance");
+  }
 
   // Validate min and max limits
   if (cashAmount < coinConfig.minWithdrawAmount) {
-    sendFailResponse(`Amount is below the minimum withdrawal limit of ₹${coinConfig.minWithdrawAmount}`);
+    sendFailResponse(
+      `Amount is below the minimum withdrawal limit of ₹${coinConfig.minWithdrawAmount}`,
+    );
   }
   if (cashAmount > coinConfig.maxWithdrawAmount) {
-    sendFailResponse(`Amount exceeds the maximum withdrawal limit of ₹${coinConfig.maxWithdrawAmount}`);
+    sendFailResponse(
+      `Amount exceeds the maximum withdrawal limit of ₹${coinConfig.maxWithdrawAmount}`,
+    );
   }
 
   const session = await mongoose.startSession();
@@ -77,19 +86,24 @@ async function createWithdrawal(userId, data) {
             status: WITHDRAWAL_STATUS.PENDING,
           },
         ],
-        { session }
+        { session },
       );
       withdrawal = newWithdrawal;
     });
 
     // Send FCM notification
     if (user.fcmTokens?.length && user.enableNotification) {
-      const localizedNotif = getNotification(APP_NOTIFICATIONS.withdraw.initiated, user.language);
+      const localizedNotif = getNotification(
+        APP_NOTIFICATIONS.withdraw.initiated,
+        user.language,
+      );
       sendFcmNotifications(
         user.fcmTokens,
         localizedNotif.title,
-        formatNotification(localizedNotif.body, { amount: cashAmount })
-      ).catch((err) => console.error("[FCM] Withdrawal initiated notification failed:", err));
+        formatNotification(localizedNotif.body, { amount: cashAmount }),
+      ).catch((err) =>
+        console.error("[FCM] Withdrawal initiated notification failed:", err),
+      );
     }
 
     return {
@@ -192,6 +206,47 @@ async function listWithdrawals(data) {
 }
 
 /**
+ * User: Get detailed info of a single withdrawal.
+ */
+async function getWithdrawalDetailsUser(id, userId) {
+  const withdrawal = await Withdrawal.findOne({ _id: id, userId })
+    .populate("userId", "name email phone language razorpayContactId")
+    .populate("bankAccountId")
+    .lean();
+
+  if (!withdrawal) {
+    sendFailResponse("Withdrawal request not found");
+  }
+
+  const bankAccount = withdrawal.bankAccountId;
+  let decryptedBank = null;
+  if (bankAccount) {
+    const accountNumber = decrypt(
+      bankAccount.accountNumber,
+      bankAccount.accountIv,
+    );
+    const ifscCode = decrypt(bankAccount.ifscCode, bankAccount.ifscIv);
+    decryptedBank = {
+      id: bankAccount._id,
+      userName: bankAccount.accountHolderName, // mapped to match transaction details expectation
+      accountHolderName: bankAccount.accountHolderName,
+      accountNumber,
+      ifscCode,
+      bankName: bankAccount.bankName,
+      branchName: bankAccount.branchName,
+    };
+  }
+
+  return {
+    ...withdrawal,
+    id: withdrawal._id,
+    user: withdrawal.userId,
+    bankDetails: decryptedBank, // mapped to match transaction details expectation
+    amount: withdrawal.cashAmount, // mapped to match transaction details expectation
+  };
+}
+
+/**
  * Admin: Get detailed info of a single withdrawal.
  */
 async function getWithdrawalDetails(id) {
@@ -208,7 +263,10 @@ async function getWithdrawalDetails(id) {
   const bankAccount = withdrawal.bankAccountId;
   let decryptedBank = null;
   if (bankAccount) {
-    const accountNumber = decrypt(bankAccount.accountNumber, bankAccount.accountIv);
+    const accountNumber = decrypt(
+      bankAccount.accountNumber,
+      bankAccount.accountIv,
+    );
     const ifscCode = decrypt(bankAccount.ifscCode, bankAccount.ifscIv);
     decryptedBank = {
       id: bankAccount._id,
@@ -277,7 +335,9 @@ async function approveWithdrawal(adminId, withdrawalId) {
   }
 
   if (withdrawal.status !== WITHDRAWAL_STATUS.PENDING) {
-    sendFailResponse(`Cannot approve a withdrawal with ${withdrawal.status} status`);
+    sendFailResponse(
+      `Cannot approve a withdrawal with ${withdrawal.status} status`,
+    );
   }
 
   const user = withdrawal.userId;
@@ -303,7 +363,10 @@ async function approveWithdrawal(adminId, withdrawalId) {
   // 2. Create Razorpay Fund Account if missing
   let fundAccountId = bankAccount.razorpayFundAccountId;
   if (!fundAccountId) {
-    const accountNumber = decrypt(bankAccount.accountNumber, bankAccount.accountIv);
+    const accountNumber = decrypt(
+      bankAccount.accountNumber,
+      bankAccount.accountIv,
+    );
     const ifscCode = decrypt(bankAccount.ifscCode, bankAccount.ifscIv);
 
     try {
@@ -323,10 +386,17 @@ async function approveWithdrawal(adminId, withdrawalId) {
   // 3. Initiate Razorpay Payout (amount in paise, so cashAmount * 100)
   const amountInPaise = Math.round(withdrawal.cashAmount * 100);
   const referenceId = withdrawal._id.toString(); // Idempotency key
-  const narration = `Payout of ${withdrawal.cashAmount}`.replace(/[^a-zA-Z0-9 ]/g, "").slice(0, 30);
+  const narration = `Payout of ${withdrawal.cashAmount}`
+    .replace(/[^a-zA-Z0-9 ]/g, "")
+    .slice(0, 30);
 
   try {
-    const payout = await createRazorpayPayout(fundAccountId, amountInPaise, referenceId, narration);
+    const payout = await createRazorpayPayout(
+      fundAccountId,
+      amountInPaise,
+      referenceId,
+      narration,
+    );
 
     // Update Withdrawal status to PROCESSING
     withdrawal.status = WITHDRAWAL_STATUS.PROCESSING;
@@ -337,12 +407,17 @@ async function approveWithdrawal(adminId, withdrawalId) {
 
     // Send FCM notification
     if (user.fcmTokens?.length && user.enableNotification) {
-      const localizedNotif = getNotification(APP_NOTIFICATIONS.withdraw.approved, user.language);
+      const localizedNotif = getNotification(
+        APP_NOTIFICATIONS.withdraw.approved,
+        user.language,
+      );
       sendFcmNotifications(
         user.fcmTokens,
         localizedNotif.title,
-        localizedNotif.body
-      ).catch((err) => console.error("[FCM] Withdrawal approval notification failed:", err));
+        localizedNotif.body,
+      ).catch((err) =>
+        console.error("[FCM] Withdrawal approval notification failed:", err),
+      );
     }
 
     return {
@@ -364,7 +439,9 @@ async function approveWithdrawal(adminId, withdrawalId) {
 async function cancelWithdrawal(adminId, withdrawalId, data) {
   const { remarks } = data;
   if (!remarks || remarks.trim().length < 5) {
-    sendFailResponse("A cancellation reason of at least 5 characters is required");
+    sendFailResponse(
+      "A cancellation reason of at least 5 characters is required",
+    );
   }
 
   const withdrawal = await Withdrawal.findById(withdrawalId).populate("userId");
@@ -398,12 +475,17 @@ async function cancelWithdrawal(adminId, withdrawalId, data) {
 
     // Send FCM notification
     if (user.fcmTokens?.length && user.enableNotification) {
-      const localizedNotif = getNotification(APP_NOTIFICATIONS.withdraw.cancelled, user.language);
+      const localizedNotif = getNotification(
+        APP_NOTIFICATIONS.withdraw.cancelled,
+        user.language,
+      );
       sendFcmNotifications(
         user.fcmTokens,
         localizedNotif.title,
-        localizedNotif.body
-      ).catch((err) => console.error("[FCM] Withdrawal cancelled notification failed:", err));
+        localizedNotif.body,
+      ).catch((err) =>
+        console.error("[FCM] Withdrawal cancelled notification failed:", err),
+      );
     }
 
     return {
@@ -422,9 +504,9 @@ async function cancelWithdrawal(adminId, withdrawalId, data) {
 }
 
 module.exports = {
-
   createWithdrawal,
   getWithdrawalHistory,
+  getWithdrawalDetailsUser,
   listWithdrawals,
   getWithdrawalDetails,
   getWithdrawalsSummary,

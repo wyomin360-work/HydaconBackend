@@ -127,7 +127,7 @@ userSchema.methods.calculateCompletionPercentage = async function () {
   try {
     const Role = mongoose.model("Role");
     // Dynamically require UserBankAccount to avoid circular dependencies in schema
-    const UserBankAccount = mongoose.model("UserBankAccount"); 
+    const UserBankAccount = mongoose.model("UserBankAccount");
     let roleName = "";
     if (this.roleId) {
       const role = await Role.findById(this.roleId);
@@ -138,14 +138,17 @@ userSchema.methods.calculateCompletionPercentage = async function () {
 
     let hasBankDetails = false;
     if (this._id) {
-      const bankAccount = await UserBankAccount.findOne({ userId: this._id, isActive: true }).lean();
+      const bankAccount = await UserBankAccount.findOne({
+        userId: this._id,
+        isActive: true,
+      }).lean();
       hasBankDetails = !!bankAccount;
     }
 
     this.profileCompletionPercentage = calculateProfileCompletion(
       this,
       roleName,
-      hasBankDetails
+      hasBankDetails,
     );
   } catch (err) {
     console.error("Error calculating profile completion percentage:", err);

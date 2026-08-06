@@ -1,8 +1,6 @@
 const { sendResponse } = require("../../utils/responseHandlers");
 const service = require("./withdrawals.service");
 
-
-
 exports.createWithdrawal = async (req, res, next) => {
   const userId = req.userId;
   const data = req.body;
@@ -13,6 +11,13 @@ exports.createWithdrawal = async (req, res, next) => {
 exports.getWithdrawalHistory = async (req, res, next) => {
   const userId = req.userId;
   const result = await service.getWithdrawalHistory(userId);
+  return sendResponse(res, result);
+};
+
+exports.getWithdrawalDetailsUser = async (req, res, next) => {
+  const { id } = req.params;
+  const userId = req.userId;
+  const result = await service.getWithdrawalDetailsUser(id, userId);
   return sendResponse(res, result);
 };
 
