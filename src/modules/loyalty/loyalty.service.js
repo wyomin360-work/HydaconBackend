@@ -1,10 +1,10 @@
 const Tier = require("../../schemas/tier.schema");
 const LoyaltySeason = require("../../schemas/loyalty-season.schema");
-const TierBenefit = require("../../schemas/tier-benefit.schema");
 const TierConfiguration = require("../../schemas/tier-configuration.schema");
 const TierConfigurationHistory = require("../../schemas/tier-configuration-history.schema");
 const LoyaltyConfigAuditLog = require("../../schemas/loyalty-config-audit.schema");
 const UserTierProgress = require("../../schemas/user-tier-progress.schema");
+const SeasonTierClaim = require("../../schemas/season-tier-claim.schema");
 const LoyaltyTransaction = require("../../schemas/loyalty-transaction.schema");
 const User = require("../../schemas/user.schema");
 const { sendFcmNotifications } = require("../../functions/fcm");
@@ -792,7 +792,6 @@ async function listTierConfigurations(query = {}) {
   const [configs, total] = await Promise.all([
     TierConfiguration.find(filters)
       .populate("tierId")
-      .populate("benefits")
       .skip(skip)
       .limit(limit)
       .lean(),
@@ -811,42 +810,8 @@ async function listTierConfigurations(query = {}) {
 }
 
 /**
- * Admin API: Lists configured benefit items with pagination.
- */
-async function listBenefits(query = {}) {
-  const page = Number(query.page || 1);
-  const limit = Number(query.limit || 20);
-  const skip = (page - 1) * limit;
-
-  const filters = {};
-  if (query.search) {
-    filters.$or = [
-      { name: { $regex: query.search, $options: "i" } },
-      { key: { $regex: query.search, $options: "i" } },
-    ];
-  }
-  if (query.active === "true") filters.active = true;
-  if (query.active === "false") filters.active = false;
-
-  const [benefits, total] = await Promise.all([
-    TierBenefit.find(filters).skip(skip).limit(limit).lean(),
-    TierBenefit.countDocuments(filters),
-  ]);
-
-  return {
-    data: benefits,
-    pagination: {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    },
-  };
-}
-
-/**
  * Retrieve the full tier progression configurations for the active season,
- * populated with the tier definition data and benefits list.
+ * populated with the tier definition data.
  */
 async function getTierProgressionMetadata(userId) {
   const activeSeason = await resolveActiveSeason();
@@ -860,10 +825,181 @@ async function getTierProgressionMetadata(userId) {
     isArchived: { $ne: true },
   })
     .populate("tierId")
-    .populate("benefits")
+    .populate("rewards.giftId")
     .lean();
 
-  return configs;
+  if (!userId) {
+    return configs;
+  }
+
+  let userProgressQuery = UserTierProgress.findOne({
+    userId,
+    seasonId: activeSeason._id,
+  });
+  if (userProgressQuery && typeof userProgressQuery.populate === "function") {
+    userProgressQuery = userProgressQuery.populate("currentTierId");
+  }
+
+  let claimsQuery = SeasonTierClaim.find({
+    userId,
+    seasonId: activeSeason._id,
+  });
+  if (claimsQuery && typeof claimsQuery.lean === "function") {
+    claimsQuery = claimsQuery.lean();
+  }
+
+  const [userProgress, claimsRes] = await Promise.all([
+    userProgressQuery,
+    claimsQuery,
+  ]);
+  const claims = claimsRes || [];
+
+  const claimedTierSet = new Set(
+    claims.map((c) => String(c.tierId._id || c.tierId)),
+  );
+  const userQP = userProgress?.currentPoint || 0;
+  const userRank = userProgress?.currentTierId?.rank ?? 0;
+
+  return configs.map((config) => {
+    const reqQP = config.qualificationPoint || 0;
+    const tierRank = config.tierId?.rank ?? 0;
+    const tierIdStr = String(config.tierId?._id || config.tierId);
+
+    const isUnlocked = userQP >= reqQP || userRank >= tierRank;
+    const isClaimed = claimedTierSet.has(tierIdStr);
+    const hasRewards =
+      Array.isArray(config.rewards) && config.rewards.length > 0;
+    const isClaimable = isUnlocked && !isClaimed && hasRewards;
+
+    return {
+      ...config,
+      isUnlocked,
+      isClaimed,
+      isClaimable,
+    };
+  });
+}
+
+/**
+ * Claims all tier rewards configured for a season tier if unlocked and not already claimed.
+ */
+async function claimTierReward(userId, { seasonId, tierId } = {}) {
+  let targetSeason = null;
+  if (seasonId) {
+    targetSeason = await LoyaltySeason.findById(seasonId);
+  } else {
+    targetSeason = await resolveActiveSeason();
+  }
+
+  if (!targetSeason || !targetSeason.active) {
+    sendFailResponse("Season is not active", 400);
+  }
+
+  const sId = targetSeason._id;
+
+  const userProgress = await UserTierProgress.findOne({
+    userId,
+    seasonId: sId,
+  }).populate("currentTierId");
+
+  if (!userProgress) {
+    sendFailResponse("User has no progress in this season", 400);
+  }
+
+  const tierConfig = await TierConfiguration.findOne({
+    seasonId: sId,
+    tierId,
+    active: true,
+    isArchived: { $ne: true },
+  }).populate("tierId");
+
+  if (!tierConfig) {
+    sendFailResponse("Tier configuration not found", 404);
+  }
+
+  const userQP = userProgress.currentPoint || 0;
+  const reqQP = tierConfig.qualificationPoint || 0;
+  const userTierRank = userProgress.currentTierId?.rank ?? 0;
+  const targetTierRank = tierConfig.tierId?.rank ?? 0;
+
+  const isQualified = userQP >= reqQP || userTierRank >= targetTierRank;
+  if (!isQualified) {
+    sendFailResponse("You have not reached this tier yet", 403);
+  }
+
+  if (!tierConfig.rewards || tierConfig.rewards.length === 0) {
+    sendFailResponse("No rewards available for this tier", 400);
+  }
+
+  const existingClaim = await SeasonTierClaim.findOne({
+    userId,
+    seasonId: sId,
+    tierId,
+  });
+
+  if (existingClaim) {
+    sendFailResponse("Tier rewards have already been claimed", 409);
+  }
+
+  const rewardsService = require("../rewards/rewards.service");
+
+  const claimedRewards = [];
+  for (const reward of tierConfig.rewards) {
+    const rewardType = reward.rewardType;
+    let amount = 0;
+    if (rewardType === "POINTS") amount = Number(reward.points) || 0;
+    if (
+      rewardType === "COINS" ||
+      rewardType === "COIN" ||
+      rewardType === "HYDACOIN"
+    ) {
+      amount = Number(reward.coins) || 0;
+    }
+
+    const sourceDetails = {
+      cause: "SEASON_TIER_REWARD",
+      causeId: String(tierConfig._id),
+      causeTitle:
+        reward.title ||
+        `Season Tier Reward (${tierConfig.tierId?.name || "Tier"})`,
+      referenceId: String(tierConfig._id),
+    };
+
+    const awardResult = await rewardsService.awardRewardToUser(
+      userId,
+      {
+        type: rewardType,
+        amount,
+        giftId: reward.giftId ? String(reward.giftId) : null,
+      },
+      sourceDetails,
+    );
+
+    claimedRewards.push({
+      rewardType,
+      amount,
+      title: reward.title || reward.giftName,
+      giftId: reward.giftId,
+      result: awardResult,
+    });
+  }
+
+  const claimRecord = await SeasonTierClaim.create({
+    userId,
+    seasonId: sId,
+    tierId,
+    tierConfigurationId: tierConfig._id,
+    claimedAt: new Date(),
+    rewardsClaimed: claimedRewards,
+  });
+
+  return {
+    message: "Season tier reward claimed successfully",
+    data: {
+      claim: claimRecord,
+      rewards: claimedRewards,
+    },
+  };
 }
 
 /**
@@ -1302,7 +1438,6 @@ async function createTierConfiguration(adminId, payload) {
       "qualificationPoint",
       "threshold",
       "pointMultiplier",
-      "benefits",
       "active",
       "isFinalTier",
       "metadata",
@@ -1474,7 +1609,6 @@ async function updateTierConfiguration(adminId, configId, payload) {
     "qualificationPoint",
     "threshold",
     "pointMultiplier",
-    "benefits",
     "active",
     "isFinalTier",
     "metadata",
@@ -1741,7 +1875,6 @@ module.exports = {
   listTiers,
   listSeasons,
   listTierConfigurations,
-  listBenefits,
   createSeason,
   updateSeason,
   activateSeason,
@@ -1757,4 +1890,5 @@ module.exports = {
   getSeasonById,
   validateTierRange,
   processLoyaltyAndContestsAfterScan,
+  claimTierReward,
 };

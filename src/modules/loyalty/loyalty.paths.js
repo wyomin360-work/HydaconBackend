@@ -2,6 +2,8 @@ module.exports = {
   root: "/loyalty",
   summary: "/summary",
   progression: "/progression",
+  claimReward: "/claim-reward",
+  claimSeasonTierReward: "/seasons/:seasonId/tiers/:tierId/claim",
   admin: {
     tiers: "/admin/tiers",
     tiersDetail: "/admin/tiers/:id",
@@ -15,7 +17,5 @@ module.exports = {
     tierConfigurationHistory: "/admin/tier-configurations/:id/history",
     configAuditLogs: "/admin/config-audit-logs",
     configAuditLogDetail: "/admin/config-audit-logs/:id",
-    benefits: "/admin/benefits",
-    benefitsDetail: "/admin/benefits/:id",
   },
 };

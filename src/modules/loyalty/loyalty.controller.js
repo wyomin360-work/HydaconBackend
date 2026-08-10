@@ -1,7 +1,6 @@
 const loyaltyService = require("./loyalty.service");
 const Tier = require("../../schemas/tier.schema");
 const LoyaltySeason = require("../../schemas/loyalty-season.schema");
-const TierBenefit = require("../../schemas/tier-benefit.schema");
 const TierConfiguration = require("../../schemas/tier-configuration.schema");
 const { sendResponse } = require("../../utils/responseHandlers");
 
@@ -22,6 +21,19 @@ async function getTierProgression(req, res) {
   const userId = req.userId;
   const progression = await loyaltyService.getTierProgressionMetadata(userId);
   return sendResponse(res, progression, 200);
+}
+
+/**
+ * Mobile App API: Claims unlocked tier rewards for the active season.
+ */
+async function claimTierReward(req, res) {
+  const userId = req.userId;
+  const payload = {
+    seasonId: req.params?.seasonId || req.body?.seasonId,
+    tierId: req.params?.tierId || req.body?.tierId,
+  };
+  const result = await loyaltyService.claimTierReward(userId, payload);
+  return sendResponse(res, result, 200);
 }
 
 // ----------------------------------------------------
@@ -135,23 +147,6 @@ async function updateTierConfiguration(req, res) {
 }
 
 /**
- * Admin API: Creates a dynamic benefit metadata entry.
- */
-async function createBenefit(req, res) {
-  const { name, description, key, active } = req.body;
-  const benefit = await TierBenefit.create({ name, description, key, active });
-  return sendResponse(res, benefit, 201);
-}
-
-/**
- * Admin API: Lists configured benefit items (paginated).
- */
-async function listBenefits(req, res) {
-  const result = await loyaltyService.listBenefits(req.query);
-  return sendResponse(res, result, 200);
-}
-
-/**
  * Admin API: Updates an existing season generally.
  */
 async function updateSeason(req, res) {
@@ -234,26 +229,6 @@ async function deleteTierConfiguration(req, res) {
   );
 }
 
-/**
- * Admin API: Updates an existing benefit.
- */
-async function updateBenefit(req, res) {
-  const benefitId = req.params.id;
-  const benefit = await TierBenefit.findByIdAndUpdate(benefitId, req.body, {
-    new: true,
-  });
-  return sendResponse(res, benefit, 200);
-}
-
-/**
- * Admin API: Deletes a benefit.
- */
-async function deleteBenefit(req, res) {
-  const benefitId = req.params.id;
-  await TierBenefit.findByIdAndDelete(benefitId);
-  return sendResponse(res, { message: "Benefit deleted successfully" }, 200);
-}
-
 async function addPoints(req, res) {
   const userId = req.userId;
   const { points = 100 } = req.body;
@@ -284,13 +259,10 @@ module.exports = {
   listTierConfigurations,
   updateTierConfiguration,
   deleteTierConfiguration,
-  createBenefit,
-  listBenefits,
-  updateBenefit,
-  deleteBenefit,
   getSeasonManagementSummary,
   listConfigurationAuditLogs,
   getConfigAuditLogById,
   getTierConfigurationHistory,
   getSeasonById,
+  claimTierReward,
 };
