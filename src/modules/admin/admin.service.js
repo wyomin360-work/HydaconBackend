@@ -18,10 +18,10 @@ const {
 const { sendMail } = require("../../functions/nodemailer");
 
 async function generateAndSaveToken(payload) {
-  const accessToken = generateToken(payload);
-  const refreshToken = generateToken(payload, "30d");
+  const accessToken = generateToken(payload, "15m");
+  const refreshToken = generateToken(payload, "7d");
   const refreshTokenTokenExpiryIn = new Date(
-    Date.now() + 30 * 24 * 60 * 60 * 1000,
+    Date.now() + 7 * 24 * 60 * 60 * 1000,
   );
 
   if (!refreshToken || !accessToken)
@@ -30,7 +30,7 @@ async function generateAndSaveToken(payload) {
   await RefreshToken.create({
     refreshToken,
     userId: payload?.adminId,
-    expiresAt: refreshTokenTokenExpiryIn, //30 days
+    expiresAt: refreshTokenTokenExpiryIn, //7 days
   });
   return { accessToken, refreshToken };
 }
@@ -163,7 +163,7 @@ async function login(adminData) {
 // Logout Admin
 // ----------------------
 async function logout(adminId) {
-  await RefreshToken.findOneAndDelete({ userId: adminId });
+  await RefreshToken.updateMany({ userId: adminId }, { $set: { revoked: true } });
   return { message: "Logged Out successfully", data: { loggedOut: true } };
 }
 

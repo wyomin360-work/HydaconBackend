@@ -45,10 +45,10 @@ const { sendMail } = require("../../functions/nodemailer");
 const AppConfig = require("../../schemas/app-config.schema");
 
 async function generateAndSaveToken(payload) {
-  const accessToken = generateToken(payload);
-  const refreshToken = generateToken(payload, "30d");
+  const accessToken = generateToken(payload, "15m");
+  const refreshToken = generateToken(payload, "7d");
   const refreshTokenTokenExpiryIn = new Date(
-    Date.now() + 30 * 24 * 60 * 60 * 1000,
+    Date.now() + 7 * 24 * 60 * 60 * 1000,
   );
 
   if (!accessToken || !refreshToken)
@@ -57,12 +57,10 @@ async function generateAndSaveToken(payload) {
   // Clear viewedPopups for user session on login
   await User.findByIdAndUpdate(payload?.userId, { viewedPopups: [] });
 
-  await RefreshToken.deleteMany({ userId: payload?.userId });
-
   await RefreshToken.create({
     refreshToken,
     userId: payload?.userId,
-    expiresAt: refreshTokenTokenExpiryIn, //30 days
+    expiresAt: refreshTokenTokenExpiryIn, //7 days
   });
 
   if (!refreshToken || !accessToken)
@@ -310,7 +308,7 @@ async function logout(userId) {
       localizedNotif.body,
     ).catch((err) => console.error("[FCM] logout notification failed:", err));
   }
-  await RefreshToken.findOneAndDelete({ userId: userId });
+  await RefreshToken.updateMany({ userId: userId }, { $set: { revoked: true } });
   await User.findByIdAndUpdate(
     userId,
     { $set: { fcmTokens: [] } },

@@ -21,7 +21,7 @@ async function renewToken(data) {
 
   const now = moment();
   const refreshTokenTokenExpiryIn = new Date(
-    Date.now() + 30 * 24 * 60 * 60 * 1000,
+    Date.now() + 7 * 24 * 60 * 60 * 1000,
   );
 
   const tokenDetails = verifyToken(currentRefreshToken);
@@ -32,45 +32,62 @@ async function renewToken(data) {
     if (!user) sendFailResponse("Corrupted token", 401);
 
     const storedToken = await RefreshToken.findOne({
+      refreshToken: currentRefreshToken,
       userId: tokenDetails?.userId,
     });
 
-    if (!storedToken || storedToken.refreshToken !== currentRefreshToken) {
+    if (!storedToken) {
       sendFailResponse("Token manipulated", 401);
+    }
+
+    if (storedToken.revoked) {
+      // Token reuse detected! Revoke all tokens for this user.
+      await RefreshToken.deleteMany({ userId: user._id });
+      sendFailResponse("Token compromised. Please log in again.", 403);
     }
 
     let payload = {
       userId: user._id,
       email: user.email,
     };
-    const expiresAt = moment(storedToken.expiresAt);
-    const daysRemaining = expiresAt.diff(now, "days");
-    const accessToken = generateToken(payload);
-    let refreshToken = user.refreshToken;
+    
+    // Generate new token pair
+    const accessToken = generateToken(payload, "15m");
+    const refreshToken = generateToken(payload, "7d");
 
-    if (daysRemaining <= 5) {
-      refreshToken = generateToken(payload, "30d");
-      await RefreshToken.deleteMany({ userId: user._id });
-      await RefreshToken.create({
-        refreshToken,
-        userId: payload?.userId,
-        expiresAt: refreshTokenTokenExpiryIn,
-      });
-    }
+    // Revoke old token
+    storedToken.revoked = true;
+    await storedToken.save();
 
-    ((user.refreshToken = refreshToken), (user.accessToken = accessToken));
+    // Create new refresh token
+    await RefreshToken.create({
+      refreshToken,
+      userId: payload?.userId,
+      expiresAt: refreshTokenTokenExpiryIn,
+    });
+
+    user.refreshToken = refreshToken;
+    user.accessToken = accessToken;
     await user.save();
+    
     return { accessToken, refreshToken };
   } else if (role === ROLES.ADMIN) {
     const admin = await Admin.findById(tokenDetails?.adminId);
     if (!admin) sendFailResponse("Corrupted token", 401);
 
     const storedToken = await RefreshToken.findOne({
-      adminId: tokenDetails?.adminId,
+      refreshToken: currentRefreshToken,
+      userId: tokenDetails?.adminId,
     });
 
-    if (!storedToken || storedToken.refreshToken !== currentRefreshToken) {
+    if (!storedToken) {
       sendFailResponse("Token manipulated", 401);
+    }
+
+    if (storedToken.revoked) {
+      // Token reuse detected! Revoke all tokens for this admin.
+      await RefreshToken.deleteMany({ userId: admin._id });
+      sendFailResponse("Token compromised. Please log in again.", 403);
     }
 
     let payload = {
@@ -78,22 +95,25 @@ async function renewToken(data) {
       email: admin.email,
     };
 
-    const expiresAt = moment(storedToken.expiresAt);
-    const daysRemaining = expiresAt.diff(now, "days");
-    const accessToken = generateToken(payload);
-    let refreshToken = admin.refreshToken;
+    // Generate new token pair
+    const accessToken = generateToken(payload, "15m");
+    const refreshToken = generateToken(payload, "7d");
 
-    if (daysRemaining <= 5) {
-      refreshToken = generateToken(payload, "30d");
-      await RefreshToken.deleteMany({ adminId: admin._id });
-      await RefreshToken.create({
-        refreshToken,
-        adminId: payload?.adminId,
-        expiresAt: refreshTokenTokenExpiryIn,
-      });
-    }
-    ((admin.refreshToken = refreshToken), (admin.accessToken = accessToken));
+    // Revoke old token
+    storedToken.revoked = true;
+    await storedToken.save();
+
+    // Create new refresh token
+    await RefreshToken.create({
+      refreshToken,
+      userId: payload?.adminId,
+      expiresAt: refreshTokenTokenExpiryIn,
+    });
+
+    admin.refreshToken = refreshToken;
+    admin.accessToken = accessToken;
     await admin.save();
+    
     return { accessToken, refreshToken };
   } else {
     sendFailResponse("Invalid token", 401);
