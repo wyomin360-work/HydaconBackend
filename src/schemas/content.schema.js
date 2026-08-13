@@ -79,5 +79,15 @@ const contentSchema = new mongoose.Schema(
   },
 );
 
+// Add compound indexes for high-traffic query performance
+contentSchema.index({
+  active: 1,
+  startDate: 1,
+  endDate: 1,
+  priority: -1,
+  sortOrder: 1,
+});
+contentSchema.index({ ruleSetId: 1 });
+
 const Content = mongoose.model("Content", contentSchema);
 module.exports = Content;

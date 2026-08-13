@@ -4,6 +4,7 @@ const pinoHttp = require("pino-http");
 const cors = require("cors");
 const swaggerUi = require("swagger-ui-express");
 const path = require("path");
+  const mongoose = require("mongoose");
 
 // file imports
 const swaggerSpec = require("./config/swagger.config");
@@ -81,6 +82,16 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.get("/", (req, res) => {
   logger.info("Root endpoint hit", { route: "/" });
   res.send({ message: "Hello World" });
+});
+
+app.get("/health", (req, res) => {
+  const isDbConnected = mongoose.connection.readyState === 1;
+  const statusCode = isDbConnected ? 200 : 503;
+  res.status(statusCode).json({
+    status: isDbConnected ? "ok" : "degraded",
+    database: isDbConnected ? "connected" : "disconnected",
+    timestamp: new Date().toISOString(),
+  });
 });
 
 app.use((req, res, next) => {
