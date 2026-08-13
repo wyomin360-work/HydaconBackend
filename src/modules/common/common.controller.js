@@ -6,7 +6,6 @@ exports.uploadImage = async (req, res) => {
   const response = await commonService.uploadImage(fileData);
   return sendResponse(res, response);
 };
-
 exports.renewToken = async (req, res) => {
   const data = req?.body;
   const response = await commonService.renewToken(data);
