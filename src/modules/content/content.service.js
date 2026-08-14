@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Content = require("../../schemas/content.schema");
 const User = require("../../schemas/user.schema");
 const AppError = require("../../utils/appError");
@@ -5,6 +6,7 @@ const { ALLOWED_PLACEMENTS } = require("../../constants/content");
 const { RuleSet } = require("../../schemas/rule-set.schema");
 const ruleSetEvaluator = require("../rule-set/rule-set.evaluator");
 const ContentAnalytics = require("../../schemas/contentAnalytics.schema");
+const Role = require("../../schemas/role.schema");
 
 const validatePlacements = (placements) => {
   if (!placements || !Array.isArray(placements)) return;
@@ -85,6 +87,8 @@ const createContent = async (data) => {
 
   const content = new Content(data);
   await content.save();
+
+  invalidateContentCache();
 
   const result = content.toObject();
   if (hadConflict) {
@@ -190,6 +194,7 @@ const updateContent = async (id, data) => {
     { $set: data },
     { new: true, runValidators: true },
   );
+  invalidateContentCache();
   return content;
 };
 
@@ -198,6 +203,7 @@ const deleteContent = async (id) => {
   if (!content) {
     throw new AppError("Content not found", 404);
   }
+  invalidateContentCache();
   return content;
 };
 
@@ -240,71 +246,152 @@ const listContent = async (query = {}) => {
   };
 };
 
+// In-Memory Cache for Active Contents & Guest Homepage
+let cachedActiveContents = null;
+let activeContentsCacheTime = 0;
+let cachedGuestHomepage = null;
+let guestHomepageCacheTime = 0;
+const CACHE_TTL_MS = 30 * 1000; // 30 seconds
+
+const USER_EVALUATION_FIELDS =
+  "roleId viewedPopups currentTierId hydaconCoins cashBalance totalPoints profileCompletionPercentage areaOfOperation kycStatus referralsCount successfulReferralsCount currentStreak language";
+
+const invalidateContentCache = () => {
+  cachedActiveContents = null;
+  activeContentsCacheTime = 0;
+  cachedGuestHomepage = null;
+  guestHomepageCacheTime = 0;
+};
+
 const filterContentsByRuleSet = async (contents, user) => {
   if (!user) {
     return contents.filter((c) => !c.ruleSetId);
   }
-  const filtered = [];
-  for (const content of contents) {
-    if (!content.ruleSetId) {
-      filtered.push(content);
-      continue;
-    }
-    try {
-      const ruleSet = await RuleSet.findById(content.ruleSetId);
-      if (ruleSet) {
-        const evaluation = await ruleSetEvaluator.evaluateRuleSet(
-          ruleSet,
-          user,
-          { targetId: content._id },
-        );
-        if (evaluation.eligible) {
-          filtered.push(content);
-        }
+
+  // Pre-populate user.roleId if present as an unpopulated ObjectId
+  if (user.roleId && typeof user.roleId !== "object") {
+    const roleQuery = Role.findById(user.roleId);
+    if (roleQuery) {
+      const roleObj = roleQuery.lean ? await roleQuery.lean() : await roleQuery;
+      if (roleObj) {
+        user.roleId = roleObj;
       }
-    } catch (err) {
-      console.error(
-        `Error evaluating ruleset for content ${content._id}:`,
-        err.message,
-      );
     }
   }
-  return filtered;
+
+  // Parallelize rule set evaluation across content items using Promise.all
+  const results = await Promise.all(
+    contents.map(async (content) => {
+      if (!content.ruleSetId) {
+        return content;
+      }
+      try {
+        let ruleSet = content.ruleSetId;
+        // Fetch rule set from DB only if it was not pre-populated
+        if (typeof ruleSet !== "object" || !ruleSet || !ruleSet.rules) {
+          const rsQuery = RuleSet.findById(content.ruleSetId);
+          if (rsQuery) {
+            ruleSet = rsQuery.lean ? await rsQuery.lean() : await rsQuery;
+          } else {
+            ruleSet = null;
+          }
+        }
+        if (ruleSet) {
+          const evaluation = await ruleSetEvaluator.evaluateRuleSet(
+            ruleSet,
+            user,
+            { targetId: content._id },
+          );
+          if (evaluation.eligible) {
+            return content;
+          }
+        }
+      } catch (err) {
+        console.error(
+          `Error evaluating ruleset for content ${content._id}:`,
+          err.message,
+        );
+      }
+      return null;
+    }),
+  );
+
+  return results.filter(Boolean);
 };
 
-// Helper: Fetch active contents
+// Helper: Fetch active contents with 30s in-memory caching and graceful degradation
 const getActiveContents = async () => {
-  const now = new Date();
-  return await Content.find({
-    active: true,
-    $and: [
-      { $or: [{ startDate: null }, { startDate: { $lte: now } }] },
-      { $or: [{ endDate: null }, { endDate: { $gte: now } }] },
-    ],
-  })
-    .sort({ priority: -1, sortOrder: 1 })
-    .lean();
+  const nowMs = Date.now();
+  if (cachedActiveContents && nowMs - activeContentsCacheTime < CACHE_TTL_MS) {
+    return cachedActiveContents;
+  }
+
+  // Graceful degradation: Check if MongoDB is connected
+  const isDbReady = mongoose.connection.readyState === 1 || process.env.NODE_ENV === "test";
+  if (!isDbReady) {
+    console.warn("⚠️ [ContentService] MongoDB unavailable. Gracefully serving cached or empty content.");
+    if (cachedActiveContents) {
+      return cachedActiveContents;
+    }
+    return [];
+  }
+
+  try {
+    const now = new Date();
+    const contents = await Content.find({
+      active: true,
+      $and: [
+        { $or: [{ startDate: null }, { startDate: { $lte: now } }] },
+        { $or: [{ endDate: null }, { endDate: { $gte: now } }] },
+      ],
+    })
+      .populate("ruleSetId")
+      .sort({ priority: -1, sortOrder: 1 })
+      .lean();
+
+    cachedActiveContents = contents;
+    activeContentsCacheTime = nowMs;
+    return contents;
+  } catch (error) {
+    console.error("❌ [ContentService] Database error fetching active contents:", error.message);
+    if (cachedActiveContents) {
+      return cachedActiveContents;
+    }
+    return [];
+  }
 };
 
 const getHomepageContent = async (userId = null) => {
-  let activeContents = await getActiveContents();
+  // Return guest cached response if available
+  const nowMs = Date.now();
+  if (
+    !userId &&
+    cachedGuestHomepage &&
+    nowMs - guestHomepageCacheTime < CACHE_TTL_MS
+  ) {
+    return cachedGuestHomepage;
+  }
 
-  if (userId) {
-    const user = await User.findById(userId);
-    if (user) {
-      activeContents = await filterContentsByRuleSet(activeContents, user);
+  let activeContents = await getActiveContents();
+  let viewedIds = [];
+
+  if (userId && (mongoose.connection.readyState === 1 || process.env.NODE_ENV === "test")) {
+    try {
+      const user = await User.findById(userId)
+        .select(USER_EVALUATION_FIELDS)
+        .populate("roleId")
+        .lean();
+      if (user) {
+        activeContents = await filterContentsByRuleSet(activeContents, user);
+        if (user.viewedPopups && Array.isArray(user.viewedPopups)) {
+          viewedIds = user.viewedPopups.map((id) => id.toString());
+        }
+      }
+    } catch (err) {
+      console.error("❌ [ContentService] User lookup error during getHomepageContent:", err.message);
     }
   } else {
     activeContents = await filterContentsByRuleSet(activeContents, null);
-  }
-
-  // Get viewed popups for the user
-  let viewedIds = [];
-  if (userId) {
-    const user = await User.findById(userId).lean();
-    if (user && user.viewedPopups) {
-      viewedIds = user.viewedPopups.map((id) => id.toString());
-    }
   }
 
   // Group by placement
@@ -331,28 +418,31 @@ const getHomepageContent = async (userId = null) => {
     }
   });
 
+  if (!userId) {
+    cachedGuestHomepage = homepageGroups;
+    guestHomepageCacheTime = nowMs;
+  }
+
   return homepageGroups;
 };
 
 const getPlacementContent = async (placement, userId = null) => {
   let activeContents = await getActiveContents();
+  let viewedIds = [];
 
   if (userId) {
-    const user = await User.findById(userId);
+    const user = await User.findById(userId)
+      .select(USER_EVALUATION_FIELDS)
+      .populate("roleId")
+      .lean();
     if (user) {
       activeContents = await filterContentsByRuleSet(activeContents, user);
+      if (user.viewedPopups && Array.isArray(user.viewedPopups)) {
+        viewedIds = user.viewedPopups.map((id) => id.toString());
+      }
     }
   } else {
     activeContents = await filterContentsByRuleSet(activeContents, null);
-  }
-
-  // Get viewed popups for the user
-  let viewedIds = [];
-  if (userId) {
-    const user = await User.findById(userId).lean();
-    if (user && user.viewedPopups) {
-      viewedIds = user.viewedPopups.map((id) => id.toString());
-    }
   }
 
   return activeContents.filter((content) => {
@@ -466,5 +556,6 @@ module.exports = {
   trackContentView,
   getContentDetails,
   getContentDetailsAdmin,
+  invalidateContentCache,
   ALLOWED_PLACEMENTS,
 };

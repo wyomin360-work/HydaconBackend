@@ -20,6 +20,18 @@ router.get(
   handleError(controller.getTierProgression),
 );
 
+// User Claim Tier Reward Endpoints (Mobile App integration)
+router.post(
+  loyaltyPaths.claimReward,
+  verification.verifyUser,
+  handleError(controller.claimTierReward),
+);
+router.post(
+  loyaltyPaths.claimSeasonTierReward,
+  verification.verifyUser,
+  handleError(controller.claimTierReward),
+);
+
 // Admin Loyalty Tier Management Endpoints
 router.post(
   loyaltyPaths.admin.tiers,
@@ -119,28 +131,6 @@ router.delete(
   loyaltyPaths.admin.tierConfigurationsDetail,
   verification.verifyAdmin,
   handleError(controller.deleteTierConfiguration),
-);
-
-// Admin Benefits Endpoints
-router.post(
-  loyaltyPaths.admin.benefits,
-  verification.verifyAdmin,
-  handleError(controller.createBenefit),
-);
-router.get(
-  loyaltyPaths.admin.benefits,
-  verification.verifyAdmin,
-  handleError(controller.listBenefits),
-);
-router.patch(
-  loyaltyPaths.admin.benefitsDetail,
-  verification.verifyAdmin,
-  handleError(controller.updateBenefit),
-);
-router.delete(
-  loyaltyPaths.admin.benefitsDetail,
-  verification.verifyAdmin,
-  handleError(controller.deleteBenefit),
 );
 
 module.exports = router;

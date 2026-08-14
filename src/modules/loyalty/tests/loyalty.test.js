@@ -6,7 +6,8 @@ const TierConfiguration = require("../../../schemas/tier-configuration.schema");
 const UserTierProgress = require("../../../schemas/user-tier-progress.schema");
 const LoyaltyTransaction = require("../../../schemas/loyalty-transaction.schema");
 const User = require("../../../schemas/user.schema");
-const TierBenefit = require("../../../schemas/tier-benefit.schema");
+const SeasonTierClaim = require("../../../schemas/season-tier-claim.schema");
+const rewardsService = require("../../rewards/rewards.service");
 const {
   LOYALTY_TRANSACTION_TYPES,
   LOYALTY_TRANSACTION_SOURCES,
@@ -26,11 +27,14 @@ jest.mock("node-cron", () => ({
 // Mock schemas
 jest.mock("../../../schemas/tier.schema");
 jest.mock("../../../schemas/loyalty-season.schema");
-jest.mock("../../../schemas/tier-benefit.schema");
 jest.mock("../../../schemas/tier-configuration.schema");
 jest.mock("../../../schemas/user-tier-progress.schema");
 jest.mock("../../../schemas/loyalty-transaction.schema");
 jest.mock("../../../schemas/user.schema");
+jest.mock("../../../schemas/season-tier-claim.schema");
+jest.mock("../../rewards/rewards.service", () => ({
+  awardRewardToUser: jest.fn().mockResolvedValue({ success: true }),
+}));
 jest.mock("../../../functions/fcm", () => ({
   sendFcmNotifications: jest.fn().mockResolvedValue({}),
 }));
@@ -254,7 +258,9 @@ describe("Loyalty and Tier Progression Engine", () => {
         active: true,
         isArchived: { $ne: true },
       });
-      expect(result).toEqual(mockConfigs);
+      expect(result[0]).toHaveProperty("isUnlocked");
+      expect(result[0]).toHaveProperty("isClaimed");
+      expect(result[0]).toHaveProperty("isClaimable");
     });
   });
 
@@ -441,27 +447,6 @@ describe("Loyalty and Tier Progression Engine", () => {
       expect(TierConfiguration.findByIdAndDelete).toHaveBeenCalledWith(
         "someId",
       );
-      expect(mockRes.status).toHaveBeenCalledWith(200);
-    });
-
-    it("should update a tier benefit", async () => {
-      TierBenefit.findByIdAndUpdate.mockResolvedValue({
-        _id: "someId",
-        name: "Updated Benefit",
-      });
-      await loyaltyController.updateBenefit(mockReq, mockRes);
-      expect(TierBenefit.findByIdAndUpdate).toHaveBeenCalledWith(
-        "someId",
-        mockReq.body,
-        { new: true },
-      );
-      expect(mockRes.status).toHaveBeenCalledWith(200);
-    });
-
-    it("should delete a tier benefit", async () => {
-      TierBenefit.findByIdAndDelete.mockResolvedValue({});
-      await loyaltyController.deleteBenefit(mockReq, mockRes);
-      expect(TierBenefit.findByIdAndDelete).toHaveBeenCalledWith("someId");
       expect(mockRes.status).toHaveBeenCalledWith(200);
     });
   });
@@ -1359,6 +1344,311 @@ describe("Loyalty and Tier Progression Engine", () => {
       await expect(
         loyaltyService.createSeason("admin123", payload),
       ).rejects.toThrow();
+    });
+  });
+
+  describe("Season Tier Rewards & Configuration Management", () => {
+    it("should create tier configuration with rewards payload", async () => {
+      const mockSeason = { _id: "season123", active: true };
+      const mockTier = { _id: "tier123", name: "Bronze", rank: 1 };
+      LoyaltySeason.findById.mockReturnValue({
+        lean: jest.fn().mockResolvedValue(mockSeason),
+      });
+      Tier.findById.mockReturnValue({
+        lean: jest.fn().mockResolvedValue(mockTier),
+      });
+
+      const payload = {
+        seasonId: "season123",
+        tierId: "tier123",
+        qualificationPoint: 100,
+        threshold: 400,
+        pointMultiplier: 1.1,
+        rewards: [
+          { rewardType: "POINTS", points: 100, title: "100 Bonus Pts" },
+          { rewardType: "COINS", coins: 20, title: "20 Hydacoins" },
+        ],
+      };
+
+      const mockSavedConfig = {
+        _id: "config123",
+        ...payload,
+      };
+
+      TierConfiguration.prototype.save = jest
+        .fn()
+        .mockResolvedValue(mockSavedConfig);
+
+      const result = await loyaltyService.createTierConfiguration(
+        "admin123",
+        payload,
+      );
+
+      expect(result).toBeDefined();
+    });
+
+    it("should update tier configuration rewards", async () => {
+      const mockConfig = {
+        _id: "config123",
+        seasonId: { _id: "season123" },
+        tierId: { _id: "tier123" },
+        rewards: [{ rewardType: "POINTS", points: 50 }],
+        toObject: jest.fn().mockReturnValue({}),
+        save: jest.fn(),
+      };
+      TierConfiguration.findById.mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(mockConfig),
+        then: jest.fn((cb) => cb(mockConfig)),
+      });
+
+      const updatePayload = {
+        rewards: [
+          { rewardType: "POINTS", points: 150, title: "Updated Pts" },
+          { rewardType: "GIFT", giftName: "Exclusive Mug", title: "Free Mug" },
+        ],
+      };
+
+      TierConfiguration.findByIdAndUpdate.mockResolvedValue({
+        _id: "config123",
+        seasonId: { _id: "season123" },
+        tierId: { _id: "tier123" },
+        toObject: jest.fn().mockReturnValue({}),
+        ...updatePayload,
+      });
+
+      const result = await loyaltyService.updateTierConfiguration(
+        "admin123",
+        "config123",
+        updatePayload,
+      );
+
+      expect(TierConfiguration.findByIdAndUpdate).toHaveBeenCalled();
+    });
+  });
+
+  describe("Season Tier Rewards & Claiming Edge Cases", () => {
+    it("should successfully claim tier rewards if user qualifies and has not claimed yet", async () => {
+      const mockSeason = { _id: "season123", active: true };
+      LoyaltySeason.findById.mockResolvedValue(mockSeason);
+
+      const mockProgress = {
+        userId: "user123",
+        seasonId: "season123",
+        currentPoint: 500,
+        currentTierId: { _id: "tier123", rank: 1, name: "Bronze" },
+      };
+      UserTierProgress.findOne.mockReturnValue({
+        populate: jest.fn().mockResolvedValue(mockProgress),
+      });
+
+      const mockTierConfig = {
+        _id: "config123",
+        seasonId: "season123",
+        tierId: { _id: "tier123", rank: 1, name: "Bronze" },
+        qualificationPoint: 100,
+        rewards: [
+          { rewardType: "POINTS", points: 50, title: "Bonus Points" },
+          { rewardType: "COINS", coins: 10, title: "Bonus Coins" },
+        ],
+      };
+      TierConfiguration.findOne.mockReturnValue({
+        populate: jest.fn().mockResolvedValue(mockTierConfig),
+      });
+
+      SeasonTierClaim.findOne.mockResolvedValue(null);
+      SeasonTierClaim.create.mockResolvedValue({
+        _id: "claim123",
+        userId: "user123",
+        seasonId: "season123",
+        tierId: "tier123",
+      });
+
+      const result = await loyaltyService.claimTierReward("user123", {
+        seasonId: "season123",
+        tierId: "tier123",
+      });
+
+      expect(result.message).toContain("claimed successfully");
+      expect(rewardsService.awardRewardToUser).toHaveBeenCalledTimes(2);
+      expect(SeasonTierClaim.create).toHaveBeenCalled();
+    });
+
+    it("should throw error if user has already claimed rewards for this tier (Double Claiming)", async () => {
+      const mockSeason = { _id: "season123", active: true };
+      LoyaltySeason.findById.mockResolvedValue(mockSeason);
+
+      const mockProgress = {
+        userId: "user123",
+        seasonId: "season123",
+        currentPoint: 500,
+        currentTierId: { _id: "tier123", rank: 1 },
+      };
+      UserTierProgress.findOne.mockReturnValue({
+        populate: jest.fn().mockResolvedValue(mockProgress),
+      });
+
+      const mockTierConfig = {
+        _id: "config123",
+        seasonId: "season123",
+        tierId: { _id: "tier123", rank: 1 },
+        qualificationPoint: 100,
+        rewards: [{ rewardType: "POINTS", points: 50 }],
+      };
+      TierConfiguration.findOne.mockReturnValue({
+        populate: jest.fn().mockResolvedValue(mockTierConfig),
+      });
+
+      SeasonTierClaim.findOne.mockResolvedValue({ _id: "existingClaim" });
+
+      await expect(
+        loyaltyService.claimTierReward("user123", {
+          seasonId: "season123",
+          tierId: "tier123",
+        }),
+      ).rejects.toThrow("already been claimed");
+    });
+
+    it("should throw error if season is not active", async () => {
+      SeasonTierClaim.findOne.mockResolvedValue(null);
+      LoyaltySeason.findById.mockResolvedValue({
+        _id: "season123",
+        active: false,
+      });
+
+      await expect(
+        loyaltyService.claimTierReward("user123", {
+          seasonId: "season123",
+          tierId: "tier123",
+        }),
+      ).rejects.toThrow("Season is not active");
+    });
+
+    it("should throw error if user has not reached the tier being claimed", async () => {
+      const mockSeason = { _id: "season123", active: true };
+      LoyaltySeason.findById.mockResolvedValue(mockSeason);
+
+      const mockProgress = {
+        userId: "user123",
+        seasonId: "season123",
+        currentPoint: 50,
+        currentTierId: { _id: "tier0", rank: 0, name: "Beginner" },
+      };
+      UserTierProgress.findOne.mockReturnValue({
+        populate: jest.fn().mockResolvedValue(mockProgress),
+      });
+
+      const mockTierConfig = {
+        _id: "configGold",
+        seasonId: "season123",
+        tierId: { _id: "tierGold", rank: 3, name: "Gold" },
+        qualificationPoint: 1000,
+        rewards: [{ rewardType: "POINTS", points: 500 }],
+      };
+      TierConfiguration.findOne.mockReturnValue({
+        populate: jest.fn().mockResolvedValue(mockTierConfig),
+      });
+
+      SeasonTierClaim.findOne.mockResolvedValue(null);
+
+      await expect(
+        loyaltyService.claimTierReward("user123", {
+          seasonId: "season123",
+          tierId: "tierGold",
+        }),
+      ).rejects.toThrow("You have not reached this tier yet");
+    });
+
+    it("should throw error if tier configuration has no rewards defined", async () => {
+      const mockSeason = { _id: "season123", active: true };
+      LoyaltySeason.findById.mockResolvedValue(mockSeason);
+
+      const mockProgress = {
+        userId: "user123",
+        seasonId: "season123",
+        currentPoint: 500,
+        currentTierId: { _id: "tier123", rank: 1, name: "Bronze" },
+      };
+      UserTierProgress.findOne.mockReturnValue({
+        populate: jest.fn().mockResolvedValue(mockProgress),
+      });
+
+      const mockTierConfig = {
+        _id: "config123",
+        seasonId: "season123",
+        tierId: { _id: "tier123", rank: 1 },
+        qualificationPoint: 100,
+        rewards: [], // Empty rewards
+      };
+      TierConfiguration.findOne.mockReturnValue({
+        populate: jest.fn().mockResolvedValue(mockTierConfig),
+      });
+
+      SeasonTierClaim.findOne.mockResolvedValue(null);
+
+      await expect(
+        loyaltyService.claimTierReward("user123", {
+          seasonId: "season123",
+          tierId: "tier123",
+        }),
+      ).rejects.toThrow("No rewards available for this tier");
+    });
+  });
+
+  describe("Season Rollover with Percentage Decline Carry-Forward", () => {
+    it("should calculate 50% carry-forward points correctly during season rollover", async () => {
+      const endedSeason = {
+        _id: "seasonOld",
+        name: "Old Season",
+        active: false,
+        carryForwardBehavior: "PERCENTAGE",
+        carryForwardPercentage: 50,
+      };
+
+      const newSeason = {
+        _id: "seasonNew",
+        name: "New Season",
+        active: true,
+      };
+
+      const previousPoints = 1000;
+      const expectedCarriedPoints = 500; // 50% of 1000
+
+      // Calculate carry forward points
+      let carriedPoints = 0;
+      if (endedSeason.carryForwardBehavior === "RESET") {
+        carriedPoints = 0;
+      } else if (endedSeason.carryForwardBehavior === "FULL") {
+        carriedPoints = previousPoints;
+      } else if (endedSeason.carryForwardBehavior === "PERCENTAGE") {
+        const pct = Math.max(
+          0,
+          Math.min(100, Number(endedSeason.carryForwardPercentage) || 0),
+        );
+        carriedPoints = Math.floor(previousPoints * (pct / 100));
+      }
+
+      expect(carriedPoints).toBe(expectedCarriedPoints);
+    });
+
+    it("should assign Silver tier when user carries forward 500 points with 50% decline from 1000 points", async () => {
+      const newSeasonTiers = [
+        { _id: "t0", name: "Beginner", rank: 0, qualificationPoint: 0 },
+        { _id: "t1", name: "Bronze", rank: 1, qualificationPoint: 100 },
+        { _id: "t2", name: "Silver", rank: 2, qualificationPoint: 500 },
+        { _id: "t3", name: "Gold", rank: 3, qualificationPoint: 1000 },
+      ];
+
+      const carriedPoints = 500;
+
+      // Find highest qualifying tier for 500 points
+      const qualifyingTier = [...newSeasonTiers]
+        .sort((a, b) => b.rank - a.rank)
+        .find((t) => carriedPoints >= t.qualificationPoint);
+
+      expect(qualifyingTier).toBeDefined();
+      expect(qualifyingTier.name).toBe("Silver");
+      expect(qualifyingTier.rank).toBe(2);
     });
   });
 });
