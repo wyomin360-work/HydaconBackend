@@ -906,100 +906,140 @@ async function claimTierReward(userId, { seasonId, tierId } = {}) {
     sendFailResponse("User has no progress in this season", 400);
   }
 
-  const tierConfig = await TierConfiguration.findOne({
+  const userQP = userProgress.currentPoint || 0;
+
+  const eligibleConfigsQuery = {
     seasonId: sId,
-    tierId,
     active: true,
     isArchived: { $ne: true },
-  }).populate("tierId");
+    qualificationPoint: { $lte: userQP }
+  };
 
-  if (!tierConfig) {
-    sendFailResponse("Tier configuration not found", 404);
+  if (tierId) {
+    const specificTierConfig = await TierConfiguration.findOne({
+      seasonId: sId,
+      tierId,
+      active: true,
+      isArchived: { $ne: true },
+    });
+    
+    if (!specificTierConfig) {
+      sendFailResponse("Tier configuration not found", 404);
+    }
+    if ((specificTierConfig.qualificationPoint || 0) > userQP) {
+      sendFailResponse("You have not reached this tier yet", 403);
+    }
+    eligibleConfigsQuery.qualificationPoint = { $lte: specificTierConfig.qualificationPoint || 0 };
   }
 
-  const userQP = userProgress.currentPoint || 0;
-  const reqQP = tierConfig.qualificationPoint || 0;
-  const userTierRank = userProgress.currentTierId?.rank ?? 0;
-  const targetTierRank = tierConfig.tierId?.rank ?? 0;
+  const tierConfigs = await TierConfiguration.find(eligibleConfigsQuery)
+    .populate("tierId")
+    .sort({ qualificationPoint: 1 });
 
-  const isQualified = userQP >= reqQP || userTierRank >= targetTierRank;
-  if (!isQualified) {
-    sendFailResponse("You have not reached this tier yet", 403);
+  if (tierConfigs.length === 0) {
+    sendFailResponse("No eligible tiers to claim", 400);
   }
 
-  if (!tierConfig.rewards || tierConfig.rewards.length === 0) {
-    sendFailResponse("No rewards available for this tier", 400);
-  }
-
-  const existingClaim = await SeasonTierClaim.findOne({
-    userId,
-    seasonId: sId,
-    tierId,
-  });
-
-  if (existingClaim) {
-    sendFailResponse("Tier rewards have already been claimed", 409);
-  }
+  const mongoose = require("mongoose");
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
   const rewardsService = require("../rewards/rewards.service");
+  const claimsProcessed = [];
+  const allClaimedRewards = [];
 
-  const claimedRewards = [];
-  for (const reward of tierConfig.rewards) {
-    const rewardType = reward.rewardType;
-    let amount = 0;
-    if (rewardType === "POINTS") amount = Number(reward.points) || 0;
-    if (
-      rewardType === "COINS" ||
-      rewardType === "COIN" ||
-      rewardType === "HYDACOIN"
-    ) {
-      amount = Number(reward.coins) || 0;
+  try {
+    for (const config of tierConfigs) {
+      if (!config.rewards || config.rewards.length === 0 || !config.tierId) {
+        continue;
+      }
+
+      const existingClaim = await SeasonTierClaim.findOne({
+        userId,
+        seasonId: sId,
+        tierId: config.tierId._id,
+      }).session(session);
+
+      if (existingClaim) {
+        continue;
+      }
+
+      const claimedRewardsForConfig = [];
+      for (const reward of config.rewards) {
+        const rewardType = reward.rewardType;
+        let amount = 0;
+        if (rewardType === "POINTS") amount = Number(reward.points) || 0;
+        if (
+          rewardType === "COINS" ||
+          rewardType === "COIN" ||
+          rewardType === "HYDACOIN"
+        ) {
+          amount = Number(reward.coins) || 0;
+        }
+
+        const sourceDetails = {
+          cause: "SEASON_TIER_REWARD",
+          causeId: String(config._id),
+          causeTitle:
+            reward.title ||
+            `Season Tier Reward (${config.tierId?.name || "Tier"})`,
+          referenceId: String(config._id),
+        };
+
+        const awardResult = await rewardsService.awardRewardToUser(
+          userId,
+          {
+            type: rewardType,
+            amount,
+            giftId: reward.giftId ? String(reward.giftId) : null,
+          },
+          sourceDetails,
+          session,
+        );
+
+        claimedRewardsForConfig.push({
+          rewardType,
+          amount,
+          title: reward.title || reward.giftName,
+          giftId: reward.giftId,
+          result: awardResult,
+        });
+        allClaimedRewards.push(claimedRewardsForConfig[claimedRewardsForConfig.length - 1]);
+      }
+
+      const claimRecord = await SeasonTierClaim.create([{
+        userId,
+        seasonId: sId,
+        tierId: config.tierId._id,
+        tierConfigurationId: config._id,
+        claimedAt: new Date(),
+        rewardsClaimed: claimedRewardsForConfig,
+      }], { session });
+      
+      claimsProcessed.push(claimRecord[0]);
     }
 
-    const sourceDetails = {
-      cause: "SEASON_TIER_REWARD",
-      causeId: String(tierConfig._id),
-      causeTitle:
-        reward.title ||
-        `Season Tier Reward (${tierConfig.tierId?.name || "Tier"})`,
-      referenceId: String(tierConfig._id),
-    };
+    if (claimsProcessed.length === 0 && tierId) {
+      await session.abortTransaction();
+      session.endSession();
+      sendFailResponse("Tier rewards have already been claimed", 409);
+    }
 
-    const awardResult = await rewardsService.awardRewardToUser(
-      userId,
-      {
-        type: rewardType,
-        amount,
-        giftId: reward.giftId ? String(reward.giftId) : null,
+    await session.commitTransaction();
+    session.endSession();
+
+    return {
+      message: claimsProcessed.length > 0 ? "Season tier rewards claimed successfully" : "No new rewards to claim",
+      data: {
+        claims: claimsProcessed,
+        rewards: allClaimedRewards,
       },
-      sourceDetails,
-    );
-
-    claimedRewards.push({
-      rewardType,
-      amount,
-      title: reward.title || reward.giftName,
-      giftId: reward.giftId,
-      result: awardResult,
-    });
+    };
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    throw error;
   }
-
-  const claimRecord = await SeasonTierClaim.create({
-    userId,
-    seasonId: sId,
-    tierId,
-    tierConfigurationId: tierConfig._id,
-    claimedAt: new Date(),
-    rewardsClaimed: claimedRewards,
-  });
-
-  return {
-    message: "Season tier reward claimed successfully",
-    data: {
-      claim: claimRecord,
-      rewards: claimedRewards,
-    },
-  };
 }
 
 /**
@@ -1395,6 +1435,9 @@ async function createTierConfiguration(adminId, payload) {
   if (!season || season.isArchived) {
     sendFailResponse("Season not found", 404);
   }
+  if (season.startDate <= new Date()) {
+    sendFailResponse("Cannot modify tier configurations for started or completed seasons", 400);
+  }
 
   const tier = await Tier.findById(payload.tierId).lean();
   if (!tier) {
@@ -1573,6 +1616,9 @@ async function updateTierConfiguration(adminId, configId, payload) {
     .populate("seasonId");
   if (!existing) {
     sendFailResponse("Tier configuration not found", 404);
+  }
+  if (existing.seasonId && existing.seasonId.startDate <= new Date()) {
+    sendFailResponse("Cannot modify tier configurations for started or completed seasons", 400);
   }
 
   const qp =

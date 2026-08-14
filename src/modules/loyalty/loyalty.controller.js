@@ -221,6 +221,13 @@ async function deleteTier(req, res) {
  */
 async function deleteTierConfiguration(req, res) {
   const configId = req.params.id;
+  const config = await TierConfiguration.findById(configId).populate("seasonId");
+  if (!config) {
+    return sendResponse(res, { message: "Tier configuration not found" }, 404);
+  }
+  if (config.seasonId && config.seasonId.startDate <= new Date()) {
+    return res.status(400).json({ status: "fail", message: "Cannot modify tier configurations for started or completed seasons" });
+  }
   await TierConfiguration.findByIdAndDelete(configId);
   return sendResponse(
     res,
