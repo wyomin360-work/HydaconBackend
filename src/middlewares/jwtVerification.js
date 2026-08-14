@@ -3,6 +3,7 @@ const { sendFailResponse } = require("../utils/responseHandlers");
 const { verifyToken, generateToken } = require("../utils/heplers");
 const Admin = require("../schemas/admin.schema");
 const User = require("../schemas/user.schema");
+const RefreshToken = require("../schemas/refreshtoken.schema");
 const { ROLES } = require("../constants/common");
 
 const secretKey = process.env.JWT_SECRET;
@@ -15,15 +16,22 @@ async function verifyUser(req, res, next) {
   }
 
   const token = authHeader.split(" ")[1];
-  const verifiedToken = verifyToken(token);
-
-  if (!verifiedToken) sendFailResponse("Token Expired", 401);
+  let verifiedToken;
+  try {
+    verifiedToken = jwt.verify(token, secretKey);
+  } catch (err) {
+    if (err.name === "TokenExpiredError") {
+      verifiedToken = jwt.verify(token, secretKey, { ignoreExpiration: true });
+    } else {
+      return sendFailResponse("Not authorized to access this route", 401);
+    }
+  }
 
   const user = await User.findById(verifiedToken.userId);
-  if (!user) sendFailResponse("User not found", 404);
+  if (!user) return sendFailResponse("User not found", 404);
 
   if (verifiedToken.accessTokenVersion !== user.accessTokenVersion) {
-    sendFailResponse("Token has been revoked. Please login again.", 401);
+    return sendFailResponse("Token has been revoked. Please login again.", 401);
   }
 
   // Auto-renew token if expiring in less than 5 minutes (300 seconds)
@@ -31,17 +39,26 @@ async function verifyUser(req, res, next) {
   const timeRemaining = verifiedToken.exp - currentTime;
 
   if (timeRemaining < 300) {
-    user.accessTokenVersion = (user.accessTokenVersion || 0) + 1;
-    await user.save();
-
-    const payload = {
+    const activeRefreshToken = await RefreshToken.findOne({
       userId: user._id,
-      email: user.email,
-      accessTokenVersion: user.accessTokenVersion,
-    };
-    const newToken = generateToken(payload, "15m");
-    res.setHeader("x-renewed-token", newToken);
-    res.setHeader("Access-Control-Expose-Headers", "x-renewed-token");
+      revoked: false,
+      expiresAt: { $gt: new Date() },
+    });
+
+    if (!activeRefreshToken) {
+      if (timeRemaining < 0) {
+        return sendFailResponse("Session expired. Please login again.", 401);
+      }
+    } else {
+      const payload = {
+        userId: user._id,
+        email: user.email,
+        accessTokenVersion: user.accessTokenVersion,
+      };
+      const newToken = generateToken(payload, "30m");
+      res.setHeader("x-renewed-token", newToken);
+      res.setHeader("Access-Control-Expose-Headers", "x-renewed-token");
+    }
   }
 
   req.userId = verifiedToken?.userId;
@@ -58,21 +75,24 @@ async function verifyAdmin(req, res, next) {
   }
 
   const token = authHeader.split(" ")[1];
-  const verifiedToken = verifyToken(token);
-  if (!verifiedToken) {
-    sendFailResponse("Token Expired", 401);
-    return;
+  let verifiedToken;
+  try {
+    verifiedToken = jwt.verify(token, secretKey);
+  } catch (err) {
+    if (err.name === "TokenExpiredError") {
+      verifiedToken = jwt.verify(token, secretKey, { ignoreExpiration: true });
+    } else {
+      return sendFailResponse("Not authorized to access this route", 401);
+    }
   }
 
   const admin = await Admin.findById(verifiedToken.adminId);
   if (!admin) {
-    sendFailResponse("Admin not found", 404);
-    return;
+    return sendFailResponse("Admin not found", 404);
   }
 
   if (verifiedToken.accessTokenVersion !== admin.accessTokenVersion) {
-    sendFailResponse("Token has been revoked. Please login again.", 401);
-    return;
+    return sendFailResponse("Token has been revoked. Please login again.", 401);
   }
 
   // Auto-renew token if expiring in less than 5 minutes (300 seconds)
@@ -80,17 +100,26 @@ async function verifyAdmin(req, res, next) {
   const timeRemaining = verifiedToken.exp - currentTime;
 
   if (timeRemaining < 300) {
-    admin.accessTokenVersion = (admin.accessTokenVersion || 0) + 1;
-    await admin.save();
+    const activeRefreshToken = await RefreshToken.findOne({
+      userId: admin._id,
+      revoked: false,
+      expiresAt: { $gt: new Date() },
+    });
 
-    const payload = {
-      adminId: admin._id,
-      email: admin.email,
-      accessTokenVersion: admin.accessTokenVersion,
-    };
-    const newToken = generateToken(payload, "15m");
-    res.setHeader("x-renewed-token", newToken);
-    res.setHeader("Access-Control-Expose-Headers", "x-renewed-token");
+    if (!activeRefreshToken) {
+      if (timeRemaining < 0) {
+        return sendFailResponse("Session expired. Please login again.", 401);
+      }
+    } else {
+      const payload = {
+        adminId: admin._id,
+        email: admin.email,
+        accessTokenVersion: admin.accessTokenVersion,
+      };
+      const newToken = generateToken(payload, "30m");
+      res.setHeader("x-renewed-token", newToken);
+      res.setHeader("Access-Control-Expose-Headers", "x-renewed-token");
+    }
   }
 
   req.userId = verifiedToken?.adminId;
@@ -107,35 +136,47 @@ async function verifyAdminOrUser(req, res, next) {
 
   const token = authHeader.split(" ")[1];
 
-  const verifiedToken = verifyToken(token);
-
-  if (!verifiedToken) {
-    sendFailResponse("Token Expired", 401);
-    return;
+  let verifiedToken;
+  try {
+    verifiedToken = jwt.verify(token, secretKey);
+  } catch (err) {
+    if (err.name === "TokenExpiredError") {
+      verifiedToken = jwt.verify(token, secretKey, { ignoreExpiration: true });
+    } else {
+      return sendFailResponse("Not authorized to access this route", 401);
+    }
   }
 
   let entity = await Admin.findById(verifiedToken.adminId);
   if (entity) {
     if (verifiedToken.accessTokenVersion !== entity.accessTokenVersion) {
-      sendFailResponse("Token has been revoked. Please login again.", 401);
-      return;
+      return sendFailResponse("Token has been revoked. Please login again.", 401);
     }
 
     const currentTime = Math.floor(Date.now() / 1000);
     const timeRemaining = verifiedToken.exp - currentTime;
 
     if (timeRemaining < 300) {
-      entity.accessTokenVersion = (entity.accessTokenVersion || 0) + 1;
-      await entity.save();
+      const activeRefreshToken = await RefreshToken.findOne({
+        userId: entity._id,
+        revoked: false,
+        expiresAt: { $gt: new Date() },
+      });
 
-      const payload = {
-        adminId: entity._id,
-        email: entity.email,
-        accessTokenVersion: entity.accessTokenVersion,
-      };
-      const newToken = generateToken(payload, "15m");
-      res.setHeader("x-renewed-token", newToken);
-      res.setHeader("Access-Control-Expose-Headers", "x-renewed-token");
+      if (!activeRefreshToken) {
+        if (timeRemaining < 0) {
+          return sendFailResponse("Session expired. Please login again.", 401);
+        }
+      } else {
+        const payload = {
+          adminId: entity._id,
+          email: entity.email,
+          accessTokenVersion: entity.accessTokenVersion,
+        };
+        const newToken = generateToken(payload, "30m");
+        res.setHeader("x-renewed-token", newToken);
+        res.setHeader("Access-Control-Expose-Headers", "x-renewed-token");
+      }
     }
 
     req.userId = verifiedToken.adminId;
@@ -147,25 +188,33 @@ async function verifyAdminOrUser(req, res, next) {
   entity = await User.findById(verifiedToken.userId);
   if (entity) {
     if (verifiedToken.accessTokenVersion !== entity.accessTokenVersion) {
-      sendFailResponse("Token has been revoked. Please login again.", 401);
-      return;
+      return sendFailResponse("Token has been revoked. Please login again.", 401);
     }
 
     const currentTime = Math.floor(Date.now() / 1000);
     const timeRemaining = verifiedToken.exp - currentTime;
 
     if (timeRemaining < 300) {
-      entity.accessTokenVersion = (entity.accessTokenVersion || 0) + 1;
-      await entity.save();
-
-      const payload = {
+      const activeRefreshToken = await RefreshToken.findOne({
         userId: entity._id,
-        email: entity.email,
-        accessTokenVersion: entity.accessTokenVersion,
-      };
-      const newToken = generateToken(payload, "15m");
-      res.setHeader("x-renewed-token", newToken);
-      res.setHeader("Access-Control-Expose-Headers", "x-renewed-token");
+        revoked: false,
+        expiresAt: { $gt: new Date() },
+      });
+
+      if (!activeRefreshToken) {
+        if (timeRemaining < 0) {
+          return sendFailResponse("Session expired. Please login again.", 401);
+        }
+      } else {
+        const payload = {
+          userId: entity._id,
+          email: entity.email,
+          accessTokenVersion: entity.accessTokenVersion,
+        };
+        const newToken = generateToken(payload, "15m");
+        res.setHeader("x-renewed-token", newToken);
+        res.setHeader("Access-Control-Expose-Headers", "x-renewed-token");
+      }
     }
 
     req.userId = verifiedToken.userId;
