@@ -1,6 +1,6 @@
 const jwt = require("jsonwebtoken");
 const { sendFailResponse } = require("../utils/responseHandlers");
-const { verifyToken, generateToken } = require("../utils/heplers");
+const { generateToken } = require("../utils/heplers");
 const Admin = require("../schemas/admin.schema");
 const User = require("../schemas/user.schema");
 const RefreshToken = require("../schemas/refreshtoken.schema");
@@ -8,29 +8,39 @@ const { ROLES } = require("../constants/common");
 
 const secretKey = process.env.JWT_SECRET;
 
-async function verifyUser(req, res, next) {
+/**
+ * Helper to extract and verify JWT from Authorization header.
+ * Throws AppError via sendFailResponse if invalid or missing.
+ */
+function extractAndVerifyToken(req) {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    sendFailResponse("Authorization token missing", 401);
+    return sendFailResponse("Authorization token missing", 401);
   }
 
   const token = authHeader.split(" ")[1];
-  let verifiedToken;
   try {
-    verifiedToken = jwt.verify(token, secretKey);
+    return jwt.verify(token, secretKey);
   } catch (err) {
     if (err.name === "TokenExpiredError") {
-      verifiedToken = jwt.verify(token, secretKey, { ignoreExpiration: true });
-    } else {
-      return sendFailResponse("Not authorized to access this route", 401);
+      return jwt.verify(token, secretKey, { ignoreExpiration: true });
     }
+    return sendFailResponse("Not authorized to access this route", 401);
   }
+}
 
-  const user = await User.findById(verifiedToken.userId);
-  if (!user) return sendFailResponse("User not found", 404);
+/**
+ * Helper to validate entity (User or Admin) from payload, check version, handle auto-renewal, and attach to req.
+ */
+async function authenticateEntity(req, res, verifiedToken, Model, idClaim, entityKey, expiresIn = "30m") {
+  const entityId = verifiedToken[idClaim];
+  if (!entityId) return null;
 
-  if (verifiedToken.accessTokenVersion !== user.accessTokenVersion) {
+  const entity = await Model.findById(entityId);
+  if (!entity) return null;
+
+  if (verifiedToken.accessTokenVersion !== entity.accessTokenVersion) {
     return sendFailResponse("Token has been revoked. Please login again.", 401);
   }
 
@@ -40,7 +50,7 @@ async function verifyUser(req, res, next) {
 
   if (timeRemaining < 300) {
     const activeRefreshToken = await RefreshToken.findOne({
-      userId: user._id,
+      userId: entity._id,
       revoked: false,
       expiresAt: { $gt: new Date() },
     });
@@ -51,174 +61,46 @@ async function verifyUser(req, res, next) {
       }
     } else {
       const payload = {
-        userId: user._id,
-        email: user.email,
-        accessTokenVersion: user.accessTokenVersion,
+        [idClaim]: entity._id,
+        email: entity.email,
+        accessTokenVersion: entity.accessTokenVersion,
       };
-      const newToken = generateToken(payload, "30m");
+      const newToken = generateToken(payload, expiresIn);
       res.setHeader("x-renewed-token", newToken);
       res.setHeader("Access-Control-Expose-Headers", "x-renewed-token");
     }
   }
 
-  req.userId = verifiedToken?.userId;
-  req.user = user;
+  req.userId = entityId;
+  req[entityKey] = entity;
+  return entity;
+}
+
+async function verifyUser(req, res, next) {
+  const verifiedToken = extractAndVerifyToken(req);
+  const user = await authenticateEntity(req, res, verifiedToken, User, "userId", "user", "30m");
+  if (!user) return sendFailResponse("User not found", 404);
   next();
 }
 
 async function verifyAdmin(req, res, next) {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    sendFailResponse("Authorization token missing", 401);
-    return;
-  }
-
-  const token = authHeader.split(" ")[1];
-  let verifiedToken;
-  try {
-    verifiedToken = jwt.verify(token, secretKey);
-  } catch (err) {
-    if (err.name === "TokenExpiredError") {
-      verifiedToken = jwt.verify(token, secretKey, { ignoreExpiration: true });
-    } else {
-      return sendFailResponse("Not authorized to access this route", 401);
-    }
-  }
-
-  const admin = await Admin.findById(verifiedToken.adminId);
-  if (!admin) {
-    return sendFailResponse("Admin not found", 404);
-  }
-
-  if (verifiedToken.accessTokenVersion !== admin.accessTokenVersion) {
-    return sendFailResponse("Token has been revoked. Please login again.", 401);
-  }
-
-  // Auto-renew token if expiring in less than 5 minutes (300 seconds)
-  const currentTime = Math.floor(Date.now() / 1000);
-  const timeRemaining = verifiedToken.exp - currentTime;
-
-  if (timeRemaining < 300) {
-    const activeRefreshToken = await RefreshToken.findOne({
-      userId: admin._id,
-      revoked: false,
-      expiresAt: { $gt: new Date() },
-    });
-
-    if (!activeRefreshToken) {
-      if (timeRemaining < 0) {
-        return sendFailResponse("Session expired. Please login again.", 401);
-      }
-    } else {
-      const payload = {
-        adminId: admin._id,
-        email: admin.email,
-        accessTokenVersion: admin.accessTokenVersion,
-      };
-      const newToken = generateToken(payload, "30m");
-      res.setHeader("x-renewed-token", newToken);
-      res.setHeader("Access-Control-Expose-Headers", "x-renewed-token");
-    }
-  }
-
-  req.userId = verifiedToken?.adminId;
-  req.admin = admin;
+  const verifiedToken = extractAndVerifyToken(req);
+  const admin = await authenticateEntity(req, res, verifiedToken, Admin, "adminId", "admin", "30m");
+  if (!admin) return sendFailResponse("Admin not found", 404);
   next();
 }
 
 async function verifyAdminOrUser(req, res, next) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    sendFailResponse("Authorization token missing", 401);
-    return;
-  }
+  const verifiedToken = extractAndVerifyToken(req);
 
-  const token = authHeader.split(" ")[1];
-
-  let verifiedToken;
-  try {
-    verifiedToken = jwt.verify(token, secretKey);
-  } catch (err) {
-    if (err.name === "TokenExpiredError") {
-      verifiedToken = jwt.verify(token, secretKey, { ignoreExpiration: true });
-    } else {
-      return sendFailResponse("Not authorized to access this route", 401);
-    }
-  }
-
-  let entity = await Admin.findById(verifiedToken.adminId);
-  if (entity) {
-    if (verifiedToken.accessTokenVersion !== entity.accessTokenVersion) {
-      return sendFailResponse("Token has been revoked. Please login again.", 401);
-    }
-
-    const currentTime = Math.floor(Date.now() / 1000);
-    const timeRemaining = verifiedToken.exp - currentTime;
-
-    if (timeRemaining < 300) {
-      const activeRefreshToken = await RefreshToken.findOne({
-        userId: entity._id,
-        revoked: false,
-        expiresAt: { $gt: new Date() },
-      });
-
-      if (!activeRefreshToken) {
-        if (timeRemaining < 0) {
-          return sendFailResponse("Session expired. Please login again.", 401);
-        }
-      } else {
-        const payload = {
-          adminId: entity._id,
-          email: entity.email,
-          accessTokenVersion: entity.accessTokenVersion,
-        };
-        const newToken = generateToken(payload, "30m");
-        res.setHeader("x-renewed-token", newToken);
-        res.setHeader("Access-Control-Expose-Headers", "x-renewed-token");
-      }
-    }
-
-    req.userId = verifiedToken.adminId;
-    req.admin = entity;
+  const admin = await authenticateEntity(req, res, verifiedToken, Admin, "adminId", "admin", "30m");
+  if (admin) {
     req.role = ROLES.ADMIN;
     return next();
   }
 
-  entity = await User.findById(verifiedToken.userId);
-  if (entity) {
-    if (verifiedToken.accessTokenVersion !== entity.accessTokenVersion) {
-      return sendFailResponse("Token has been revoked. Please login again.", 401);
-    }
-
-    const currentTime = Math.floor(Date.now() / 1000);
-    const timeRemaining = verifiedToken.exp - currentTime;
-
-    if (timeRemaining < 300) {
-      const activeRefreshToken = await RefreshToken.findOne({
-        userId: entity._id,
-        revoked: false,
-        expiresAt: { $gt: new Date() },
-      });
-
-      if (!activeRefreshToken) {
-        if (timeRemaining < 0) {
-          return sendFailResponse("Session expired. Please login again.", 401);
-        }
-      } else {
-        const payload = {
-          userId: entity._id,
-          email: entity.email,
-          accessTokenVersion: entity.accessTokenVersion,
-        };
-        const newToken = generateToken(payload, "15m");
-        res.setHeader("x-renewed-token", newToken);
-        res.setHeader("Access-Control-Expose-Headers", "x-renewed-token");
-      }
-    }
-
-    req.userId = verifiedToken.userId;
-    req.user = entity;
+  const user = await authenticateEntity(req, res, verifiedToken, User, "userId", "user", "15m");
+  if (user) {
     req.role = ROLES.USER;
     return next();
   }
