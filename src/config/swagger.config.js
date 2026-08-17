@@ -13,6 +13,7 @@ const videoDoc = require("../docs/video.doc");
 const eventsDoc = require("../docs/events.doc");
 const contestsDoc = require("../docs/contests.doc");
 const scratchCardsDoc = require("../docs/scratch-cards.doc");
+const loyaltyDoc = require("../docs/loyalty.doc");
 
 const options = {
   definition: {
@@ -40,6 +41,7 @@ const options = {
       ...eventsDoc,
       ...contestsDoc,
       ...scratchCardsDoc,
+      ...loyaltyDoc,
     },
   },
   apis: [],

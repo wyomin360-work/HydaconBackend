@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Tier = require("../../schemas/tier.schema");
 const LoyaltySeason = require("../../schemas/loyalty-season.schema");
 const TierConfiguration = require("../../schemas/tier-configuration.schema");
@@ -14,6 +15,7 @@ const { createTierConfigHistorySnapshot } = require("./loyalty-audit.service");
 const referralService = require("../referral/referral.service");
 const { REFERRAL_MILESTONES } = require("../../constants/referrals");
 const contestsService = require("../contests/contests.service");
+const rewardsService = require("../rewards/rewards.service");
 
 async function logConfigurationAudit(payload) {
   return logAudit(payload.action, payload);
@@ -929,6 +931,9 @@ async function claimTierReward(userId, { seasonId, tierId } = {}) {
     if ((specificTierConfig.qualificationPoint || 0) > userQP) {
       sendFailResponse("You have not reached this tier yet", 403);
     }
+    if (!specificTierConfig.rewards || specificTierConfig.rewards.length === 0) {
+      sendFailResponse("No rewards available for this tier", 400);
+    }
     eligibleConfigsQuery.qualificationPoint = { $lte: specificTierConfig.qualificationPoint || 0 };
   }
 
@@ -940,11 +945,9 @@ async function claimTierReward(userId, { seasonId, tierId } = {}) {
     sendFailResponse("No eligible tiers to claim", 400);
   }
 
-  const mongoose = require("mongoose");
   const session = await mongoose.startSession();
   session.startTransaction();
 
-  const rewardsService = require("../rewards/rewards.service");
   const claimsProcessed = [];
   const allClaimedRewards = [];
 
@@ -954,11 +957,14 @@ async function claimTierReward(userId, { seasonId, tierId } = {}) {
         continue;
       }
 
-      const existingClaim = await SeasonTierClaim.findOne({
+      const claimQuery = SeasonTierClaim.findOne({
         userId,
         seasonId: sId,
         tierId: config.tierId._id,
-      }).session(session);
+      });
+      const existingClaim = await (claimQuery && typeof claimQuery.session === "function"
+        ? claimQuery.session(session)
+        : claimQuery);
 
       if (existingClaim) {
         continue;
@@ -1130,10 +1136,14 @@ async function createSeason(adminId, payload = {}) {
     // Sequential loop is mandatory to prevent race conditions during database updates
     // and correctly calculate tier thresholds & run validation checks.
     for (const config of sortedConfigs) {
-      await createTierConfiguration(adminId, {
-        ...config,
-        seasonId: season._id.toString(),
-      });
+      await createTierConfiguration(
+        adminId,
+        {
+          ...config,
+          seasonId: season._id.toString(),
+        },
+        { isInitialCreation: true },
+      );
     }
   }
 
@@ -1430,12 +1440,12 @@ async function validateTierConfigurationThreshold(
   }
 }
 
-async function createTierConfiguration(adminId, payload) {
+async function createTierConfiguration(adminId, payload, options = {}) {
   const season = await LoyaltySeason.findById(payload.seasonId).lean();
   if (!season || season.isArchived) {
     sendFailResponse("Season not found", 404);
   }
-  if (season.startDate <= new Date()) {
+  if (!options.isInitialCreation && season.startDate <= new Date()) {
     sendFailResponse("Cannot modify tier configurations for started or completed seasons", 400);
   }
 
