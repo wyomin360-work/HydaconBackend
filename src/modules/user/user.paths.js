@@ -35,4 +35,5 @@ module.exports = {
   },
   convertPoints: "/convert-points",
   conversionHistory: "/convert-points/history",
+  pointsLedger: "/points-ledger",
 };

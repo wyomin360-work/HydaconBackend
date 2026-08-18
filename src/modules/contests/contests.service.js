@@ -16,6 +16,11 @@ const { attachId, formatNotification } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const { sendFcmNotifications } = require("../../functions/fcm");
 const { APP_NOTIFICATIONS } = require("../../constants/notifications");
+const { updateUserPoints } = require("../user/user.service");
+const {
+  POINTS_TRANSACTION_TYPE,
+  POINTS_TRANSACTION_REASON,
+} = require("../../constants/points");
 const {
   CONTEST_STATUS,
   REWARD_TYPE,
@@ -222,12 +227,15 @@ async function adminFinaliseContest(contestId, adminId) {
       const prize = contest.prizes.find((p) => p.rank === i + 1);
       if (prize) {
         if (prize.rewardType === REWARD_TYPE.POINTS && prize.points > 0) {
-          const user = await User.findById(entry.userId).session(session);
-          if (user) {
-            user.totalPoints += prize.points;
-            user.lifetimePoints = (user.lifetimePoints || 0) + prize.points;
-            await user.save({ session });
-          }
+          await updateUserPoints({
+            userId: entry.userId,
+            amount: prize.points,
+            transactionType: POINTS_TRANSACTION_TYPE.CREDIT,
+            reason: POINTS_TRANSACTION_REASON.CONTEST_WIN,
+            description: `Prize for contest: ${contest.name}`,
+            metadata: { contestId: contest._id, rank: prize.rank },
+            session: session,
+          });
           entry.bonusPointsAwarded = prize.points;
           entry.rewardType = REWARD_TYPE.POINTS;
           entry.rewardStatus = ENTRY_REWARD_STATUS.CREDITED;
@@ -688,10 +696,15 @@ async function userClaimReward(contestId, userId) {
   }
 
   if (prize.rewardType === REWARD_TYPE.POINTS) {
-    const user = await User.findById(userId);
-    if (user) {
-      user.totalPoints = (user.totalPoints || 0) + (prize.points || 0);
-      await user.save();
+    if (prize.points > 0) {
+      await updateUserPoints({
+        userId: userId,
+        amount: prize.points,
+        transactionType: POINTS_TRANSACTION_TYPE.CREDIT,
+        reason: POINTS_TRANSACTION_REASON.CONTEST_WIN,
+        description: `Manual prize for contest rank`,
+        metadata: { contestId, rank: prize.rank }
+      });
     }
     entry.rewardType = REWARD_TYPE.POINTS;
     entry.bonusPointsAwarded = prize.points;

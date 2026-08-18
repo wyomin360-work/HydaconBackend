@@ -2,6 +2,8 @@ const User = require("../../schemas/user.schema");
 const RefreshToken = require("../../schemas/refreshtoken.schema");
 const PointConversion = require("../../schemas/point-conversion.schema");
 const ServiceRequest = require("../../schemas/service-request.schema");
+const PointsLedger = require("../../schemas/points-ledger.schema");
+const { POINTS_TRANSACTION_TYPE } = require("../../constants/points");
 const { checkS3FileExists, deleteS3File } = require("../../utils/s3");
 const path = require("path");
 const sharp = require("sharp");
@@ -1471,11 +1473,19 @@ async function convertPointsToCoins(userId, data) {
 
       const coinsToAdd = points / ratio;
 
-      user.totalPoints -= points;
-      user.hydaconCoins = (user.hydaconCoins || 0) + coinsToAdd;
-      user.lifetimeHydaconCoins = (user.lifetimeHydaconCoins || 0) + coinsToAdd;
+      const updatedUser = await updateUserPoints({
+        userId: user._id,
+        amount: points,
+        transactionType: POINTS_TRANSACTION_TYPE.DEBIT,
+        reason: POINTS_TRANSACTION_REASON.WITHDRAWAL_TO_COIN,
+        description: `Converted ${points} points to ${coinsToAdd} coins`,
+        session
+      });
 
-      await user.save({ session });
+      updatedUser.hydaconCoins = (updatedUser.hydaconCoins || 0) + coinsToAdd;
+      updatedUser.lifetimeHydaconCoins = (updatedUser.lifetimeHydaconCoins || 0) + coinsToAdd;
+
+      await updatedUser.save({ session });
 
       await PointConversion.create(
         [
@@ -1489,7 +1499,7 @@ async function convertPointsToCoins(userId, data) {
         { session },
       );
 
-      result = attachId(user.toObject());
+      result = attachId(updatedUser.toObject());
     });
 
     return {
@@ -1550,25 +1560,111 @@ async function releaseBan(userId) {
  * @returns {Promise<object>} The updated user document
  */
 async function creditUserScanPoints(userId, weightedPoints) {
+  if (weightedPoints > 0) {
+    await updateUserPoints({
+      userId,
+      amount: weightedPoints,
+      transactionType: POINTS_TRANSACTION_TYPE.CREDIT,
+      reason: POINTS_TRANSACTION_REASON.QR_SCAN,
+      description: "Points credited from QR scan"
+    });
+  }
+
   return User.findByIdAndUpdate(
     userId,
     {
-      $inc: {
-        totalPoints: weightedPoints,
-        lifetimePoints: weightedPoints,
-        totalScans: 1,
-      },
-      $set: {
-        failedScanAttempts: 0,
-        scanBanUntil: null,
-      },
+      $inc: { totalScans: 1 },
+      $set: { failedScanAttempts: 0, scanBanUntil: null },
     },
-    { new: true },
+    { new: true }
   );
+}
+
+/**
+ * Atomically updates user's points and creates a PointsLedger entry.
+ * @param {string} userId
+ * @param {number} amount - Always positive.
+ * @param {string} transactionType - 'CREDIT' or 'DEBIT'
+ * @param {string} reason - POINTS_TRANSACTION_REASON
+ * @param {string} description
+ * @param {object} metadata
+ * @param {boolean} incrementLifetime - default true for CREDIT
+ * @param {object} session - optional mongoose session
+ */
+async function updateUserPoints({ userId, amount, transactionType, reason, description = "", metadata = {}, incrementLifetime = null, session = null }) {
+  if (!amount || amount < 0) throw new Error("Amount must be positive");
+
+  const isCredit = transactionType === POINTS_TRANSACTION_TYPE.CREDIT;
+  const pointChange = isCredit ? amount : -amount;
+  
+  const incQuery = { totalPoints: pointChange };
+  
+  const shouldIncLifetime = incrementLifetime !== null ? incrementLifetime : isCredit;
+  if (shouldIncLifetime && isCredit) {
+    incQuery.lifetimePoints = amount;
+  }
+
+  const options = { new: true };
+  if (session) options.session = session;
+
+  const updatedUser = await User.findByIdAndUpdate(
+    userId,
+    { $inc: incQuery },
+    options
+  );
+
+  if (!updatedUser) {
+    throw new Error("User not found");
+  }
+
+  const ledgerData = {
+    userId,
+    amount,
+    transactionType,
+    reason,
+    description,
+    balance: updatedUser.totalPoints,
+    metadata
+  };
+
+  if (session) {
+    await PointsLedger.create([ledgerData], { session });
+  } else {
+    await PointsLedger.create(ledgerData);
+  }
+
+  return updatedUser;
+}
+
+async function getPointsLedger(userId, page = 1, limit = 10) {
+  const skip = (page - 1) * limit;
+  const [data, totalCount] = await Promise.all([
+    PointsLedger.find({ userId })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    PointsLedger.countDocuments({ userId })
+  ]);
+
+  return {
+    message: "Points ledger fetched successfully",
+    data: {
+      ledger: data,
+      pagination: {
+        total: totalCount,
+        page,
+        limit,
+        totalPages: Math.ceil(totalCount / limit)
+      }
+    }
+  };
 }
 
 module.exports = {
   registerUser,
+  updateUserPoints,
+  getPointsLedger,
   login,
   userList,
   logout,

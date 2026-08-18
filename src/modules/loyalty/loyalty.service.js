@@ -14,6 +14,8 @@ const { createTierConfigHistorySnapshot } = require("./loyalty-audit.service");
 const referralService = require("../referral/referral.service");
 const { REFERRAL_MILESTONES } = require("../../constants/referrals");
 const contestsService = require("../contests/contests.service");
+const { updateUserPoints } = require("../user/user.service");
+const { POINTS_TRANSACTION_TYPE, POINTS_TRANSACTION_REASON } = require("../../constants/points");
 
 async function logConfigurationAudit(payload) {
   return logAudit(payload.action, payload);
@@ -317,21 +319,18 @@ async function addBonusPoints(
     ...(session ? [{ session }] : []),
   );
 
-  // 2. Add to user totalPoints atomically using $inc
-  const userUpdate = {
-    totalPoints: points,
-  };
-  if (!skipLifetimePoints) {
-    userUpdate.lifetimePoints = points;
-  }
-
-  const updatedUser = await User.findByIdAndUpdate(
+  // 2. Add to user totalPoints atomically using updateUserPoints
+  const transactionReason = POINTS_TRANSACTION_REASON[source] || POINTS_TRANSACTION_REASON.ADMIN_ADJUSTMENT;
+  const updatedUser = await updateUserPoints({
     userId,
-    {
-      $inc: userUpdate,
-    },
-    { new: true, session },
-  );
+    amount: points,
+    transactionType: POINTS_TRANSACTION_TYPE.CREDIT,
+    reason: transactionReason,
+    description: description || `Loyalty point addition via ${source}`,
+    metadata: { seasonId: activeSeason?._id, referenceId },
+    incrementLifetime: !skipLifetimePoints,
+    session
+  });
 
   // 3. Sync QP to ensure UserTierProgress.currentPoint >= updatedUser.totalPoints
   if (activeSeason && !skipQpSync) {
@@ -945,6 +944,10 @@ async function claimTierReward(userId, { seasonId, tierId } = {}) {
   session.startTransaction();
 
   const rewardsService = require("../rewards/rewards.service");
+  const LoyaltySeason = require("../../schemas/loyalty-season.schema");
+  const season = await LoyaltySeason.findById(sId).session(session).lean();
+  const seasonName = season ? season.name : "Season";
+
   const claimsProcessed = [];
   const allClaimedRewards = [];
 
@@ -982,7 +985,7 @@ async function claimTierReward(userId, { seasonId, tierId } = {}) {
           causeId: String(config._id),
           causeTitle:
             reward.title ||
-            `Season Tier Reward (${config.tierId?.name || "Tier"})`,
+            `Tier Rank Up Reward (${seasonName} - ${config.tierId?.name || "Tier"})`,
           referenceId: String(config._id),
         };
 

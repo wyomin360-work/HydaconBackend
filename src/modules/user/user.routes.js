@@ -178,6 +178,12 @@ router.get(
   handleError(controller.conversionHistory),
 );
 
+router.get(
+  userPaths.pointsLedger,
+  verification.verifyUser,
+  handleError(controller.pointsLedger),
+);
+
 router.patch(
   userPaths.toggleStatus,
   verification.verifyAdmin,

@@ -390,6 +390,9 @@ async function awardRewardToUser(
     if (cause === "SCRATCH_CARD") {
       loyaltySource = LOYALTY_TRANSACTION_SOURCES.SCRATCH_CARD_BONUS;
     }
+    if (cause === "SEASON_TIER_REWARD") {
+      loyaltySource = LOYALTY_TRANSACTION_SOURCES.TIER_RANK_UP;
+    }
 
     const options = {
       skipQpSync: true, // Bonus points do not contribute to tier upgrades
