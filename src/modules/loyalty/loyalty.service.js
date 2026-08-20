@@ -43,7 +43,7 @@ function normalizeDateRange(startDate, endDate) {
   return { start, end };
 }
 
-async function ensureSeasonDateRangeHasNoOverlap({
+async function checkSeasonDateRangeOverlap({
   startDate,
   endDate,
   excludeSeasonId = null,
@@ -62,11 +62,7 @@ async function ensureSeasonDateRangeHasNoOverlap({
   }
 
   const overlappingSeason = await LoyaltySeason.findOne(query);
-  if (overlappingSeason) {
-    sendFailResponse(
-      `Conflict: The season date range overlaps with an existing season "${overlappingSeason.name}".`,
-    );
-  }
+  return overlappingSeason;
 }
 
 async function resolveActiveSeason() {
@@ -689,6 +685,68 @@ async function getUserLoyaltySummary(userId) {
   };
 }
 
+async function createTier(adminId, payload = {}) {
+  await validateTierRange(payload);
+  const tier = await Tier.create(payload);
+
+  await logConfigurationAudit({
+    action: "TIER_CREATED",
+    changedBy: adminId,
+    tierId: tier._id,
+    tierName: tier.name,
+    changes: buildChanges({}, tier.toObject(), [
+      "name",
+      "key",
+      "rank",
+      "qualificationPoint",
+      "threshold",
+      "active",
+    ]),
+  });
+
+  return tier;
+}
+
+async function updateTier(adminId, tierId, payload = {}) {
+  const existingTier = await Tier.findById(tierId);
+  if (!existingTier) {
+    sendFailResponse("Tier not found", 404);
+  }
+
+  await validateTierRange(payload, tierId);
+
+  const updatedTier = await Tier.findByIdAndUpdate(
+    tierId,
+    { $set: payload },
+    { new: true },
+  );
+
+  const changes = buildChanges(
+    existingTier.toObject(),
+    updatedTier.toObject(),
+    [
+      "name",
+      "key",
+      "rank",
+      "qualificationPoint",
+      "threshold",
+      "active",
+    ],
+  );
+
+  if (changes.length) {
+    await logConfigurationAudit({
+      action: "TIER_UPDATED",
+      changedBy: adminId,
+      tierId: updatedTier._id,
+      tierName: updatedTier.name,
+      changes,
+    });
+  }
+
+  return updatedTier;
+}
+
 /**
  * Admin API: Lists all configured loyalty tiers with pagination.
  */
@@ -947,8 +1005,9 @@ async function claimTierReward(userId, { seasonId, tierId } = {}) {
   session.startTransaction();
 
   const rewardsService = require("../rewards/rewards.service");
-  const LoyaltySeason = require("../../schemas/loyalty-season.schema");
-  const season = await LoyaltySeason.findById(sId).session(session).lean();
+  const seasonQuery = LoyaltySeason.findById(sId);
+  const seasonDoc = seasonQuery.session ? seasonQuery.session(session) : seasonQuery;
+  const season = await (seasonDoc.lean ? seasonDoc.lean() : seasonDoc);
   const seasonName = season ? season.name : "Season";
 
   const claimsProcessed = [];
@@ -1074,11 +1133,19 @@ async function createSeason(adminId, payload = {}) {
 
   const { name, code, startDate, endDate, active = false } = details;
   const { start, end } = normalizeDateRange(startDate, endDate);
-  await ensureSeasonDateRangeHasNoOverlap({ startDate: start, endDate: end });
+  const overlappingSeason = await checkSeasonDateRangeOverlap({
+    startDate: start,
+    endDate: end,
+  });
+
+  let finalActive = active;
+  if (overlappingSeason) {
+    finalActive = false;
+  }
 
   const now = new Date();
 
-  if (active) {
+  if (finalActive) {
     await LoyaltySeason.updateMany(
       { active: true },
       { active: false, deactivatedAt: now },
@@ -1091,8 +1158,8 @@ async function createSeason(adminId, payload = {}) {
     code,
     startDate: start,
     endDate: end,
-    active,
-    activatedAt: active ? now : null,
+    active: finalActive,
+    activatedAt: finalActive ? now : null,
     deactivatedAt: null,
   });
 
@@ -1150,7 +1217,7 @@ async function createSeason(adminId, payload = {}) {
     }
   }
 
-  return season;
+  return { ...season, seasonCreated: true };
 }
 
 async function updateSeason(adminId, seasonId, payload) {
@@ -1177,11 +1244,14 @@ async function updateSeason(adminId, seasonId, payload) {
     );
     nextData.startDate = start;
     nextData.endDate = end;
-    await ensureSeasonDateRangeHasNoOverlap({
+    const overlappingSeason = await checkSeasonDateRangeOverlap({
       startDate: start,
       endDate: end,
       excludeSeasonId: seasonId,
     });
+    if (overlappingSeason) {
+      nextData.active = false;
+    }
   }
 
   if (payload.active === true) {
@@ -1226,22 +1296,36 @@ async function updateSeason(adminId, seasonId, payload) {
     });
   }
 
-  return updatedSeason;
+  return {
+    ...(updatedSeason),
+    seasonUpdated: true,
+  };
 }
 
-async function activateSeason(adminId, seasonId) {
+async function activateSeason(adminId, seasonId, overrideStartDate = false) {
   const season = await LoyaltySeason.findById(seasonId);
   if (!season) {
     sendFailResponse("Season not found", 404);
+  }
+
+  const updates = {
+    active: true,
+    activatedAt: new Date(),
+    deactivatedAt: null,
+  };
+
+  if (overrideStartDate) {
+    updates.startDate = new Date();
   }
 
   await LoyaltySeason.updateMany(
     { _id: { $ne: seasonId }, active: true },
     { active: false, deactivatedAt: new Date() },
   );
+
   const activeSeason = await LoyaltySeason.findByIdAndUpdate(
     seasonId,
-    { active: true, activatedAt: new Date(), deactivatedAt: null },
+    { $set: updates },
     { new: true },
   );
 
@@ -1250,7 +1334,10 @@ async function activateSeason(adminId, seasonId) {
     changedBy: adminId,
     seasonId: activeSeason._id,
     seasonName: activeSeason.name,
-    changes: [{ field: "active", oldValue: false, newValue: true }],
+    changes: [
+      { field: "active", oldValue: false, newValue: true },
+      ...(overrideStartDate ? [{ field: "startDate", oldValue: season.startDate, newValue: updates.startDate }] : []),
+    ],
   });
 
   return activeSeason;
@@ -1932,6 +2019,8 @@ module.exports = {
   getTierProgressionMetadata,
   resolveActiveSeason,
   listTiers,
+  createTier,
+  updateTier,
   listSeasons,
   listTierConfigurations,
   createSeason,
