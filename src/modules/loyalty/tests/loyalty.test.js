@@ -7,6 +7,7 @@ const UserTierProgress = require("../../../schemas/user-tier-progress.schema");
 const LoyaltyTransaction = require("../../../schemas/loyalty-transaction.schema");
 const User = require("../../../schemas/user.schema");
 const SeasonTierClaim = require("../../../schemas/season-tier-claim.schema");
+const PointsLedger = require("../../../schemas/points-ledger.schema");
 const rewardsService = require("../../rewards/rewards.service");
 const {
   LOYALTY_TRANSACTION_TYPES,
@@ -32,6 +33,7 @@ jest.mock("../../../schemas/user-tier-progress.schema");
 jest.mock("../../../schemas/loyalty-transaction.schema");
 jest.mock("../../../schemas/user.schema");
 jest.mock("../../../schemas/season-tier-claim.schema");
+jest.mock("../../../schemas/points-ledger.schema");
 jest.mock("../../rewards/rewards.service", () => ({
   awardRewardToUser: jest.fn().mockResolvedValue({ success: true }),
 }));
@@ -52,6 +54,7 @@ describe("Loyalty and Tier Progression Engine", () => {
   let mockUser, mockTiers, mockSeason, mockConfigs, mockProgress;
 
   beforeEach(() => {
+    PointsLedger.create.mockResolvedValue({});
     jest.clearAllMocks();
 
     const mongoose = require("mongoose");

@@ -966,20 +966,20 @@ async function claimTierReward(userId, { seasonId, tierId } = {}) {
 
   const userQP = userProgress.currentPoint || 0;
 
-  const eligibleConfigsQuery = {
-    seasonId: sId,
-    active: true,
-    isArchived: { $ne: true },
-    qualificationPoint: { $lte: userQP }
-  };
+  let tierConfigs = [];
 
   if (tierId) {
-    const specificTierConfig = await TierConfiguration.findOne({
+    let specificTierConfigQuery = TierConfiguration.findOne({
       seasonId: sId,
       tierId,
       active: true,
       isArchived: { $ne: true },
     });
+    if (specificTierConfigQuery && typeof specificTierConfigQuery.populate === "function") {
+      specificTierConfigQuery = specificTierConfigQuery.populate("tierId");
+    }
+
+    const specificTierConfig = await specificTierConfigQuery;
 
     if (!specificTierConfig) {
       sendFailResponse("Tier configuration not found", 404);
@@ -990,12 +990,18 @@ async function claimTierReward(userId, { seasonId, tierId } = {}) {
     if (!specificTierConfig.rewards || specificTierConfig.rewards.length === 0) {
       sendFailResponse("No rewards available for this tier", 400);
     }
-    eligibleConfigsQuery.qualificationPoint = { $lte: specificTierConfig.qualificationPoint || 0 };
-  }
 
-  const tierConfigs = await TierConfiguration.find(eligibleConfigsQuery)
-    .populate("tierId")
-    .sort({ qualificationPoint: 1 });
+    tierConfigs = [specificTierConfig];
+  } else {
+    tierConfigs = await TierConfiguration.find({
+      seasonId: sId,
+      active: true,
+      isArchived: { $ne: true },
+      qualificationPoint: { $lte: userQP },
+    })
+      .populate("tierId")
+      .sort({ qualificationPoint: 1 });
+  }
 
   if (tierConfigs.length === 0) {
     sendFailResponse("No eligible tiers to claim", 400);
