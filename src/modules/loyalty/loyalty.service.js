@@ -6,6 +6,7 @@ const TierConfigurationHistory = require("../../schemas/tier-configuration-histo
 const LoyaltyConfigAuditLog = require("../../schemas/loyalty-config-audit.schema");
 const UserTierProgress = require("../../schemas/user-tier-progress.schema");
 const SeasonTierClaim = require("../../schemas/season-tier-claim.schema");
+const SeasonTierClaim = require("../../schemas/season-tier-claim.schema");
 const LoyaltyTransaction = require("../../schemas/loyalty-transaction.schema");
 const User = require("../../schemas/user.schema");
 const { sendFcmNotifications } = require("../../functions/fcm");
@@ -2044,5 +2045,6 @@ module.exports = {
   getSeasonById,
   validateTierRange,
   processLoyaltyAndContestsAfterScan,
+  claimTierReward,
   claimTierReward,
 };

@@ -272,6 +272,9 @@ describe("Loyalty and Tier Progression Engine", () => {
       expect(result[0]).toHaveProperty("isUnlocked");
       expect(result[0]).toHaveProperty("isClaimed");
       expect(result[0]).toHaveProperty("isClaimable");
+      expect(result[0]).toHaveProperty("isUnlocked");
+      expect(result[0]).toHaveProperty("isClaimed");
+      expect(result[0]).toHaveProperty("isClaimable");
     });
   });
 
