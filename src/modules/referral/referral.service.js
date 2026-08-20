@@ -14,7 +14,10 @@ const {
   getNotification,
 } = require("../../constants/notifications");
 const { updateUserPoints } = require("../user/user.service");
-const { POINTS_TRANSACTION_TYPE, POINTS_TRANSACTION_REASON } = require("../../constants/points");
+const {
+  POINTS_TRANSACTION_TYPE,
+  POINTS_TRANSACTION_REASON,
+} = require("../../constants/points");
 
 // ─────────────────────────────────────────────
 // getMobileReferralStats
@@ -220,7 +223,7 @@ async function evaluateReferralReward(userId, userTotalScans) {
         amount: refereeRewardPoints,
         transactionType: POINTS_TRANSACTION_TYPE.CREDIT,
         reason: POINTS_TRANSACTION_REASON.REFERRAL_REWARD,
-        description: `Referral milestone reward (${milestoneConfig.scansRequired} scans)`
+        description: `Referral milestone reward (${matchedReward.requiredScans || userTotalScans} scans)`,
       });
     }
     if (refereeRewardCoins > 0) {
@@ -239,7 +242,7 @@ async function evaluateReferralReward(userId, userTotalScans) {
         amount: referrerRewardPoints,
         transactionType: POINTS_TRANSACTION_TYPE.CREDIT,
         reason: POINTS_TRANSACTION_REASON.REFERRAL_REWARD,
-        description: `Referral milestone reward from user ${userId}`
+        description: `Referral milestone reward from user ${userId}`,
       });
     }
     if (referrerRewardCoins > 0) {
@@ -300,7 +303,7 @@ async function completeMilestone(userId, milestone) {
     amount: points,
     transactionType: POINTS_TRANSACTION_TYPE.CREDIT,
     reason: POINTS_TRANSACTION_REASON.REFERRAL_REWARD,
-    description: `Referral milestone reward for ${milestone}`
+    description: `Referral milestone reward for ${milestone}`,
   });
 
   // Credit Referee
@@ -309,7 +312,7 @@ async function completeMilestone(userId, milestone) {
     amount: points,
     transactionType: POINTS_TRANSACTION_TYPE.CREDIT,
     reason: POINTS_TRANSACTION_REASON.REFERRAL_REWARD,
-    description: `Referral milestone reward for ${milestone}`
+    description: `Referral milestone reward for ${milestone}`,
   });
 
   // 5. Send FCM Notifications

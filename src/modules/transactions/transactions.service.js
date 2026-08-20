@@ -19,7 +19,10 @@ const { sendFcmNotifications } = require("../../functions/fcm");
 const { LOYALTY_TRANSACTION_TYPES } = require("../../constants/loyalty");
 const LoyaltyTransaction = require("../../schemas/loyalty-transaction.schema");
 const { updateUserPoints } = require("../user/user.service");
-const { POINTS_TRANSACTION_TYPE, POINTS_TRANSACTION_REASON } = require("../../constants/points");
+const {
+  POINTS_TRANSACTION_TYPE,
+  POINTS_TRANSACTION_REASON,
+} = require("../../constants/points");
 
 // ----------------------
 // Transaction List
@@ -253,7 +256,7 @@ async function createTransaction(data, userId) {
     transactionType: POINTS_TRANSACTION_TYPE.DEBIT,
     reason: POINTS_TRANSACTION_REASON.WITHDRAWAL_TO_CASH,
     description: `Withdrawal request for ${amount} INR`,
-    metadata: { transactionId: transaction._id }
+    metadata: { transactionId: transaction._id },
   });
   if (user?.fcmTokens?.length && user?.enableNotification) {
     const localizedNotif = getNotification(

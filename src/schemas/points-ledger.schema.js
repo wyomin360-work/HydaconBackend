@@ -49,7 +49,7 @@ const pointsLedgerSchema = new mongoose.Schema(
         return ret;
       },
     },
-  }
+  },
 );
 
 const PointsLedger = mongoose.model("PointsLedger", pointsLedgerSchema);

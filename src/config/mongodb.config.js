@@ -10,11 +10,11 @@ class Database {
     this.maxRetries = 5;
     this.connectionOptions = {
       serverSelectionTimeoutMS: 5000, // 5s timeout on server selection
-      connectTimeoutMS: 10000,        // 10s initial connection timeout
-      socketTimeoutMS: 45000,         // 45s socket inactivity timeout
-      maxPoolSize: 50,                // Up to 50 socket connections
-      minPoolSize: 10,                // Keep at least 10 connections warm
-      heartbeatFrequencyMS: 10000,    // Health check node every 10s
+      connectTimeoutMS: 10000, // 10s initial connection timeout
+      socketTimeoutMS: 45000, // 45s socket inactivity timeout
+      maxPoolSize: 50, // Up to 50 socket connections
+      minPoolSize: 10, // Keep at least 10 connections warm
+      heartbeatFrequencyMS: 10000, // Health check node every 10s
     };
 
     this._setupEventListeners();
@@ -30,7 +30,9 @@ class Database {
     });
 
     mongoose.connection.on("disconnected", () => {
-      logger.warn("⚠️ MongoDB Disconnected. Reconnection will be attempted automatically.");
+      logger.warn(
+        "⚠️ MongoDB Disconnected. Reconnection will be attempted automatically.",
+      );
     });
 
     mongoose.connection.on("reconnected", () => {
@@ -47,7 +49,9 @@ class Database {
     while (attempt < this.maxRetries) {
       try {
         attempt++;
-        logger.info(`Connecting to MongoDB (Attempt ${attempt}/${this.maxRetries})...`);
+        logger.info(
+          `Connecting to MongoDB (Attempt ${attempt}/${this.maxRetries})...`,
+        );
         await mongoose.connect(this.mongodbUrl, this.connectionOptions);
         return;
       } catch (error) {
@@ -56,7 +60,9 @@ class Database {
         });
 
         if (attempt >= this.maxRetries) {
-          logger.fatal("💥 Max MongoDB connection retries reached. Exiting process.");
+          logger.fatal(
+            "💥 Max MongoDB connection retries reached. Exiting process.",
+          );
           process.exit(1);
         }
 
@@ -72,7 +78,9 @@ class Database {
       await mongoose.disconnect();
       logger.info("🔌 Disconnected from MongoDB");
     } catch (error) {
-      logger.error("❌ Failed to disconnect from MongoDB:", { error: error.message });
+      logger.error("❌ Failed to disconnect from MongoDB:", {
+        error: error.message,
+      });
     }
   }
 }

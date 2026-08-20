@@ -4,7 +4,7 @@ const pinoHttp = require("pino-http");
 const cors = require("cors");
 const swaggerUi = require("swagger-ui-express");
 const path = require("path");
-  const mongoose = require("mongoose");
+const mongoose = require("mongoose");
 
 // file imports
 const swaggerSpec = require("./config/swagger.config");

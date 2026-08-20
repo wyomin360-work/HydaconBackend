@@ -25,8 +25,7 @@ async function generateAndSaveToken(admin) {
   };
   const accessToken = generateToken(accessPayload, "30m");
 
-  if (!accessToken)
-    return { accessToken: null };
+  if (!accessToken) return { accessToken: null };
 
   const refreshPayload = {
     adminId: admin._id,
@@ -153,7 +152,8 @@ async function login(adminData) {
   const isSamePassword = await compareHash(password, existingAdmin.password);
   if (!isSamePassword) sendFailResponse("PassWord mismatch");
 
-  const { accessToken, refreshToken } = await generateAndSaveToken(existingAdmin);
+  const { accessToken, refreshToken } =
+    await generateAndSaveToken(existingAdmin);
 
   const { password: pw, ...rest } = existingAdmin;
 
@@ -172,7 +172,7 @@ async function logout(adminId) {
     admin.tokenVersion = (admin.tokenVersion || 0) + 1;
     admin.accessTokenVersion = (admin.accessTokenVersion || 0) + 1;
     await admin.save();
-    
+
     await RefreshToken.deleteMany({ userId: admin._id });
   }
   return { message: "Logged Out successfully", data: { loggedOut: true } };

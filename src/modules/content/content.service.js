@@ -327,9 +327,12 @@ const getActiveContents = async () => {
   }
 
   // Graceful degradation: Check if MongoDB is connected
-  const isDbReady = mongoose.connection.readyState === 1 || process.env.NODE_ENV === "test";
+  const isDbReady =
+    mongoose.connection.readyState === 1 || process.env.NODE_ENV === "test";
   if (!isDbReady) {
-    console.warn("⚠️ [ContentService] MongoDB unavailable. Gracefully serving cached or empty content.");
+    console.warn(
+      "⚠️ [ContentService] MongoDB unavailable. Gracefully serving cached or empty content.",
+    );
     if (cachedActiveContents) {
       return cachedActiveContents;
     }
@@ -353,7 +356,10 @@ const getActiveContents = async () => {
     activeContentsCacheTime = nowMs;
     return contents;
   } catch (error) {
-    console.error("❌ [ContentService] Database error fetching active contents:", error.message);
+    console.error(
+      "❌ [ContentService] Database error fetching active contents:",
+      error.message,
+    );
     if (cachedActiveContents) {
       return cachedActiveContents;
     }
@@ -375,7 +381,10 @@ const getHomepageContent = async (userId = null) => {
   let activeContents = await getActiveContents();
   let viewedIds = [];
 
-  if (userId && (mongoose.connection.readyState === 1 || process.env.NODE_ENV === "test")) {
+  if (
+    userId &&
+    (mongoose.connection.readyState === 1 || process.env.NODE_ENV === "test")
+  ) {
     try {
       const user = await User.findById(userId)
         .select(USER_EVALUATION_FIELDS)
@@ -388,7 +397,10 @@ const getHomepageContent = async (userId = null) => {
         }
       }
     } catch (err) {
-      console.error("❌ [ContentService] User lookup error during getHomepageContent:", err.message);
+      console.error(
+        "❌ [ContentService] User lookup error during getHomepageContent:",
+        err.message,
+      );
     }
   } else {
     activeContents = await filterContentsByRuleSet(activeContents, null);

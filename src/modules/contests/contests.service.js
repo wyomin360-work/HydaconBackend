@@ -703,7 +703,7 @@ async function userClaimReward(contestId, userId) {
         transactionType: POINTS_TRANSACTION_TYPE.CREDIT,
         reason: POINTS_TRANSACTION_REASON.CONTEST_WIN,
         description: `Manual prize for contest rank`,
-        metadata: { contestId, rank: prize.rank }
+        metadata: { contestId, rank: prize.rank },
       });
     }
     entry.rewardType = REWARD_TYPE.POINTS;

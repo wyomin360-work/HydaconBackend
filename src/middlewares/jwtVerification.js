@@ -33,7 +33,15 @@ function extractAndVerifyToken(req) {
 /**
  * Helper to validate entity (User or Admin) from payload, check version, handle auto-renewal, and attach to req.
  */
-async function authenticateEntity(req, res, verifiedToken, Model, idClaim, entityKey, expiresIn = "30m") {
+async function authenticateEntity(
+  req,
+  res,
+  verifiedToken,
+  Model,
+  idClaim,
+  entityKey,
+  expiresIn = "30m",
+) {
   const entityId = verifiedToken[idClaim];
   if (!entityId) return null;
 
@@ -78,14 +86,30 @@ async function authenticateEntity(req, res, verifiedToken, Model, idClaim, entit
 
 async function verifyUser(req, res, next) {
   const verifiedToken = extractAndVerifyToken(req);
-  const user = await authenticateEntity(req, res, verifiedToken, User, "userId", "user", "30m");
+  const user = await authenticateEntity(
+    req,
+    res,
+    verifiedToken,
+    User,
+    "userId",
+    "user",
+    "30m",
+  );
   if (!user) return sendFailResponse("User not found", 404);
   next();
 }
 
 async function verifyAdmin(req, res, next) {
   const verifiedToken = extractAndVerifyToken(req);
-  const admin = await authenticateEntity(req, res, verifiedToken, Admin, "adminId", "admin", "30m");
+  const admin = await authenticateEntity(
+    req,
+    res,
+    verifiedToken,
+    Admin,
+    "adminId",
+    "admin",
+    "30m",
+  );
   if (!admin) return sendFailResponse("Admin not found", 404);
   next();
 }
@@ -93,13 +117,29 @@ async function verifyAdmin(req, res, next) {
 async function verifyAdminOrUser(req, res, next) {
   const verifiedToken = extractAndVerifyToken(req);
 
-  const admin = await authenticateEntity(req, res, verifiedToken, Admin, "adminId", "admin", "30m");
+  const admin = await authenticateEntity(
+    req,
+    res,
+    verifiedToken,
+    Admin,
+    "adminId",
+    "admin",
+    "30m",
+  );
   if (admin) {
     req.role = ROLES.ADMIN;
     return next();
   }
 
-  const user = await authenticateEntity(req, res, verifiedToken, User, "userId", "user", "15m");
+  const user = await authenticateEntity(
+    req,
+    res,
+    verifiedToken,
+    User,
+    "userId",
+    "user",
+    "15m",
+  );
   if (user) {
     req.role = ROLES.USER;
     return next();

@@ -20,7 +20,9 @@ module.exports = {
       tags: ["Loyalty User"],
       security: [{ bearerAuth: [] }],
       responses: {
-        200: { description: "User tier progression metadata fetched successfully" },
+        200: {
+          description: "User tier progression metadata fetched successfully",
+        },
         401: { description: "Unauthorized" },
       },
     },

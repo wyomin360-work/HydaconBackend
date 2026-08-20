@@ -206,6 +206,11 @@ describe("Contests Service Unit Tests", () => {
         save: jest.fn().mockResolvedValue(true),
       };
       User.findById.mockResolvedValue(mockUser);
+      User.findByIdAndUpdate.mockImplementation((id, update) => {
+        if (update?.$inc?.totalPoints)
+          mockUser.totalPoints += update.$inc.totalPoints;
+        return Promise.resolve(mockUser);
+      });
 
       const result = await contestsService.userClaimReward("c1", "u1");
 
@@ -368,6 +373,11 @@ describe("Contests Service Unit Tests", () => {
       User.findById.mockReturnValue({
         session: jest.fn().mockResolvedValue(mockUser),
       });
+      User.findByIdAndUpdate.mockImplementation((id, update) => {
+        if (update?.$inc?.totalPoints)
+          mockUser.totalPoints += update.$inc.totalPoints;
+        return Promise.resolve(mockUser);
+      });
 
       const mockEntry = {
         _id: "e1",
@@ -393,7 +403,7 @@ describe("Contests Service Unit Tests", () => {
 
       // Ensure user received bonus points
       expect(mockUser.totalPoints).toBe(600);
-      expect(mockUser.save).toHaveBeenCalled();
+      expect(User.findByIdAndUpdate).toHaveBeenCalled();
 
       // Ensure entry was updated
       expect(mockEntry.rank).toBe(1);

@@ -343,7 +343,7 @@ describe("Loyalty and Tier Progression Engine", () => {
         }),
         expect.any(Object),
       );
-      expect(UserTierProgress.findOneAndUpdate).toHaveBeenCalledWith(
+      expect(UserTierProgress.findOneAndUpdate).toHaveBeenLastCalledWith(
         { userId: validUserId, seasonId: "season123" },
         expect.objectContaining({ $max: { currentPoint: 350 } }),
       );
@@ -1273,7 +1273,9 @@ describe("Loyalty and Tier Progression Engine", () => {
           active: false,
         }),
       );
-      expect(result).toEqual(expect.objectContaining({ ...mockSeasonInstance, seasonCreated: true }));
+      expect(result).toEqual(
+        expect.objectContaining({ ...mockSeasonInstance, seasonCreated: true }),
+      );
     });
 
     it("should create a season with nested payload and handle tier configurations in rank order", async () => {
@@ -1352,7 +1354,9 @@ describe("Loyalty and Tier Progression Engine", () => {
           seasonId: "newSeasonId",
         }),
       );
-      expect(result).toEqual(expect.objectContaining({ ...mockSeasonInstance, seasonCreated: true }));
+      expect(result).toEqual(
+        expect.objectContaining({ ...mockSeasonInstance, seasonCreated: true }),
+      );
     });
 
     it("should create season as inactive if season dates overlap", async () => {
@@ -1488,7 +1492,9 @@ describe("Loyalty and Tier Progression Engine", () => {
         p.populate = jest.fn().mockResolvedValue(val);
         return p;
       };
-      TierConfiguration.findOne.mockImplementation(() => makeQueryMock(mockTierConfig));
+      TierConfiguration.findOne.mockImplementation(() =>
+        makeQueryMock(mockTierConfig),
+      );
       TierConfiguration.find.mockReturnValue({
         populate: jest.fn().mockReturnValue({
           sort: jest.fn().mockResolvedValue([mockTierConfig]),
@@ -1539,7 +1545,9 @@ describe("Loyalty and Tier Progression Engine", () => {
         p.populate = jest.fn().mockResolvedValue(val);
         return p;
       };
-      TierConfiguration.findOne.mockImplementation(() => makeQueryMock(mockTierConfig));
+      TierConfiguration.findOne.mockImplementation(() =>
+        makeQueryMock(mockTierConfig),
+      );
       TierConfiguration.find.mockReturnValue({
         populate: jest.fn().mockReturnValue({
           sort: jest.fn().mockResolvedValue([mockTierConfig]),
@@ -1597,7 +1605,9 @@ describe("Loyalty and Tier Progression Engine", () => {
         p.populate = jest.fn().mockResolvedValue(val);
         return p;
       };
-      TierConfiguration.findOne.mockImplementation(() => makeQueryMock(mockTierConfig));
+      TierConfiguration.findOne.mockImplementation(() =>
+        makeQueryMock(mockTierConfig),
+      );
 
       SeasonTierClaim.findOne.mockResolvedValue(null);
 
@@ -1635,7 +1645,9 @@ describe("Loyalty and Tier Progression Engine", () => {
         p.populate = jest.fn().mockResolvedValue(val);
         return p;
       };
-      TierConfiguration.findOne.mockImplementation(() => makeQueryMock(mockTierConfig));
+      TierConfiguration.findOne.mockImplementation(() =>
+        makeQueryMock(mockTierConfig),
+      );
 
       SeasonTierClaim.findOne.mockResolvedValue(null);
 
