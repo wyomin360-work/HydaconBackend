@@ -2,9 +2,9 @@ const crypto = require("crypto");
 const mongoose = require("mongoose");
 const nodemailer = require("nodemailer");
 const Admin = require("../../schemas/admin.schema");
+const RefreshToken = require("../../schemas/refreshtoken.schema");
 const AuditLog = require("../../schemas/audit-log.schema");
 const { AUDIT_LOG_ACTIONS } = require("../../constants/audit-logs");
-const RefreshToken = require("../../schemas/refreshtoken.schema");
 const User = require("../../schemas/user.schema");
 const {
   sendFailResponse,
@@ -17,22 +17,32 @@ const {
 } = require("../../utils/heplers");
 const { sendMail } = require("../../functions/nodemailer");
 
-async function generateAndSaveToken(payload) {
-  const accessToken = generateToken(payload);
-  const refreshToken = generateToken(payload, "30d");
-  const refreshTokenTokenExpiryIn = new Date(
-    Date.now() + 30 * 24 * 60 * 60 * 1000,
-  );
+async function generateAndSaveToken(admin) {
+  const accessPayload = {
+    adminId: admin._id,
+    email: admin.email,
+    accessTokenVersion: admin.accessTokenVersion || 0,
+  };
+  const accessToken = generateToken(accessPayload, "30m");
 
-  if (!refreshToken || !accessToken)
-    sendFailResponse("Failed to generate token");
+  if (!accessToken)
+    return { accessToken: null };
+
+  const refreshPayload = {
+    adminId: admin._id,
+    email: admin.email,
+    tokenVersion: admin.tokenVersion || 0,
+  };
+  const refreshTokenStr = generateToken(refreshPayload, "60d");
+  const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000); // 60 days
 
   await RefreshToken.create({
-    refreshToken,
-    userId: payload?.adminId,
-    expiresAt: refreshTokenTokenExpiryIn, //30 days
+    userId: admin._id,
+    refreshToken: refreshTokenStr,
+    expiresAt,
   });
-  return { accessToken, refreshToken };
+
+  return { accessToken, refreshToken: refreshTokenStr };
 }
 
 // // ----------------------
@@ -86,10 +96,7 @@ async function registerAdmin(adminData, createdBy) {
   const admin = await Admin.create(newAdminData);
 
   // 3️⃣ Generate tokens
-  const { refreshToken, accessToken } = await generateAndSaveToken({
-    adminId: admin._id,
-    email: admin.email,
-  });
+  const { accessToken, refreshToken } = await generateAndSaveToken(admin);
 
   const { password: pw, ...rest } = admin.toObject();
 
@@ -146,10 +153,7 @@ async function login(adminData) {
   const isSamePassword = await compareHash(password, existingAdmin.password);
   if (!isSamePassword) sendFailResponse("PassWord mismatch");
 
-  const { refreshToken, accessToken } = await generateAndSaveToken({
-    adminId: existingAdmin?._id,
-    email: existingAdmin?.email,
-  });
+  const { accessToken, refreshToken } = await generateAndSaveToken(existingAdmin);
 
   const { password: pw, ...rest } = existingAdmin;
 
@@ -163,7 +167,14 @@ async function login(adminData) {
 // Logout Admin
 // ----------------------
 async function logout(adminId) {
-  await RefreshToken.findOneAndDelete({ userId: adminId });
+  const admin = await Admin.findById(adminId);
+  if (admin) {
+    admin.tokenVersion = (admin.tokenVersion || 0) + 1;
+    admin.accessTokenVersion = (admin.accessTokenVersion || 0) + 1;
+    await admin.save();
+    
+    await RefreshToken.deleteMany({ userId: admin._id });
+  }
   return { message: "Logged Out successfully", data: { loggedOut: true } };
 }
 

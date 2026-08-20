@@ -1,7 +1,7 @@
 const User = require("../../schemas/user.schema");
+const RefreshToken = require("../../schemas/refreshtoken.schema");
 const PointConversion = require("../../schemas/point-conversion.schema");
 const ServiceRequest = require("../../schemas/service-request.schema");
-const RefreshToken = require("../../schemas/refreshtoken.schema");
 const { checkS3FileExists, deleteS3File } = require("../../utils/s3");
 const path = require("path");
 const sharp = require("sharp");
@@ -44,30 +44,35 @@ const { sendSms } = require("../../functions/sms");
 const { sendMail } = require("../../functions/nodemailer");
 const AppConfig = require("../../schemas/app-config.schema");
 
-async function generateAndSaveToken(payload) {
-  const accessToken = generateToken(payload);
-  const refreshToken = generateToken(payload, "30d");
-  const refreshTokenTokenExpiryIn = new Date(
-    Date.now() + 30 * 24 * 60 * 60 * 1000,
-  );
+async function generateAndSaveToken(user) {
+  const accessPayload = {
+    userId: user._id,
+    email: user.email,
+    accessTokenVersion: user.accessTokenVersion || 0,
+  };
+  const accessToken = generateToken(accessPayload, "30m");
 
-  if (!accessToken || !refreshToken)
-    return { refreshToken: null, accessToken: null };
+  if (!accessToken)
+    return { accessToken: null };
 
-  // Clear viewedPopups for user session on login
-  await User.findByIdAndUpdate(payload?.userId, { viewedPopups: [] });
-
-  await RefreshToken.deleteMany({ userId: payload?.userId });
+  const refreshPayload = {
+    userId: user._id,
+    email: user.email,
+    tokenVersion: user.tokenVersion || 0,
+  };
+  const refreshTokenStr = generateToken(refreshPayload, "60d");
+  const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000); // 60 days
 
   await RefreshToken.create({
-    refreshToken,
-    userId: payload?.userId,
-    expiresAt: refreshTokenTokenExpiryIn, //30 days
+    userId: user._id,
+    refreshToken: refreshTokenStr,
+    expiresAt,
   });
 
-  if (!refreshToken || !accessToken)
-    sendFailResponse("Failed to generate token");
-  return { accessToken, refreshToken };
+  // Clear viewedPopups for user session on login
+  await User.findByIdAndUpdate(user._id, { viewedPopups: [] });
+
+  return { accessToken, refreshToken: refreshTokenStr };
 }
 
 // ----------------------
@@ -118,10 +123,7 @@ async function registerUser(userData) {
     ...(referredById && { referredBy: referredById }),
   });
 
-  const { refreshToken, accessToken } = await generateAndSaveToken({
-    userId: user?._id,
-    email: user?.email,
-  });
+  const { accessToken, refreshToken } = await generateAndSaveToken(user);
 
   const populatedUser = await User.findById(user._id).populate("roleId");
   const { password: pw, ...rest } = populatedUser.toObject();
@@ -161,10 +163,7 @@ async function login(userData) {
   const isSamePassword = await compareHash(password, userExist.password);
   if (!isSamePassword) sendFailResponse("PassWord mismatch");
 
-  const { refreshToken, accessToken } = await generateAndSaveToken({
-    userId: userExist?._id,
-    email: userExist?.email,
-  });
+  const { accessToken, refreshToken } = await generateAndSaveToken(userExist);
 
   if (userExist?.fcmTokens?.length && userExist?.enableNotification) {
     const localizedNotif = getNotification(
@@ -230,10 +229,7 @@ async function providerAuth(data) {
       ...(referredById && { referredBy: referredById }),
     });
 
-    const { refreshToken, accessToken } = await generateAndSaveToken({
-      userId: newUser?._id,
-      email: newUser?.email,
-    });
+    const { accessToken, refreshToken } = await generateAndSaveToken(newUser);
 
     const populatedNewUser = await User.findById(newUser._id).populate(
       "roleId",
@@ -266,10 +262,7 @@ async function providerAuth(data) {
       );
     }
 
-    const { refreshToken, accessToken } = await generateAndSaveToken({
-      userId: userExist?._id,
-      email: userExist?.email,
-    });
+    const { accessToken, refreshToken } = await generateAndSaveToken(userExist);
 
     if (userExist?.fcmTokens?.length && userExist?.enableNotification) {
       const localizedNotif = getNotification(
@@ -299,23 +292,27 @@ async function providerAuth(data) {
 // ----------------------
 async function logout(userId) {
   const user = await User.findById(userId);
-  if (user && user.fcmTokens?.length && user.enableNotification) {
-    const localizedNotif = getNotification(
-      APP_NOTIFICATIONS.auth.logout,
-      user.language,
-    );
-    sendFcmNotifications(
-      user.fcmTokens,
-      localizedNotif.title,
-      localizedNotif.body,
-    ).catch((err) => console.error("[FCM] logout notification failed:", err));
+  if (user) {
+    if (user.fcmTokens?.length && user.enableNotification) {
+      const localizedNotif = getNotification(
+        APP_NOTIFICATIONS.auth.logout,
+        user.language,
+      );
+      sendFcmNotifications(
+        user.fcmTokens,
+        localizedNotif.title,
+        localizedNotif.body,
+      ).catch((err) => console.error("[FCM] logout notification failed:", err));
+    }
+    
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
+    user.accessTokenVersion = (user.accessTokenVersion || 0) + 1;
+    user.fcmTokens = [];
+    await user.save();
+    
+    await RefreshToken.deleteMany({ userId: user._id });
   }
-  await RefreshToken.findOneAndDelete({ userId: userId });
-  await User.findByIdAndUpdate(
-    userId,
-    { $set: { fcmTokens: [] } },
-    { new: true },
-  );
+  
   return { message: "Logged Out successfully", data: { loggedOut: true } };
 }
 
@@ -398,10 +395,7 @@ async function verifyOtp(data) {
   if (!user) sendFailResponse("User not found");
 
   if (verifySR.requestType === ServiceRequestType.SIMPLE_OTP_LOGIN) {
-    const { refreshToken, accessToken } = await generateAndSaveToken({
-      userId: user._id,
-      email: user.email,
-    });
+    const { accessToken, refreshToken } = await generateAndSaveToken(user);
 
     if (user?.fcmTokens?.length && user?.enableNotification) {
       const localizedNotif = getNotification(

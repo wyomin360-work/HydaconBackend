@@ -17,87 +17,80 @@ async function uploadImage(file) {
 }
 
 async function renewToken(data) {
-  const { currentRefreshToken, role } = data;
+  const { currentRefreshToken, currentAccessToken, role } = data;
 
-  const now = moment();
-  const refreshTokenTokenExpiryIn = new Date(
-    Date.now() + 30 * 24 * 60 * 60 * 1000,
-  );
-
-  const tokenDetails = verifyToken(currentRefreshToken);
-  if (!tokenDetails) sendFailResponse("Authentication Expired", 401);
-
-  if (role === ROLES.USER) {
-    const user = await User.findById(tokenDetails?.userId);
-    if (!user) sendFailResponse("Corrupted token", 401);
-
-    const storedToken = await RefreshToken.findOne({
-      userId: tokenDetails?.userId,
-    });
-
-    if (!storedToken || storedToken.refreshToken !== currentRefreshToken) {
-      sendFailResponse("Token manipulated", 401);
-    }
-
-    let payload = {
-      userId: user._id,
-      email: user.email,
-    };
-    const expiresAt = moment(storedToken.expiresAt);
-    const daysRemaining = expiresAt.diff(now, "days");
-    const accessToken = generateToken(payload);
-    let refreshToken = user.refreshToken;
-
-    if (daysRemaining <= 5) {
-      refreshToken = generateToken(payload, "30d");
-      await RefreshToken.deleteMany({ userId: user._id });
-      await RefreshToken.create({
-        refreshToken,
-        userId: payload?.userId,
-        expiresAt: refreshTokenTokenExpiryIn,
-      });
-    }
-
-    ((user.refreshToken = refreshToken), (user.accessToken = accessToken));
-    await user.save();
-    return { accessToken, refreshToken };
-  } else if (role === ROLES.ADMIN) {
-    const admin = await Admin.findById(tokenDetails?.adminId);
-    if (!admin) sendFailResponse("Corrupted token", 401);
-
-    const storedToken = await RefreshToken.findOne({
-      adminId: tokenDetails?.adminId,
-    });
-
-    if (!storedToken || storedToken.refreshToken !== currentRefreshToken) {
-      sendFailResponse("Token manipulated", 401);
-    }
-
-    let payload = {
-      adminId: admin._id,
-      email: admin.email,
-    };
-
-    const expiresAt = moment(storedToken.expiresAt);
-    const daysRemaining = expiresAt.diff(now, "days");
-    const accessToken = generateToken(payload);
-    let refreshToken = admin.refreshToken;
-
-    if (daysRemaining <= 5) {
-      refreshToken = generateToken(payload, "30d");
-      await RefreshToken.deleteMany({ adminId: admin._id });
-      await RefreshToken.create({
-        refreshToken,
-        adminId: payload?.adminId,
-        expiresAt: refreshTokenTokenExpiryIn,
-      });
-    }
-    ((admin.refreshToken = refreshToken), (admin.accessToken = accessToken));
-    await admin.save();
-    return { accessToken, refreshToken };
-  } else {
-    sendFailResponse("Invalid token", 401);
+  if (!currentRefreshToken || !currentAccessToken) {
+    sendFailResponse("Refresh token and access token are required", 400);
   }
+
+  const storedToken = await RefreshToken.findOne({ refreshToken: currentRefreshToken });
+  if (!storedToken || storedToken.revoked || storedToken.expiresAt < new Date()) {
+    sendFailResponse("Invalid or expired refresh token. Please login again.", 401);
+  }
+
+  const jwt = require("jsonwebtoken");
+  const decodedAccess = jwt.decode(currentAccessToken);
+  
+  if (!decodedAccess) {
+    sendFailResponse("Invalid access token", 400);
+  }
+
+  let userOrAdmin;
+  if (role === ROLES.USER) {
+    userOrAdmin = await User.findById(decodedAccess.userId);
+  } else if (role === ROLES.ADMIN) {
+    userOrAdmin = await Admin.findById(decodedAccess.adminId);
+  } else {
+    sendFailResponse("Invalid role", 400);
+  }
+
+  if (!userOrAdmin) {
+    sendFailResponse("User or admin not found", 401);
+  }
+
+  if (decodedAccess.accessTokenVersion !== userOrAdmin.accessTokenVersion) {
+    storedToken.revoked = true;
+    await storedToken.save();
+    sendFailResponse("Session revoked. Please login again.", 401);
+  }
+
+  await RefreshToken.findByIdAndDelete(storedToken._id);
+
+  userOrAdmin.accessTokenVersion = (userOrAdmin.accessTokenVersion || 0) + 1;
+  await userOrAdmin.save();
+
+  const accessPayload = {
+    email: userOrAdmin.email,
+    accessTokenVersion: userOrAdmin.accessTokenVersion,
+  };
+  
+  const refreshPayload = {
+    email: userOrAdmin.email,
+    tokenVersion: userOrAdmin.tokenVersion,
+  };
+  
+  if (role === ROLES.USER) {
+    accessPayload.userId = userOrAdmin._id;
+    refreshPayload.userId = userOrAdmin._id;
+  } else {
+    accessPayload.adminId = userOrAdmin._id;
+    refreshPayload.adminId = userOrAdmin._id;
+  }
+
+  const newAccessToken = generateToken(accessPayload, "30m");
+  const newRefreshToken = generateToken(refreshPayload, "60d");
+  const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000);
+
+  await RefreshToken.create({
+    userId: userOrAdmin._id,
+    refreshToken: newRefreshToken,
+    expiresAt,
+  });
+
+  return { 
+    message: "Token refreshed successfully",
+    data: { accessToken: newAccessToken, refreshToken: newRefreshToken }
+  };
 }
 
 module.exports = {

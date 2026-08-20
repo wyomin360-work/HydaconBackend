@@ -9,6 +9,8 @@ const adminSchema = new mongoose.Schema(
     resetPasswordToken: { type: String },
     resetPasswordExpires: { type: Date },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "Admins" },
+    tokenVersion: { type: Number, default: 0 },
+    accessTokenVersion: { type: Number, default: 0 },
   },
   { timestamps: true },
 );

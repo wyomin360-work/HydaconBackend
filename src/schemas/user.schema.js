@@ -123,6 +123,8 @@ const userSchema = new mongoose.Schema(
       { type: mongoose.Schema.Types.ObjectId, ref: "Content", default: [] },
     ],
     language: { type: String, enum: ["en_US", "ml"], default: "en_US" },
+    tokenVersion: { type: Number, default: 0 },
+    accessTokenVersion: { type: Number, default: 0 },
   },
   {
     timestamps: true,
