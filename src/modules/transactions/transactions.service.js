@@ -18,6 +18,11 @@ const { sendFailResponse } = require("../../utils/responseHandlers");
 const { sendFcmNotifications } = require("../../functions/fcm");
 const { LOYALTY_TRANSACTION_TYPES } = require("../../constants/loyalty");
 const LoyaltyTransaction = require("../../schemas/loyalty-transaction.schema");
+const { updateUserPoints } = require("../user/user.service");
+const {
+  POINTS_TRANSACTION_TYPE,
+  POINTS_TRANSACTION_REASON,
+} = require("../../constants/points");
 
 // ----------------------
 // Transaction List
@@ -244,10 +249,15 @@ async function createTransaction(data, userId) {
     paymentMethod: PAYMENT_METHODS.DIRECT_TRANSFER,
   });
 
-  let userRemainingPoints =
-    user.totalPoints - Math.ceil(amount / coinConfig.coinValue);
-  user.totalPoints = userRemainingPoints;
-  await user.save();
+  const pointsToDeduct = Math.ceil(amount / coinConfig.coinValue);
+  await updateUserPoints({
+    userId,
+    amount: pointsToDeduct,
+    transactionType: POINTS_TRANSACTION_TYPE.DEBIT,
+    reason: POINTS_TRANSACTION_REASON.WITHDRAWAL_TO_CASH,
+    description: `Withdrawal request for ${amount} INR`,
+    metadata: { transactionId: transaction._id },
+  });
   if (user?.fcmTokens?.length && user?.enableNotification) {
     const localizedNotif = getNotification(
       withdrawNotification.initiated,

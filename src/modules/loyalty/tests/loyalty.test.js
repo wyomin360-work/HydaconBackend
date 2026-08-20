@@ -7,6 +7,7 @@ const UserTierProgress = require("../../../schemas/user-tier-progress.schema");
 const LoyaltyTransaction = require("../../../schemas/loyalty-transaction.schema");
 const User = require("../../../schemas/user.schema");
 const SeasonTierClaim = require("../../../schemas/season-tier-claim.schema");
+const PointsLedger = require("../../../schemas/points-ledger.schema");
 const rewardsService = require("../../rewards/rewards.service");
 const {
   LOYALTY_TRANSACTION_TYPES,
@@ -32,6 +33,7 @@ jest.mock("../../../schemas/user-tier-progress.schema");
 jest.mock("../../../schemas/loyalty-transaction.schema");
 jest.mock("../../../schemas/user.schema");
 jest.mock("../../../schemas/season-tier-claim.schema");
+jest.mock("../../../schemas/points-ledger.schema");
 jest.mock("../../rewards/rewards.service", () => ({
   awardRewardToUser: jest.fn().mockResolvedValue({ success: true }),
 }));
@@ -52,7 +54,16 @@ describe("Loyalty and Tier Progression Engine", () => {
   let mockUser, mockTiers, mockSeason, mockConfigs, mockProgress;
 
   beforeEach(() => {
+    PointsLedger.create.mockResolvedValue({});
     jest.clearAllMocks();
+
+    const mongoose = require("mongoose");
+    mongoose.startSession = jest.fn().mockResolvedValue({
+      startTransaction: jest.fn(),
+      commitTransaction: jest.fn(),
+      abortTransaction: jest.fn(),
+      endSession: jest.fn(),
+    });
 
     mockUser = {
       _id: "user123",
@@ -261,6 +272,9 @@ describe("Loyalty and Tier Progression Engine", () => {
       expect(result[0]).toHaveProperty("isUnlocked");
       expect(result[0]).toHaveProperty("isClaimed");
       expect(result[0]).toHaveProperty("isClaimable");
+      expect(result[0]).toHaveProperty("isUnlocked");
+      expect(result[0]).toHaveProperty("isClaimed");
+      expect(result[0]).toHaveProperty("isClaimable");
     });
   });
 
@@ -308,8 +322,9 @@ describe("Loyalty and Tier Progression Engine", () => {
         populate: jest.fn().mockResolvedValue(mockProgress),
       });
 
+      const validUserId = "507f1f77bcf86cd799439011";
       await loyaltyService.addBonusPoints(
-        "user123",
+        validUserId,
         150,
         "Spring Campaign Reward",
       );
@@ -322,19 +337,20 @@ describe("Loyalty and Tier Progression Engine", () => {
         }),
       );
       expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
-        "user123",
+        validUserId,
         expect.objectContaining({
           $inc: { totalPoints: 150, lifetimePoints: 150 },
         }),
         expect.any(Object),
       );
-      expect(UserTierProgress.findOneAndUpdate).toHaveBeenCalledWith(
-        { userId: "user123", seasonId: "season123" },
+      expect(UserTierProgress.findOneAndUpdate).toHaveBeenLastCalledWith(
+        { userId: validUserId, seasonId: "season123" },
         expect.objectContaining({ $max: { currentPoint: 350 } }),
       );
     });
 
     it("should award campaign bonus and leave QP unchanged if QP is already higher than redeemable balance", async () => {
+      const validUserId = "507f1f77bcf86cd799439011";
       mockProgress.currentPoint = 500;
       User.findByIdAndUpdate = jest
         .fn()
@@ -344,13 +360,13 @@ describe("Loyalty and Tier Progression Engine", () => {
       });
 
       await loyaltyService.addBonusPoints(
-        "user123",
+        validUserId,
         150,
         "Spring Campaign Reward",
       );
 
       expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
-        "user123",
+        validUserId,
         expect.objectContaining({
           $inc: { totalPoints: 150, lifetimePoints: 150 },
         }),
@@ -417,19 +433,22 @@ describe("Loyalty and Tier Progression Engine", () => {
 
     it("should update a season and deactivate others if active is true", async () => {
       mockReq.body = { name: "Season Updated", active: true };
-      LoyaltySeason.findByIdAndUpdate.mockResolvedValue({
+      const existing = {
         _id: "someId",
+        name: "Season 1",
+        startDate: new Date("2026-01-01"),
+        endDate: new Date("2026-12-31"),
+        toObject: () => ({ _id: "someId", name: "Season 1" }),
+      };
+      LoyaltySeason.findById.mockResolvedValue(existing);
+      LoyaltySeason.findByIdAndUpdate.mockResolvedValue({
+        ...existing,
         name: "Season Updated",
       });
       await loyaltyController.updateSeason(mockReq, mockRes);
       expect(LoyaltySeason.updateMany).toHaveBeenCalledWith(
-        { _id: { $ne: "someId" } },
-        { active: false },
-      );
-      expect(LoyaltySeason.findByIdAndUpdate).toHaveBeenCalledWith(
-        "someId",
-        mockReq.body,
-        { new: true },
+        { _id: { $ne: "someId" }, active: true },
+        { active: false, deactivatedAt: expect.any(Date) },
       );
       expect(mockRes.status).toHaveBeenCalledWith(200);
     });
@@ -442,6 +461,11 @@ describe("Loyalty and Tier Progression Engine", () => {
     });
 
     it("should delete a tier configuration", async () => {
+      TierConfiguration.findById.mockReturnValue({
+        populate: jest.fn().mockResolvedValue({
+          seasonId: { startDate: new Date(Date.now() + 86400000) },
+        }),
+      });
       TierConfiguration.findByIdAndDelete.mockResolvedValue({});
       await loyaltyController.deleteTierConfiguration(mockReq, mockRes);
       expect(TierConfiguration.findByIdAndDelete).toHaveBeenCalledWith(
@@ -1249,7 +1273,9 @@ describe("Loyalty and Tier Progression Engine", () => {
           active: false,
         }),
       );
-      expect(result).toBe(mockSeasonInstance);
+      expect(result).toEqual(
+        expect.objectContaining({ ...mockSeasonInstance, seasonCreated: true }),
+      );
     });
 
     it("should create a season with nested payload and handle tier configurations in rank order", async () => {
@@ -1328,10 +1354,12 @@ describe("Loyalty and Tier Progression Engine", () => {
           seasonId: "newSeasonId",
         }),
       );
-      expect(result).toBe(mockSeasonInstance);
+      expect(result).toEqual(
+        expect.objectContaining({ ...mockSeasonInstance, seasonCreated: true }),
+      );
     });
 
-    it("should throw conflict error if season dates overlap", async () => {
+    it("should create season as inactive if season dates overlap", async () => {
       LoyaltySeason.findOne.mockResolvedValue({ name: "Existing Season" });
 
       const payload = {
@@ -1339,11 +1367,18 @@ describe("Loyalty and Tier Progression Engine", () => {
         code: "NS1",
         startDate: "2026-07-01",
         endDate: "2026-07-31",
+        active: true,
       };
 
-      await expect(
-        loyaltyService.createSeason("admin123", payload),
-      ).rejects.toThrow();
+      await loyaltyService.createSeason("admin123", payload);
+
+      expect(LoyaltySeason.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "New Season",
+          code: "NS1",
+          active: false,
+        }),
+      );
     });
   });
 
@@ -1452,8 +1487,18 @@ describe("Loyalty and Tier Progression Engine", () => {
           { rewardType: "COINS", coins: 10, title: "Bonus Coins" },
         ],
       };
-      TierConfiguration.findOne.mockReturnValue({
-        populate: jest.fn().mockResolvedValue(mockTierConfig),
+      const makeQueryMock = (val) => {
+        const p = Promise.resolve(val);
+        p.populate = jest.fn().mockResolvedValue(val);
+        return p;
+      };
+      TierConfiguration.findOne.mockImplementation(() =>
+        makeQueryMock(mockTierConfig),
+      );
+      TierConfiguration.find.mockReturnValue({
+        populate: jest.fn().mockReturnValue({
+          sort: jest.fn().mockResolvedValue([mockTierConfig]),
+        }),
       });
 
       SeasonTierClaim.findOne.mockResolvedValue(null);
@@ -1495,8 +1540,18 @@ describe("Loyalty and Tier Progression Engine", () => {
         qualificationPoint: 100,
         rewards: [{ rewardType: "POINTS", points: 50 }],
       };
-      TierConfiguration.findOne.mockReturnValue({
-        populate: jest.fn().mockResolvedValue(mockTierConfig),
+      const makeQueryMock = (val) => {
+        const p = Promise.resolve(val);
+        p.populate = jest.fn().mockResolvedValue(val);
+        return p;
+      };
+      TierConfiguration.findOne.mockImplementation(() =>
+        makeQueryMock(mockTierConfig),
+      );
+      TierConfiguration.find.mockReturnValue({
+        populate: jest.fn().mockReturnValue({
+          sort: jest.fn().mockResolvedValue([mockTierConfig]),
+        }),
       });
 
       SeasonTierClaim.findOne.mockResolvedValue({ _id: "existingClaim" });
@@ -1545,9 +1600,14 @@ describe("Loyalty and Tier Progression Engine", () => {
         qualificationPoint: 1000,
         rewards: [{ rewardType: "POINTS", points: 500 }],
       };
-      TierConfiguration.findOne.mockReturnValue({
-        populate: jest.fn().mockResolvedValue(mockTierConfig),
-      });
+      const makeQueryMock = (val) => {
+        const p = Promise.resolve(val);
+        p.populate = jest.fn().mockResolvedValue(val);
+        return p;
+      };
+      TierConfiguration.findOne.mockImplementation(() =>
+        makeQueryMock(mockTierConfig),
+      );
 
       SeasonTierClaim.findOne.mockResolvedValue(null);
 
@@ -1580,9 +1640,14 @@ describe("Loyalty and Tier Progression Engine", () => {
         qualificationPoint: 100,
         rewards: [], // Empty rewards
       };
-      TierConfiguration.findOne.mockReturnValue({
-        populate: jest.fn().mockResolvedValue(mockTierConfig),
-      });
+      const makeQueryMock = (val) => {
+        const p = Promise.resolve(val);
+        p.populate = jest.fn().mockResolvedValue(val);
+        return p;
+      };
+      TierConfiguration.findOne.mockImplementation(() =>
+        makeQueryMock(mockTierConfig),
+      );
 
       SeasonTierClaim.findOne.mockResolvedValue(null);
 

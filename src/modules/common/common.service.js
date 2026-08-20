@@ -23,14 +23,23 @@ async function renewToken(data) {
     sendFailResponse("Refresh token and access token are required", 400);
   }
 
-  const storedToken = await RefreshToken.findOne({ refreshToken: currentRefreshToken });
-  if (!storedToken || storedToken.revoked || storedToken.expiresAt < new Date()) {
-    sendFailResponse("Invalid or expired refresh token. Please login again.", 401);
+  const storedToken = await RefreshToken.findOne({
+    refreshToken: currentRefreshToken,
+  });
+  if (
+    !storedToken ||
+    storedToken.revoked ||
+    storedToken.expiresAt < new Date()
+  ) {
+    sendFailResponse(
+      "Invalid or expired refresh token. Please login again.",
+      401,
+    );
   }
 
   const jwt = require("jsonwebtoken");
   const decodedAccess = jwt.decode(currentAccessToken);
-  
+
   if (!decodedAccess) {
     sendFailResponse("Invalid access token", 400);
   }
@@ -63,12 +72,12 @@ async function renewToken(data) {
     email: userOrAdmin.email,
     accessTokenVersion: userOrAdmin.accessTokenVersion,
   };
-  
+
   const refreshPayload = {
     email: userOrAdmin.email,
     tokenVersion: userOrAdmin.tokenVersion,
   };
-  
+
   if (role === ROLES.USER) {
     accessPayload.userId = userOrAdmin._id;
     refreshPayload.userId = userOrAdmin._id;
@@ -87,9 +96,9 @@ async function renewToken(data) {
     expiresAt,
   });
 
-  return { 
+  return {
     message: "Token refreshed successfully",
-    data: { accessToken: newAccessToken, refreshToken: newRefreshToken }
+    data: { accessToken: newAccessToken, refreshToken: newRefreshToken },
   };
 }
 

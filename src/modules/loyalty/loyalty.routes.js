@@ -3,6 +3,16 @@ const { handleError } = require("../../utils/heplers");
 const controller = require("./loyalty.controller");
 const loyaltyPaths = require("./loyalty.paths");
 const verification = require("../../middlewares/jwtVerification");
+const validateRequest = require("../../middlewares/validator");
+const {
+  loyaltyClaimRewardRequestType,
+  loyaltyTierCreateRequestType,
+  loyaltyTierUpdateRequestType,
+  loyaltySeasonCreateRequestType,
+  loyaltySeasonUpdateRequestType,
+  loyaltyTierConfigCreateRequestType,
+  loyaltyTierConfigUpdateRequestType,
+} = require("../../validations/loyalty.validations");
 
 const router = express.Router();
 
@@ -24,11 +34,13 @@ router.get(
 router.post(
   loyaltyPaths.claimReward,
   verification.verifyUser,
+  validateRequest(loyaltyClaimRewardRequestType),
   handleError(controller.claimTierReward),
 );
 router.post(
   loyaltyPaths.claimSeasonTierReward,
   verification.verifyUser,
+  validateRequest(loyaltyClaimRewardRequestType),
   handleError(controller.claimTierReward),
 );
 
@@ -36,6 +48,7 @@ router.post(
 router.post(
   loyaltyPaths.admin.tiers,
   verification.verifyAdmin,
+  validateRequest(loyaltyTierCreateRequestType),
   handleError(controller.createTier),
 );
 router.get(
@@ -46,6 +59,7 @@ router.get(
 router.patch(
   loyaltyPaths.admin.tiersDetail,
   verification.verifyAdmin,
+  validateRequest(loyaltyTierUpdateRequestType),
   handleError(controller.updateTier),
 );
 router.delete(
@@ -58,6 +72,7 @@ router.delete(
 router.post(
   loyaltyPaths.admin.seasons,
   verification.verifyAdmin,
+  validateRequest(loyaltySeasonCreateRequestType),
   handleError(controller.createSeason),
 );
 router.get(
@@ -83,6 +98,7 @@ router.patch(
 router.patch(
   loyaltyPaths.admin.seasonsDetail,
   verification.verifyAdmin,
+  validateRequest(loyaltySeasonUpdateRequestType),
   handleError(controller.updateSeason),
 );
 router.delete(
@@ -100,6 +116,7 @@ router.get(
 router.post(
   loyaltyPaths.admin.tierConfigurations,
   verification.verifyAdmin,
+  validateRequest(loyaltyTierConfigCreateRequestType),
   handleError(controller.createTierConfiguration),
 );
 router.get(
@@ -125,6 +142,7 @@ router.get(
 router.patch(
   loyaltyPaths.admin.tierConfigurationsDetail,
   verification.verifyAdmin,
+  validateRequest(loyaltyTierConfigUpdateRequestType),
   handleError(controller.updateTierConfiguration),
 );
 router.delete(

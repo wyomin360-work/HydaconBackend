@@ -44,27 +44,7 @@ async function claimTierReward(req, res) {
  * Admin API: Creates a new loyalty tier definition.
  */
 async function createTier(req, res) {
-  const {
-    name,
-    key,
-    colorIdentity,
-    badgeUrl,
-    rank,
-    qualificationPoint,
-    threshold,
-    active,
-  } = req.body;
-  await loyaltyService.validateTierRange(req.body);
-  const tier = await Tier.create({
-    name,
-    key,
-    colorIdentity,
-    badgeUrl,
-    rank,
-    qualificationPoint,
-    threshold,
-    active,
-  });
+  const tier = await loyaltyService.createTier(req.userId, req.body);
   return sendResponse(res, tier, 201);
 }
 
@@ -80,9 +60,11 @@ async function listTiers(req, res) {
  * Admin API: Updates an existing loyalty tier.
  */
 async function updateTier(req, res) {
-  const tierId = req.params.id;
-  await loyaltyService.validateTierRange(req.body, tierId);
-  const tier = await Tier.findByIdAndUpdate(tierId, req.body, { new: true });
+  const tier = await loyaltyService.updateTier(
+    req.userId,
+    req.params.id,
+    req.body,
+  );
   return sendResponse(res, tier, 200);
 }
 
@@ -107,9 +89,11 @@ async function listSeasons(req, res) {
  */
 async function activateSeason(req, res) {
   const seasonId = req.params.id;
+  const overrideStartDate = Boolean(req.body?.overrideStartDate);
   const activeSeason = await loyaltyService.activateSeason(
     req.userId,
     seasonId,
+    overrideStartDate,
   );
   return sendResponse(res, activeSeason, 200);
 }
@@ -150,16 +134,11 @@ async function updateTierConfiguration(req, res) {
  * Admin API: Updates an existing season generally.
  */
 async function updateSeason(req, res) {
-  const seasonId = req.params.id;
-  if (req.body.active === true) {
-    await LoyaltySeason.updateMany(
-      { _id: { $ne: seasonId } },
-      { active: false },
-    );
-  }
-  const season = await LoyaltySeason.findByIdAndUpdate(seasonId, req.body, {
-    new: true,
-  });
+  const season = await loyaltyService.updateSeason(
+    req.userId,
+    req.params.id,
+    req.body,
+  );
   return sendResponse(res, season, 200);
 }
 
@@ -221,6 +200,18 @@ async function deleteTier(req, res) {
  */
 async function deleteTierConfiguration(req, res) {
   const configId = req.params.id;
+  const config =
+    await TierConfiguration.findById(configId).populate("seasonId");
+  if (!config) {
+    return sendResponse(res, { message: "Tier configuration not found" }, 404);
+  }
+  if (config.seasonId && config.seasonId.startDate <= new Date()) {
+    return res.status(400).json({
+      status: "fail",
+      message:
+        "Cannot modify tier configurations for started or completed seasons",
+    });
+  }
   await TierConfiguration.findByIdAndDelete(configId);
   return sendResponse(
     res,

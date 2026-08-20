@@ -14,10 +14,13 @@ const validateRequest = (schema, property = "body") => {
     const valid = validate(req[property]);
     if (!valid) {
       const errors = validate.errors
-        .map(
-          (err) =>
-            `${err.instancePath || err.instancePath || err.params.missingProperty} ${err.message}`,
-        )
+        .map((err) => {
+          const prop =
+            err.params?.additionalProperty ||
+            err.params?.missingProperty ||
+            (err.instancePath ? err.instancePath.replace(/^\//, "") : "");
+          return prop ? `'${prop}': ${err.message}` : err.message;
+        })
         .join(", ");
       return next(new AppError(errors, 400));
     }

@@ -184,6 +184,14 @@ exports.conversionHistory = async (req, res, next) => {
   return sendResponse(res, response);
 };
 
+exports.pointsLedger = async (req, res, next) => {
+  const userId = req?.userId;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const response = await userService.getPointsLedger(userId, page, limit);
+  return sendResponse(res, response);
+};
+
 exports.toggleUserStatus = async (req, res, next) => {
   const targetUserId = req?.params?.id;
   const data = req?.body;
