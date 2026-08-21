@@ -37,6 +37,10 @@ const scratchCardsPaths = require("../modules/scratch-cards/scratch-cards.paths"
 const transactionRoutes = require("../modules/transactions/transactions.routes");
 const transactionsPath = require("../modules/transactions/transactions.path");
 
+// -- Withdrawals --
+const withdrawalRoutes = require("../modules/withdrawals/withdrawals.routes");
+const withdrawalsPath = require("../modules/withdrawals/withdrawals.path");
+
 // -- Loyalty & Campaigns --
 const loyaltyRoutes = require("../modules/loyalty/loyalty.routes");
 const loyaltyPaths = require("../modules/loyalty/loyalty.paths");
@@ -99,6 +103,9 @@ globalRoutes.use(scratchCardsPaths.root, scratchCardsRoutes);
 
 // Transactions
 globalRoutes.use(transactionsPath.root, transactionRoutes);
+
+// Withdrawals
+globalRoutes.use(withdrawalsPath.root, withdrawalRoutes);
 
 // Loyalty & Campaigns
 globalRoutes.use(loyaltyPaths.root, loyaltyRoutes);
