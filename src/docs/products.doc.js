@@ -10,12 +10,20 @@ module.exports = {
             schema: {
               type: "object",
               properties: {
-                page: { type: "integer", default: 1, description: "Page number" },
-                limit: { type: "integer", default: 10, description: "Number of products per page" }
-              }
-            }
-          }
-        }
+                page: {
+                  type: "integer",
+                  default: 1,
+                  description: "Page number",
+                },
+                limit: {
+                  type: "integer",
+                  default: 10,
+                  description: "Number of products per page",
+                },
+              },
+            },
+          },
+        },
       },
       responses: {
         200: {
@@ -36,24 +44,28 @@ module.exports = {
                             _id: { type: "string" },
                             name: { type: "string" },
                             description: { type: "string" },
-                            image: { type: "string" },
+                            featuredImage: { type: "string" },
+                            images: {
+                              type: "array",
+                              items: { type: "string" },
+                            },
                             price: { type: "number" },
-                            rewardPoints: { type: "number" }
-                          }
-                        }
+                            rewardPoints: { type: "number" },
+                          },
+                        },
                       },
                       limit: { type: "integer", example: 10 },
                       total: { type: "integer", example: 5 },
-                      page: { type: "integer", example: 1 }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+                      page: { type: "integer", example: 1 },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   },
   "/products/create": {
     post: {
@@ -65,18 +77,28 @@ module.exports = {
           "application/json": {
             schema: {
               type: "object",
-              required: ["name", "description", "image", "price", "rewardPoints"],
+              required: [
+                "name",
+                "description",
+                "price",
+                "rewardPoints",
+                "weightValue",
+                "weightUnit",
+              ],
               properties: {
                 name: { type: "string" },
                 description: { type: "string" },
-                image: { type: "string" },
+                featuredImage: { type: "string" },
+                images: { type: "array", items: { type: "string" } },
                 price: { type: "number" },
                 rewardPoints: { type: "number" },
-                netWeight: { type: 'string' },
-              }
-            }
-          }
-        }
+                weightValue: { type: "number" },
+                weightUnit: { type: "string", enum: ["kg", "g", "l", "ml"] },
+                tdsDocument: { type: "string" },
+              },
+            },
+          },
+        },
       },
       responses: {
         201: {
@@ -90,23 +112,28 @@ module.exports = {
                   data: {
                     type: "object",
                     properties: {
-                      productCreated: { type: "boolean", example: true }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+                      productCreated: { type: "boolean", example: true },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   },
   "/products/details/{productId}": {
     get: {
       summary: "Get product by ID",
       tags: ["Products"],
       parameters: [
-        { name: "productId", in: "path", required: true, schema: { type: "string" } }
+        {
+          name: "productId",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+        },
       ],
       responses: {
         200: {
@@ -122,28 +149,36 @@ module.exports = {
                       _id: { type: "string" },
                       name: { type: "string" },
                       description: { type: "string" },
-                      image: { type: "string" },
+                      featuredImage: { type: "string" },
+                      images: { type: "array", items: { type: "string" } },
                       price: { type: "number" },
                       rewardPoints: { type: "number" },
-                      netWeight: { type: 'string' },
-                      active: { type: 'boolean' },
-                    }
-                  }
-                }
-              }
-            }
-          }
+                      weightValue: { type: "number" },
+                      weightUnit: { type: "string" },
+                      tdsDocument: { type: "string" },
+                      active: { type: "boolean" },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
-        404: { description: "Product not found" }
-      }
-    }
+        404: { description: "Product not found" },
+      },
+    },
   },
   "/products/update/{productId}": {
     patch: {
       summary: "Update a product by ID",
       tags: ["Products"],
       parameters: [
-        { name: "productId", in: "path", required: true, schema: { type: "string" } }
+        {
+          name: "productId",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+        },
       ],
       requestBody: {
         required: true,
@@ -154,15 +189,18 @@ module.exports = {
               properties: {
                 name: { type: "string" },
                 description: { type: "string" },
-                image: { type: "string" },
+                featuredImage: { type: "string" },
+                images: { type: "array", items: { type: "string" } },
                 active: { type: "boolean" },
-                netWeight: { type: 'string' },
+                weightValue: { type: "number" },
+                weightUnit: { type: "string", enum: ["kg", "g", "l", "ml"] },
+                tdsDocument: { type: "string" },
                 price: { type: "number" },
-                rewardPoints: { type: "number" }
-              }
-            }
-          }
-        }
+                rewardPoints: { type: "number" },
+              },
+            },
+          },
+        },
       },
       responses: {
         200: {
@@ -176,24 +214,29 @@ module.exports = {
                   data: {
                     type: "object",
                     properties: {
-                      productUpdated: { type: "boolean", example: true }
-                    }
-                  }
-                }
-              }
-            }
-          }
+                      productUpdated: { type: "boolean", example: true },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
-        404: { description: "Product not found" }
-      }
-    }
+        404: { description: "Product not found" },
+      },
+    },
   },
   "/products/delete/{productId}": {
     delete: {
       summary: "Delete a product by ID",
       tags: ["Products"],
       parameters: [
-        { name: "productId", in: "path", required: true, schema: { type: "string" } }
+        {
+          name: "productId",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+        },
       ],
       responses: {
         200: {
@@ -207,16 +250,16 @@ module.exports = {
                   data: {
                     type: "object",
                     properties: {
-                      productDeleted: { type: "boolean", example: true }
-                    }
-                  }
-                }
-              }
-            }
-          }
+                      productDeleted: { type: "boolean", example: true },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
-        404: { description: "Product not found" }
-      }
-    }
-  }
+        404: { description: "Product not found" },
+      },
+    },
+  },
 };

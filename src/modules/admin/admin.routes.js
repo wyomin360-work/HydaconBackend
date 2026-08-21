@@ -6,6 +6,7 @@ const validateRequest = require("../../middlewares/validator");
 const {
   adminRegisterRequestType,
   adminLoginRequestType,
+  adminAuditLogsRequestType,
 } = require("../../validations/admin.validations");
 const verification = require("../../middlewares/jwtVerification");
 
@@ -16,45 +17,53 @@ router.post(
   adminPaths.auth.register,
   verification.verifyAdmin,
   validateRequest(adminRegisterRequestType),
-  handleError(controller.register)
+  handleError(controller.register),
 );
 
 router.post(
   adminPaths.auth.login,
   validateRequest(adminLoginRequestType),
-  handleError(controller.login)
+  handleError(controller.login),
 );
 
 router.post(
   adminPaths.auth.logout,
   verification.verifyAdmin,
-  handleError(controller.logout)
+  handleError(controller.logout),
 );
 router.post(
   adminPaths.auth.forgotPassword,
-  handleError(controller.forgotPassword)
+  handleError(controller.forgotPassword),
 );
 
 router.post(
   adminPaths.auth.resetPassword,
-  handleError(controller.resetPassword)
+  handleError(controller.resetPassword),
 );
 
 router.put(
   adminPaths.auth.updateDetails,
   verification.verifyAdmin,
-  handleError(controller.updateDetails)
+  handleError(controller.updateDetails),
 );
 
 router.post(
   adminPaths.list,
   verification.verifyAdmin,
-  handleError(controller.adminList)
+  handleError(controller.adminList),
 );
+
+router.post(
+  adminPaths.auditLogs.phoneNumberChanges,
+  verification.verifyAdmin,
+  validateRequest(adminAuditLogsRequestType),
+  handleError(controller.phoneNumberChangeAuditLogs),
+);
+
 router.delete(
   adminPaths.delete,
   verification.verifyAdmin,
-  handleError(controller.adminDelete)
+  handleError(controller.adminDelete),
 );
 
 module.exports = router;

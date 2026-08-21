@@ -1,0 +1,154 @@
+const express = require("express");
+const { handleError } = require("../../utils/heplers");
+const controller = require("./loyalty.controller");
+const loyaltyPaths = require("./loyalty.paths");
+const verification = require("../../middlewares/jwtVerification");
+const validateRequest = require("../../middlewares/validator");
+const {
+  loyaltyClaimRewardRequestType,
+  loyaltyTierCreateRequestType,
+  loyaltyTierUpdateRequestType,
+  loyaltySeasonCreateRequestType,
+  loyaltySeasonUpdateRequestType,
+  loyaltyTierConfigCreateRequestType,
+  loyaltyTierConfigUpdateRequestType,
+} = require("../../validations/loyalty.validations");
+
+const router = express.Router();
+
+// User Loyalty Summary Endpoint (Mobile App integration)
+router.get(
+  loyaltyPaths.summary,
+  verification.verifyUser,
+  handleError(controller.getUserSummary),
+);
+
+// User Tier Progression Metadata Endpoint (Mobile App integration)
+router.get(
+  loyaltyPaths.progression,
+  verification.verifyUser,
+  handleError(controller.getTierProgression),
+);
+
+// User Claim Tier Reward Endpoints (Mobile App integration)
+router.post(
+  loyaltyPaths.claimReward,
+  verification.verifyUser,
+  validateRequest(loyaltyClaimRewardRequestType),
+  handleError(controller.claimTierReward),
+);
+router.post(
+  loyaltyPaths.claimSeasonTierReward,
+  verification.verifyUser,
+  validateRequest(loyaltyClaimRewardRequestType),
+  handleError(controller.claimTierReward),
+);
+
+// Admin Loyalty Tier Management Endpoints
+router.post(
+  loyaltyPaths.admin.tiers,
+  verification.verifyAdmin,
+  validateRequest(loyaltyTierCreateRequestType),
+  handleError(controller.createTier),
+);
+router.get(
+  loyaltyPaths.admin.tiers,
+  verification.verifyAdmin,
+  handleError(controller.listTiers),
+);
+router.patch(
+  loyaltyPaths.admin.tiersDetail,
+  verification.verifyAdmin,
+  validateRequest(loyaltyTierUpdateRequestType),
+  handleError(controller.updateTier),
+);
+router.delete(
+  loyaltyPaths.admin.tiersDetail,
+  verification.verifyAdmin,
+  handleError(controller.deleteTier),
+);
+
+// Admin Loyalty Seasons Endpoints
+router.post(
+  loyaltyPaths.admin.seasons,
+  verification.verifyAdmin,
+  validateRequest(loyaltySeasonCreateRequestType),
+  handleError(controller.createSeason),
+);
+router.get(
+  loyaltyPaths.admin.seasons,
+  verification.verifyAdmin,
+  handleError(controller.listSeasons),
+);
+router.get(
+  loyaltyPaths.admin.seasonSummary,
+  verification.verifyAdmin,
+  handleError(controller.getSeasonManagementSummary),
+);
+router.patch(
+  loyaltyPaths.admin.seasonsActivate,
+  verification.verifyAdmin,
+  handleError(controller.activateSeason),
+);
+router.patch(
+  loyaltyPaths.admin.seasonsDeactivate,
+  verification.verifyAdmin,
+  handleError(controller.deactivateSeason),
+);
+router.patch(
+  loyaltyPaths.admin.seasonsDetail,
+  verification.verifyAdmin,
+  validateRequest(loyaltySeasonUpdateRequestType),
+  handleError(controller.updateSeason),
+);
+router.delete(
+  loyaltyPaths.admin.seasonsDetail,
+  verification.verifyAdmin,
+  handleError(controller.deleteSeason),
+);
+router.get(
+  loyaltyPaths.admin.seasonsDetail,
+  verification.verifyAdmin,
+  handleError(controller.getSeasonById),
+);
+
+// Admin Loyalty Seasonal Configurations
+router.post(
+  loyaltyPaths.admin.tierConfigurations,
+  verification.verifyAdmin,
+  validateRequest(loyaltyTierConfigCreateRequestType),
+  handleError(controller.createTierConfiguration),
+);
+router.get(
+  loyaltyPaths.admin.tierConfigurations,
+  verification.verifyAdmin,
+  handleError(controller.listTierConfigurations),
+);
+router.get(
+  loyaltyPaths.admin.tierConfigurationHistory,
+  verification.verifyAdmin,
+  handleError(controller.getTierConfigurationHistory),
+);
+router.get(
+  loyaltyPaths.admin.configAuditLogs,
+  verification.verifyAdmin,
+  handleError(controller.listConfigurationAuditLogs),
+);
+router.get(
+  loyaltyPaths.admin.configAuditLogDetail,
+  verification.verifyAdmin,
+  handleError(controller.getConfigAuditLogById),
+);
+router.patch(
+  loyaltyPaths.admin.tierConfigurationsDetail,
+  verification.verifyAdmin,
+  validateRequest(loyaltyTierConfigUpdateRequestType),
+  handleError(controller.updateTierConfiguration),
+);
+router.delete(
+  loyaltyPaths.admin.tierConfigurationsDetail,
+  verification.verifyAdmin,
+  handleError(controller.deleteTierConfiguration),
+);
+
+module.exports = router;

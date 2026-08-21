@@ -1,0 +1,63 @@
+const mongoose = require("mongoose");
+
+const tierRewardSchema = new mongoose.Schema(
+  {
+    rewardType: {
+      type: String,
+      enum: ["POINTS", "COINS", "GIFT", "PHYSICAL_GIFT"],
+      required: true,
+    },
+    points: { type: Number, default: 0 },
+    coins: { type: Number, default: 0 },
+    giftId: { type: mongoose.Schema.Types.ObjectId, ref: "Gift" },
+    giftName: { type: String, default: "" },
+    title: { type: String, default: "" },
+  },
+  { _id: true },
+);
+
+const tierConfigurationSchema = new mongoose.Schema(
+  {
+    tierId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Tier",
+      required: true,
+    },
+    seasonId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "LoyaltySeason",
+      required: true,
+    },
+    qualificationPoint: { type: Number, default: 0 }, // QP required to enter this tier
+    threshold: { type: Number, default: 0 },
+    isFinalTier: { type: Boolean, default: false },
+    pointMultiplier: { type: Number, default: 1.0 }, // Multiplier for scanning
+    rewards: { type: [tierRewardSchema], default: () => [] },
+    active: { type: Boolean, default: true },
+    metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
+    isArchived: { type: Boolean, default: false, index: true },
+  },
+  {
+    timestamps: true,
+    toJSON: {
+      virtuals: true,
+      versionKey: false,
+      transform: (doc, ret) => {
+        ret.id = doc._id;
+        return ret;
+      },
+    },
+  },
+);
+
+// Compound index to ensure one tier config per tier per season
+tierConfigurationSchema.index(
+  { tierId: 1, seasonId: 1 },
+  { unique: true, partialFilterExpression: { isArchived: false } },
+);
+
+const TierConfiguration = mongoose.model(
+  "TierConfiguration",
+  tierConfigurationSchema,
+);
+module.exports = TierConfiguration;

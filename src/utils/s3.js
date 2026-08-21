@@ -1,0 +1,226 @@
+const {
+  S3Client,
+  HeadObjectCommand,
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+} = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+const path = require("path");
+const fs = require("fs").promises;
+
+const bucketName = process.env.AWS_BUCKET_NAME;
+const region = process.env.AWS_REGION;
+const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+const CUSTOM_TEMP_DIR = path.join(process.cwd(), "src/temp");
+
+if (!bucketName || !region || !accessKeyId || !secretAccessKey) {
+  throw new Error("Required AWS environment variables are not set");
+}
+
+const s3 = new S3Client({
+  region,
+  credentials: {
+    accessKeyId,
+    secretAccessKey,
+  },
+  requestChecksumCalculation: "WHEN_REQUIRED",
+  responseChecksumValidation: "WHEN_REQUIRED",
+});
+
+const getS3KeyFromUrl = (fileUrl) => {
+  const { pathname } = new URL(fileUrl);
+  return decodeURIComponent(pathname.slice(1));
+};
+
+const checkS3FileExists = async (fileUrl) => {
+  try {
+    const res = await fetch(fileUrl, { method: "HEAD" });
+    if (res.ok) return true;
+    if (res.status === 404) return false;
+  } catch (err) {
+    console.error("Fetch HEAD failed:", err);
+  }
+
+  try {
+    const key = getS3KeyFromUrl(fileUrl);
+    const params = {
+      Bucket: bucketName,
+      Key: key,
+    };
+    await s3.send(new HeadObjectCommand(params));
+    return true;
+  } catch (error) {
+    console.error("Error in checkS3FileExists SDK call:", error);
+    if (
+      error.name === "NotFound" ||
+      (error.$metadata && error.$metadata.httpStatusCode === 404)
+    ) {
+      return false;
+    }
+    // If we get 403 Access Denied, we might not have list/get permissions via IAM, but the file might exist.
+    // Assume it exists to prevent document creation failures, since fetch already handled the 404 case.
+    if (error.$metadata && error.$metadata.httpStatusCode === 403) {
+      return true;
+    }
+    return false;
+  }
+};
+
+const deleteS3File = async (fileUrl) => {
+  try {
+    const key = getS3KeyFromUrl(fileUrl);
+
+    const params = {
+      Bucket: bucketName,
+      Key: key,
+    };
+
+    await s3.send(new DeleteObjectCommand(params));
+    return true;
+  } catch (error) {
+    console.error("Error deleting file:", error);
+    return false;
+  }
+};
+
+const streamToBuffer = async (stream) => {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    stream.on("data", (chunk) =>
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)),
+    );
+    stream.on("error", reject);
+    stream.on("end", () => resolve(Buffer.concat(chunks)));
+  });
+};
+
+const clearDir = async (target_path) => {
+  try {
+    const dirPath = target_path ?? CUSTOM_TEMP_DIR;
+    await fs.mkdir(dirPath, { recursive: true });
+
+    const files = await fs.readdir(dirPath);
+    await Promise.all(
+      files.map((file) =>
+        fs.rm(path.join(dirPath, file), { recursive: true, force: true }),
+      ),
+    );
+    console.log(dirPath + " cleared 🧹");
+  } catch (err) {
+    console.error("Failed to clear dir:", target_path, err);
+    throw err;
+  }
+};
+
+const getS3FileStream = async (docUrl, ownerId) => {
+  try {
+    if (!bucketName) throw new Error("AWS_BUCKET_NAME is missing");
+
+    await clearDir(CUSTOM_TEMP_DIR);
+
+    const key = getS3KeyFromUrl(docUrl);
+
+    const s3Res = await s3.send(
+      new GetObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+      }),
+    );
+
+    if (!s3Res.Body) {
+      throw new Error(`S3 file stream is empty. Key: ${key}`);
+    }
+
+    const buffer = await streamToBuffer(s3Res.Body);
+
+    const tempPath = path.join(
+      CUSTOM_TEMP_DIR,
+      `${Date.now()}-${ownerId}-temp.pdf`,
+    );
+    await fs.writeFile(tempPath, buffer);
+
+    return tempPath;
+  } catch (error) {
+    console.error("Error getting file stream from S3:", {
+      docUrl,
+      message: error?.message,
+    });
+    throw error;
+  }
+};
+
+const verifyUrl = async (filePath) => {
+  // For hydacon we can use a simpler prefix or global prefix
+  const filePathUpload = `uploads/${filePath}`;
+  const url = `https://${bucketName}.s3.${region}.amazonaws.com/${filePathUpload}`;
+
+  try {
+    const res = await fetch(url, { method: "HEAD" });
+    if (res.ok) {
+      return { url, exists: true };
+    }
+    if (res.status === 404) {
+      return { exists: false };
+    }
+  } catch (err) {
+    console.error("Fetch HEAD failed in verifyUrl:", err);
+  }
+
+  const params = {
+    Bucket: bucketName,
+    Key: filePathUpload,
+  };
+
+  try {
+    const metadata = await s3.send(new HeadObjectCommand(params));
+    return { url, metadata, exists: true };
+  } catch (error) {
+    return { exists: false };
+  }
+};
+
+const getPresignedUrl = async (filePath, fileType) => {
+  try {
+    const filePathToCheck = `uploads/${filePath}`;
+
+    let cacheControl = "no-cache, no-store, must-revalidate";
+    if (
+      ["image/jpeg", "image/png", "image/webp", "image/svg+xml"].includes(
+        fileType,
+      )
+    ) {
+      cacheControl = "public, max-age=31536000, immutable";
+    }
+
+    const uploadParams = {
+      Bucket: bucketName,
+      Key: filePathToCheck,
+      ContentType: fileType,
+      CacheControl: cacheControl,
+    };
+
+    const uploadUrl = await getSignedUrl(
+      s3,
+      new PutObjectCommand(uploadParams),
+      { expiresIn: 300 },
+    );
+
+    const downloadUrl = `https://${bucketName}.s3.${region}.amazonaws.com/${filePathToCheck}`;
+
+    return { uploadUrl, downloadUrl };
+  } catch (error) {
+    console.log("Error while getting presigned url:", error);
+    throw error;
+  }
+};
+
+module.exports = {
+  checkS3FileExists,
+  deleteS3File,
+  clearDir,
+  getS3FileStream,
+  verifyUrl,
+  getPresignedUrl,
+};

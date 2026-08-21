@@ -5,40 +5,59 @@
   "scripts": {
     "test": "jest",
     "start:dev": "nodemon server.js",
-    "start:prod": "nodemon server.js"
+    "start:prod": "nodemon server.js",
+    "seed:events": "node scripts/seed-kerala-events.js",
+    "seed:contests": "node scripts/seed-demo-contests.js",
+    "seed:scratch-cards": "node scripts/seed-demo-scratch-cards.js",
+    "format": "prettier --write .",
+    "notify:test": "node src/scripts/sendTestNotification.js"
   },
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1077.0",
+    "@aws-sdk/s3-request-presigner": "^3.1075.0",
     "ajv": "^8.17.1",
     "ajv-errors": "^3.0.0",
     "ajv-formats": "^3.0.1",
     "axios": "^1.11.0",
     "bcrypt": "^6.0.0",
+    "bullmq": "^5.80.11",
     "cors": "^2.8.5",
     "crypto": "^1.0.1",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
     "firebase-admin": "^13.4.0",
     "google-auth-library": "^10.3.0",
+    "handlebars": "^4.7.9",
+    "ioredis": "^5.11.1",
     "jsonwebtoken": "^9.0.3",
     "jwk-to-pem": "^2.0.7",
     "moment": "^2.30.1",
     "mongoose": "^8.17.1",
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
+    "node-cron": "^4.2.1",
     "nodemailer": "^7.0.5",
     "path": "^0.12.7",
     "pino": "^9.8.0",
     "pino-http": "^10.5.0",
     "pino-pretty": "^13.1.1",
+    "sharp": "^0.34.5",
     "swagger-jsdoc": "^6.2.8",
-    "swagger-ui-express": "^5.0.1"
+    "swagger-ui-express": "^5.0.1",
+    "twilio": "^6.0.2"
   },
   "devDependencies": {
     "jest": "^30.0.5",
     "nodemon": "^3.1.10",
+    "prettier": "^3.3.3",
     "supertest": "^7.1.4"
+  },
+  "jest": {
+    "setupFiles": [
+      "<rootDir>/tests/setup.js"
+    ]
   }
 }

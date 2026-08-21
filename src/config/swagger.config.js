@@ -7,6 +7,13 @@ const redeemsDoc = require("../docs/redeems.doc");
 const transactionsDoc = require("../docs/transactions.doc");
 const appDoc = require("../docs/app.doc");
 const commonDoc = require("../docs/common.doc");
+const rolesDoc = require("../docs/roles.doc");
+const ruleSetDoc = require("../docs/rule-set.doc");
+const videoDoc = require("../docs/video.doc");
+const eventsDoc = require("../docs/events.doc");
+const contestsDoc = require("../docs/contests.doc");
+const scratchCardsDoc = require("../docs/scratch-cards.doc");
+const loyaltyDoc = require("../docs/loyalty.doc");
 
 const options = {
   definition: {
@@ -27,8 +34,15 @@ const options = {
       ...redeemsDoc,
       ...transactionsDoc,
       ...commonDoc,
-      ...appDoc
-    }
+      ...appDoc,
+      ...rolesDoc,
+      ...ruleSetDoc,
+      ...videoDoc,
+      ...eventsDoc,
+      ...contestsDoc,
+      ...scratchCardsDoc,
+      ...loyaltyDoc,
+    },
   },
   apis: [],
 };

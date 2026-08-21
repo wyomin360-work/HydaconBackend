@@ -1,93 +1,104 @@
-const admin = require('../config/firebase.config')
-
+const admin = require("../config/firebase.config");
 
 async function sendFcmNotifications(tokens, title, body, data) {
-    const results = { success: [], errors: [] }
+  const results = { success: [], errors: [] };
+  // console.log("FCM-FCM", tokens, title, body, data)
+  if (!tokens || tokens.length === 0) {
+    throw new Error("No FCM tokens provided.");
+  }
+  const messages = tokens.map((token) => ({
+    notification: {
+      title,
+      body,
+    },
+    token,
+    data: data || {},
+    android: {
+      priority: "high",
+      ttl: 60 * 1000, // 60 seconds — drop stale notifications
+      notification: {
+        channelId: "common_notifications",
+        priority: "high",
+        defaultSound: true,
+        defaultVibrateTimings: true,
+      },
+    },
+    apns: {
+      headers: {
+        "apns-priority": "10", // iOS immediate delivery
+      },
+    },
+  }));
 
-    if (!tokens || tokens.length === 0) {
-        throw new Error('No FCM tokens provided.');
-    }
-    const messages = tokens.map((token) => ({
-        notification: {
-            title,
-            body,
-        },
-        token,
-        data: data || {},
-    }));
+  try {
+    const response = await admin.messaging().sendEach(messages);
+    response.responses.forEach((res, index) => {
+      if (res.success) {
+        results.success.push(tokens[index]);
+      } else {
+        // Log a concise error instead of the full stack trace for every token
+        // console.log(`FCM error for token ${tokens[index]}: ${res.error?.message || "Unknown error"}`);
+        results.errors.push(tokens[index]);
 
-    try {
-        const response = await admin.messaging().sendEach(messages);
-        response.responses.forEach((res, index) => {
-            if (res.success) {
-                results.success.push(tokens[index]);
-            } else {
-                console.log('FCM notifications error for notification', res); results.errors.push(tokens[index]);
-                
-                // logError();
-            }
-        });
-    } catch (error) {
-        // logError('FCM notifications error:', error);
-        console.log('FCM error', error);
-    }
-    return results;
+        // logError();
+      }
+    });
+  } catch (error) {
+    // logError('FCM notifications error:', error);
+    console.log("FCM error", error);
+  }
+  return results;
 }
 
-async function sendFcmNotificationsToTopics(
-    topics,
-    title,
-    body,
-    image,
-    data,
-) {
-    const results = {
-        success: [],
-        errors: [],
-    };
+async function sendFcmNotificationsToTopics(topics, title, body, image, data) {
+  const results = {
+    success: [],
+    errors: [],
+  };
 
-    if (!topics || topics.length === 0) {
-        throw new Error('No FCM topics provided.');
+  if (!topics || topics.length === 0) {
+    throw new Error("No FCM topics provided.");
+  }
+
+  const messages = topics.map((topic) => ({
+    topic,
+    notification: {
+      title,
+      body,
+      image,
+    },
+    data: data || {},
+  }));
+
+  try {
+    // Send messages to each topic.
+
+    for (const message of messages) {
+      try {
+        await admin.messaging().send(message);
+        results.success.push(message.topic);
+      } catch (error) {
+        results.errors.push(message.topic);
+        console.log(
+          `Failed to send notification to topic: ${message.topic}`,
+          error,
+        );
+
+        // logError(
+        //     `Failed to send notification to topic: ${message.topic}`,
+        //     error,
+        // );
+      }
     }
+  } catch (error) {
+    // logError('Error sending FCM notifications to topics:', error);
+    console.log("Error sending FCM notifications to topics:", error);
+  }
 
-    const messages = topics.map((topic) => ({
-        topic,
-        notification: {
-            title,
-            body,
-            image,
-        },
-        data: data || {},
-    }));
-
-    try {
-        // Send messages to each topic.
-
-        for (const message of messages) {
-            try {
-                await admin.messaging().send(message);
-                results.success.push(message.topic);
-            } catch (error) {
-                results.errors.push(message.topic);
-                console.log(`Failed to send notification to topic: ${message.topic}`,
-                    error,);
-                
-                // logError(
-                //     `Failed to send notification to topic: ${message.topic}`,
-                //     error,
-                // );
-            }
-        }
-    } catch (error) {
-        // logError('Error sending FCM notifications to topics:', error);
-        console.log('Error sending FCM notifications to topics:', error);
-        
-    }
-
-    return results;
+  return results;
 }
 
 module.exports = {
-    sendFcmNotifications,
-    sendFcmNotificationsToTopics
-}
+  sendFcmNotifications,
+  sendFcmNotificationsToTopics,
+};

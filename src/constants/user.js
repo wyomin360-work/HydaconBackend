@@ -1,9 +1,31 @@
 const AuthTypes = {
-    EMAIL: 'EMAIL',
-    GOOGLE: 'GOOGLE',
-    APPLE: 'APPLE',
-}
+  EMAIL: "EMAIL",
+  GOOGLE: "GOOGLE",
+  APPLE: "APPLE",
+};
+
+const KYC_STATUS = {
+  NOT_STARTED: "NOT_STARTED",
+  PENDING: "PENDING",
+  APPROVED: "APPROVED",
+  REJECTED: "REJECTED",
+};
+
+const KYC_DOCUMENT_STATUS = {
+  PENDING: "PENDING",
+  APPROVED: "APPROVED",
+  REJECTED: "REJECTED",
+};
+
+const KYC_DOCUMENT_TYPES = {
+  AADHAAR: "aadhaar",
+  PAN: "pan",
+  SHOP_PHOTO: "shopPhoto",
+};
 
 module.exports = {
-    AuthTypes
-}
+  AuthTypes,
+  KYC_STATUS,
+  KYC_DOCUMENT_STATUS,
+  KYC_DOCUMENT_TYPES,
+};

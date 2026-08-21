@@ -1,0 +1,122 @@
+const {
+  ALLOWED_PLACEMENTS,
+  ALLOWED_TYPES,
+  ALLOWED_ACTIONS,
+  ALLOWED_POPUP_TYPES,
+  ALLOWED_FREQUENCIES,
+} = require("../constants/content");
+
+const createContentRequestType = {
+  type: "object",
+  properties: {
+    title: { type: "string", minLength: 1 },
+    subtitle: { type: "string" },
+    description: { type: "string" },
+    type: {
+      type: "string",
+      enum: ALLOWED_TYPES,
+    },
+    placements: {
+      type: "array",
+      items: { type: "string", enum: ALLOWED_PLACEMENTS },
+    },
+    images: {
+      type: "object",
+      properties: {
+        mobile: { type: "string" },
+        tablet: { type: "string" },
+        web: { type: "string" },
+        thumbnail: { type: "string" },
+        icon: { type: "string" },
+      },
+      additionalProperties: false,
+    },
+    detailImages: { type: "array", items: { type: "string" } },
+    action: {
+      type: "string",
+      enum: ALLOWED_ACTIONS,
+    },
+    actionData: {},
+    active: { type: "boolean" },
+    priority: { type: "number" },
+    sortOrder: { type: "number" },
+    startDate: { type: ["string", "null"], format: "date-time" },
+    endDate: { type: ["string", "null"], format: "date-time" },
+    dismissible: { type: "boolean" },
+    showOnce: { type: "boolean" },
+    frequency: { type: "string", enum: ALLOWED_FREQUENCIES },
+    popupType: {
+      type: ["string", "null"],
+      enum: [...ALLOWED_POPUP_TYPES, null],
+    },
+    ruleSetId: { type: ["string", "null"] },
+    tags: { type: "array", items: { type: "string" } },
+    bodyText: { type: "string" },
+    media: { type: "array", items: { type: "string" } },
+    maxViews: { type: "number" },
+    forceActive: { type: "boolean" },
+  },
+  required: ["title", "type"],
+  additionalProperties: false,
+};
+
+const updateContentRequestType = {
+  type: "object",
+  properties: {
+    title: { type: "string", minLength: 1 },
+    subtitle: { type: "string" },
+    description: { type: "string" },
+    type: {
+      type: "string",
+      enum: ALLOWED_TYPES,
+    },
+    placements: {
+      type: "array",
+      items: { type: "string", enum: ALLOWED_PLACEMENTS },
+    },
+    images: {
+      type: "object",
+      properties: {
+        mobile: { type: "string" },
+        tablet: { type: "string" },
+        web: { type: "string" },
+        thumbnail: { type: "string" },
+        icon: { type: "string" },
+      },
+      additionalProperties: false,
+    },
+    detailImages: { type: "array", items: { type: "string" } },
+    action: {
+      type: "string",
+      enum: ALLOWED_ACTIONS,
+    },
+    actionData: {},
+    active: { type: "boolean" },
+    priority: { type: "number" },
+    sortOrder: { type: "number" },
+    startDate: { type: ["string", "null"], format: "date-time" },
+    endDate: { type: ["string", "null"], format: "date-time" },
+    dismissible: { type: "boolean" },
+    showOnce: { type: "boolean" },
+    frequency: { type: "string", enum: ALLOWED_FREQUENCIES },
+    popupType: {
+      type: ["string", "null"],
+      enum: [...ALLOWED_POPUP_TYPES, null],
+    },
+    ruleSetId: { type: ["string", "null"] },
+    tags: { type: "array", items: { type: "string" } },
+    bodyText: { type: "string" },
+    media: { type: "array", items: { type: "string" } },
+    singleImage: { type: "string" },
+    galleryImages: { type: "array" },
+    status: { type: "string" },
+    maxViews: { type: "number" },
+    forceActive: { type: "boolean" },
+  },
+  additionalProperties: false,
+};
+
+module.exports = {
+  createContentRequestType,
+  updateContentRequestType,
+};
