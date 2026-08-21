@@ -284,7 +284,7 @@ async function providerAuth(data) {
        
         localizedNotif.body,
       ).catch((err) =>
-        console.error("[FCM] provider login notification failed:", err),,
+        console.error("[FCM] provider login notification failed:", err),
       );
     }
 
