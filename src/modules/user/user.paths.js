@@ -9,6 +9,7 @@ module.exports = {
   profilePhoto: "/profile/photo",
   flagUser: "/flag/:id",
   toggleStatus: "/status/:id",
+  deleteAccount: "/account/delete",
   deleteUser: "/delete/:id",
   releaseBan: "/release-ban/:id",
   updatePreferences: "/preference/update",
@@ -35,4 +36,5 @@ module.exports = {
   },
   convertPoints: "/convert-points",
   conversionHistory: "/convert-points/history",
+  pointsLedger: "/points-ledger",
 };

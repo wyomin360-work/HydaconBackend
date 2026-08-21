@@ -13,6 +13,11 @@ const {
   APP_NOTIFICATIONS,
   getNotification,
 } = require("../../constants/notifications");
+const { updateUserPoints } = require("../user/user.service");
+const {
+  POINTS_TRANSACTION_TYPE,
+  POINTS_TRANSACTION_REASON,
+} = require("../../constants/points");
 
 // ─────────────────────────────────────────────
 // getMobileReferralStats
@@ -213,8 +218,13 @@ async function evaluateReferralReward(userId, userTotalScans) {
     // Reward the referee (the user who was referred)
     const refereeInc = {};
     if (refereeRewardPoints > 0) {
-      refereeInc.totalPoints = refereeRewardPoints;
-      refereeInc.lifetimePoints = refereeRewardPoints;
+      await updateUserPoints({
+        userId: userId,
+        amount: refereeRewardPoints,
+        transactionType: POINTS_TRANSACTION_TYPE.CREDIT,
+        reason: POINTS_TRANSACTION_REASON.REFERRAL_REWARD,
+        description: `Referral milestone reward (${matchedReward.requiredScans || userTotalScans} scans)`,
+      });
     }
     if (refereeRewardCoins > 0) {
       refereeInc.hydaconCoins = refereeRewardCoins;
@@ -227,8 +237,13 @@ async function evaluateReferralReward(userId, userTotalScans) {
     // Reward the referrer (the user who shared the code)
     const referrerInc = {};
     if (referrerRewardPoints > 0) {
-      referrerInc.totalPoints = referrerRewardPoints;
-      referrerInc.lifetimePoints = referrerRewardPoints;
+      await updateUserPoints({
+        userId: referrerId,
+        amount: referrerRewardPoints,
+        transactionType: POINTS_TRANSACTION_TYPE.CREDIT,
+        reason: POINTS_TRANSACTION_REASON.REFERRAL_REWARD,
+        description: `Referral milestone reward from user ${userId}`,
+      });
     }
     if (referrerRewardCoins > 0) {
       referrerInc.hydaconCoins = referrerRewardCoins;
@@ -283,19 +298,21 @@ async function completeMilestone(userId, milestone) {
   const points = config.points;
 
   // Credit Referrer
-  await User.findByIdAndUpdate(referrerId, {
-    $inc: {
-      totalPoints: points,
-      lifetimePoints: points,
-    },
+  await updateUserPoints({
+    userId: referrerId,
+    amount: points,
+    transactionType: POINTS_TRANSACTION_TYPE.CREDIT,
+    reason: POINTS_TRANSACTION_REASON.REFERRAL_REWARD,
+    description: `Referral milestone reward for ${milestone}`,
   });
 
   // Credit Referee
-  await User.findByIdAndUpdate(userId, {
-    $inc: {
-      totalPoints: points,
-      lifetimePoints: points,
-    },
+  await updateUserPoints({
+    userId: userId,
+    amount: points,
+    transactionType: POINTS_TRANSACTION_TYPE.CREDIT,
+    reason: POINTS_TRANSACTION_REASON.REFERRAL_REWARD,
+    description: `Referral milestone reward for ${milestone}`,
   });
 
   // 5. Send FCM Notifications

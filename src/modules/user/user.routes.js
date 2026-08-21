@@ -178,10 +178,22 @@ router.get(
   handleError(controller.conversionHistory),
 );
 
+router.get(
+  userPaths.pointsLedger,
+  verification.verifyUser,
+  handleError(controller.pointsLedger),
+);
+
 router.patch(
   userPaths.toggleStatus,
   verification.verifyAdmin,
   handleError(controller.toggleUserStatus),
+);
+
+router.delete(
+  userPaths.deleteAccount,
+  verification.verifyUser,
+  handleError(controller.deleteOwnAccount),
 );
 
 router.delete(

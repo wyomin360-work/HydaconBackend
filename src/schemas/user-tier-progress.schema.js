@@ -27,6 +27,11 @@ const userTierProgressSchema = new mongoose.Schema(
       ref: "Tier",
       default: null,
     }, // Last tier celebrated by user
+    lastCelebratedSeasonId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "LoyaltySeason",
+      default: null,
+    }, // Last season celebrated by user
     currentPoint: { type: Number, default: 0 }, // QP (strictly scan points)
     lastEvaluatedAt: { type: Date, default: Date.now },
   },

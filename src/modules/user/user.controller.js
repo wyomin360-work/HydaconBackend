@@ -180,7 +180,17 @@ exports.convertPoints = async (req, res, next) => {
 
 exports.conversionHistory = async (req, res, next) => {
   const userId = req?.userId;
-  const response = await userService.getConversionHistory(userId);
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const response = await userService.getConversionHistory(userId, page, limit);
+  return sendResponse(res, response);
+};
+
+exports.pointsLedger = async (req, res, next) => {
+  const userId = req?.userId;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const response = await userService.getPointsLedger(userId, page, limit);
   return sendResponse(res, response);
 };
 
@@ -193,6 +203,12 @@ exports.toggleUserStatus = async (req, res, next) => {
 
 exports.deleteUser = async (req, res, next) => {
   const userId = req.params?.id;
+  const response = await userService.deleteUser(userId);
+  return sendResponse(res, response);
+};
+
+exports.deleteOwnAccount = async (req, res, next) => {
+  const userId = req.userId;
   const response = await userService.deleteUser(userId);
   return sendResponse(res, response);
 };

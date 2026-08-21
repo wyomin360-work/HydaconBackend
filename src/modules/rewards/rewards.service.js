@@ -364,7 +364,7 @@ async function awardRewardToUser(
   const { type, amount, giftId } = rewardDetails;
   const { cause, causeId, causeTitle, referenceId } = sourceDetails;
 
-  if (type === "GIFT") {
+  if (type === "GIFT" || type === "PHYSICAL_GIFT") {
     let giftQuery = Gift.findById(giftId);
     if (giftQuery && session && typeof giftQuery.session === "function") {
       giftQuery = giftQuery.session(session);
@@ -390,6 +390,9 @@ async function awardRewardToUser(
     if (cause === "SCRATCH_CARD") {
       loyaltySource = LOYALTY_TRANSACTION_SOURCES.SCRATCH_CARD_BONUS;
     }
+    if (cause === "SEASON_TIER_REWARD") {
+      loyaltySource = LOYALTY_TRANSACTION_SOURCES.TIER_RANK_UP;
+    }
 
     const options = {
       skipQpSync: true, // Bonus points do not contribute to tier upgrades
@@ -408,7 +411,12 @@ async function awardRewardToUser(
     return { success: true, pointsAwarded: amount };
   }
 
-  if (type === "COIN" || type === "HYDACOIN" || type === "HYDACON_COIN") {
+  if (
+    type === "COIN" ||
+    type === "COINS" ||
+    type === "HYDACOIN" ||
+    type === "HYDACON_COIN"
+  ) {
     const coinsToAward = Number(amount) || 0;
     let userQuery = User.findByIdAndUpdate(
       userId,

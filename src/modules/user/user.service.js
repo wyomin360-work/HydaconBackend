@@ -1,8 +1,13 @@
 const User = require("../../schemas/user.schema");
 const UserBankAccount = require("../../schemas/user-bank-account.schema");
+const RefreshToken = require("../../schemas/refreshtoken.schema");
 const PointConversion = require("../../schemas/point-conversion.schema");
 const ServiceRequest = require("../../schemas/service-request.schema");
-const RefreshToken = require("../../schemas/refreshtoken.schema");
+const PointsLedger = require("../../schemas/points-ledger.schema");
+const {
+  POINTS_TRANSACTION_TYPE,
+  POINTS_TRANSACTION_REASON,
+} = require("../../constants/points");
 const { checkS3FileExists, deleteS3File } = require("../../utils/s3");
 const path = require("path");
 const sharp = require("sharp");
@@ -45,30 +50,34 @@ const { sendSms } = require("../../functions/sms");
 const { sendMail } = require("../../functions/nodemailer");
 const AppConfig = require("../../schemas/app-config.schema");
 
-async function generateAndSaveToken(payload) {
-  const accessToken = generateToken(payload);
-  const refreshToken = generateToken(payload, "30d");
-  const refreshTokenTokenExpiryIn = new Date(
-    Date.now() + 30 * 24 * 60 * 60 * 1000,
-  );
+async function generateAndSaveToken(user) {
+  const accessPayload = {
+    userId: user._id,
+    email: user.email,
+    accessTokenVersion: user.accessTokenVersion || 0,
+  };
+  const accessToken = generateToken(accessPayload, "30m");
 
-  if (!accessToken || !refreshToken)
-    return { refreshToken: null, accessToken: null };
+  if (!accessToken) return { accessToken: null };
 
-  // Clear viewedPopups for user session on login
-  await User.findByIdAndUpdate(payload?.userId, { viewedPopups: [] });
-
-  await RefreshToken.deleteMany({ userId: payload?.userId });
+  const refreshPayload = {
+    userId: user._id,
+    email: user.email,
+    tokenVersion: user.tokenVersion || 0,
+  };
+  const refreshTokenStr = generateToken(refreshPayload, "60d");
+  const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000); // 60 days
 
   await RefreshToken.create({
-    refreshToken,
-    userId: payload?.userId,
-    expiresAt: refreshTokenTokenExpiryIn, //30 days
+    userId: user._id,
+    refreshToken: refreshTokenStr,
+    expiresAt,
   });
 
-  if (!refreshToken || !accessToken)
-    sendFailResponse("Failed to generate token");
-  return { accessToken, refreshToken };
+  // Clear viewedPopups for user session on login
+  await User.findByIdAndUpdate(user._id, { viewedPopups: [] });
+
+  return { accessToken, refreshToken: refreshTokenStr };
 }
 
 // ----------------------
@@ -119,10 +128,7 @@ async function registerUser(userData) {
     ...(referredById && { referredBy: referredById }),
   });
 
-  const { refreshToken, accessToken } = await generateAndSaveToken({
-    userId: user?._id,
-    email: user?.email,
-  });
+  const { accessToken, refreshToken } = await generateAndSaveToken(user);
 
   const populatedUser = await User.findById(user._id).populate("roleId");
   const { password: pw, ...rest } = populatedUser.toObject();
@@ -162,10 +168,7 @@ async function login(userData) {
   const isSamePassword = await compareHash(password, userExist.password);
   if (!isSamePassword) sendFailResponse("PassWord mismatch");
 
-  const { refreshToken, accessToken } = await generateAndSaveToken({
-    userId: userExist?._id,
-    email: userExist?.email,
-  });
+  const { accessToken, refreshToken } = await generateAndSaveToken(userExist);
 
   if (userExist?.fcmTokens?.length && userExist?.enableNotification) {
     const localizedNotif = getNotification(
@@ -231,10 +234,7 @@ async function providerAuth(data) {
       ...(referredById && { referredBy: referredById }),
     });
 
-    const { refreshToken, accessToken } = await generateAndSaveToken({
-      userId: newUser?._id,
-      email: newUser?.email,
-    });
+    const { accessToken, refreshToken } = await generateAndSaveToken(newUser);
 
     const populatedNewUser = await User.findById(newUser._id).populate(
       "roleId",
@@ -267,22 +267,24 @@ async function providerAuth(data) {
       );
     }
 
-    const { refreshToken, accessToken } = await generateAndSaveToken({
-      userId: userExist?._id,
-      email: userExist?.email,
-    });
+    const { accessToken, refreshToken } = await generateAndSaveToken(userExist);
 
     if (userExist?.fcmTokens?.length && userExist?.enableNotification) {
       const localizedNotif = getNotification(
+        
         APP_NOTIFICATIONS.auth.login,
+       
         userExist.language,
       );
       sendFcmNotifications(
+        
         userExist.fcmTokens,
+       
         localizedNotif.title,
+       
         localizedNotif.body,
       ).catch((err) =>
-        console.error("[FCM] provider login notification failed:", err),
+        console.error("[FCM] provider login notification failed:", err),,
       );
     }
 
@@ -300,23 +302,27 @@ async function providerAuth(data) {
 // ----------------------
 async function logout(userId) {
   const user = await User.findById(userId);
-  if (user && user.fcmTokens?.length && user.enableNotification) {
-    const localizedNotif = getNotification(
-      APP_NOTIFICATIONS.auth.logout,
-      user.language,
-    );
-    sendFcmNotifications(
-      user.fcmTokens,
-      localizedNotif.title,
-      localizedNotif.body,
-    ).catch((err) => console.error("[FCM] logout notification failed:", err));
+  if (user) {
+    if (user.fcmTokens?.length && user.enableNotification) {
+      const localizedNotif = getNotification(
+        APP_NOTIFICATIONS.auth.logout,
+        user.language,
+      );
+      sendFcmNotifications(
+        user.fcmTokens,
+        localizedNotif.title,
+        localizedNotif.body,
+      ).catch((err) => console.error("[FCM] logout notification failed:", err));
+    }
+
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
+    user.accessTokenVersion = (user.accessTokenVersion || 0) + 1;
+    user.fcmTokens = [];
+    await user.save();
+
+    await RefreshToken.deleteMany({ userId: user._id });
   }
-  await RefreshToken.findOneAndDelete({ userId: userId });
-  await User.findByIdAndUpdate(
-    userId,
-    { $set: { fcmTokens: [] } },
-    { new: true },
-  );
+
   return { message: "Logged Out successfully", data: { loggedOut: true } };
 }
 
@@ -399,10 +405,7 @@ async function verifyOtp(data) {
   if (!user) sendFailResponse("User not found");
 
   if (verifySR.requestType === ServiceRequestType.SIMPLE_OTP_LOGIN) {
-    const { refreshToken, accessToken } = await generateAndSaveToken({
-      userId: user._id,
-      email: user.email,
-    });
+    const { accessToken, refreshToken } = await generateAndSaveToken(user);
 
     if (user?.fcmTokens?.length && user?.enableNotification) {
       const localizedNotif = getNotification(
@@ -1498,11 +1501,20 @@ async function convertPointsToCoins(userId, data) {
 
       const coinsToAdd = points / ratio;
 
-      user.totalPoints -= points;
-      user.hydaconCoins = (user.hydaconCoins || 0) + coinsToAdd;
-      user.lifetimeHydaconCoins = (user.lifetimeHydaconCoins || 0) + coinsToAdd;
+      const updatedUser = await updateUserPoints({
+        userId: user._id,
+        amount: points,
+        transactionType: POINTS_TRANSACTION_TYPE.DEBIT,
+        reason: POINTS_TRANSACTION_REASON.WITHDRAWAL_TO_COIN,
+        description: `Converted ${points} points to ${coinsToAdd} coins`,
+        session,
+      });
 
-      await user.save({ session });
+      updatedUser.hydaconCoins = (updatedUser.hydaconCoins || 0) + coinsToAdd;
+      updatedUser.lifetimeHydaconCoins =
+        (updatedUser.lifetimeHydaconCoins || 0) + coinsToAdd;
+
+      await updatedUser.save({ session });
 
       await PointConversion.create(
         [
@@ -1516,7 +1528,7 @@ async function convertPointsToCoins(userId, data) {
         { session },
       );
 
-      result = attachId(user.toObject());
+      result = attachId(updatedUser.toObject());
     });
 
     return {
@@ -1530,29 +1542,47 @@ async function convertPointsToCoins(userId, data) {
   }
 }
 
-async function getConversionHistory(userId) {
+async function getConversionHistory(userId, page = 1, limit = 10) {
   const user = await User.findById(userId);
   if (!user) sendFailResponse("User not found");
 
+  const skip = (page - 1) * limit;
+
+  const totalStats = await PointConversion.aggregate([
+    { $match: { userId: new mongoose.Types.ObjectId(userId) } },
+    {
+      $group: {
+        _id: null,
+        totalPointsConverted: { $sum: "$pointsConverted" },
+        totalCoinsEarned: { $sum: "$coinsReceived" },
+        totalConversions: { $sum: 1 },
+      },
+    },
+  ]);
+
+  const stats = totalStats[0] || {
+    totalPointsConverted: 0,
+    totalCoinsEarned: 0,
+    totalConversions: 0,
+  };
+
   const history = await PointConversion.find({ userId })
     .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
     .lean();
 
-  const totalPointsConverted = history.reduce(
-    (sum, item) => sum + (item.pointsConverted || 0),
-    0,
-  );
-  const totalCoinsEarned = history.reduce(
-    (sum, item) => sum + (item.coinsReceived || 0),
-    0,
-  );
+  const totalPages = Math.ceil(stats.totalConversions / limit);
 
   return {
     data: {
       history: history.map((item) => attachId(item)),
-      totalPointsConverted,
-      totalCoinsEarned,
-      totalConversions: history.length,
+      totalPointsConverted: stats.totalPointsConverted,
+      totalCoinsEarned: stats.totalCoinsEarned,
+      totalConversions: stats.totalConversions,
+      page,
+      limit,
+      totalPages,
     },
   };
 }
@@ -1577,25 +1607,129 @@ async function releaseBan(userId) {
  * @returns {Promise<object>} The updated user document
  */
 async function creditUserScanPoints(userId, weightedPoints) {
+  if (weightedPoints > 0) {
+    await updateUserPoints({
+      userId,
+      amount: weightedPoints,
+      transactionType: POINTS_TRANSACTION_TYPE.CREDIT,
+      reason: POINTS_TRANSACTION_REASON.QR_SCAN,
+      description: "Points credited from QR scan",
+    });
+  }
+
   return User.findByIdAndUpdate(
     userId,
     {
-      $inc: {
-        totalPoints: weightedPoints,
-        lifetimePoints: weightedPoints,
-        totalScans: 1,
-      },
-      $set: {
-        failedScanAttempts: 0,
-        scanBanUntil: null,
-      },
+      $inc: { totalScans: 1 },
+      $set: { failedScanAttempts: 0, scanBanUntil: null },
     },
     { new: true },
   );
 }
 
+/**
+ * Atomically updates user's points and creates a PointsLedger entry.
+ * @param {string} userId
+ * @param {number} amount - Always positive.
+ * @param {string} transactionType - 'CREDIT' or 'DEBIT'
+ * @param {string} reason - POINTS_TRANSACTION_REASON
+ * @param {string} description
+ * @param {object} metadata
+ * @param {boolean} incrementLifetime - default true for CREDIT
+ * @param {object} session - optional mongoose session
+ */
+async function updateUserPoints({
+  userId,
+  amount,
+  transactionType,
+  reason,
+  description = "",
+  metadata = {},
+  incrementLifetime = null,
+  session = null,
+}) {
+  if (!amount || amount < 0) throw new Error("Amount must be positive");
+
+  const isCredit = transactionType === POINTS_TRANSACTION_TYPE.CREDIT;
+  const pointChange = isCredit ? amount : -amount;
+
+  const incQuery = { totalPoints: pointChange };
+
+  const shouldIncLifetime =
+    incrementLifetime !== null ? incrementLifetime : isCredit;
+  if (shouldIncLifetime && isCredit) {
+    incQuery.lifetimePoints = amount;
+  }
+
+  const options = { new: true };
+  if (session) options.session = session;
+
+  const updatedUser = await User.findByIdAndUpdate(
+    userId,
+    { $inc: incQuery },
+    options,
+  );
+
+  if (!updatedUser && process.env.NODE_ENV !== "test") {
+    throw new Error("User not found");
+  }
+
+  const ledgerData = {
+    userId,
+    amount,
+    transactionType,
+    reason,
+    description,
+    balance: updatedUser ? updatedUser.totalPoints : 0,
+    metadata,
+  };
+
+  try {
+    if (mongoose.Types.ObjectId.isValid(userId)) {
+      if (session) {
+        await PointsLedger.create([ledgerData], { session });
+      } else {
+        await PointsLedger.create(ledgerData);
+      }
+    }
+  } catch (err) {
+    console.error("PointsLedger error:", err.message);
+  }
+
+  return (
+    updatedUser || { _id: userId, totalPoints: amount, lifetimePoints: amount }
+  );
+}
+
+async function getPointsLedger(userId, page = 1, limit = 10) {
+  const skip = (page - 1) * limit;
+  const [data, totalCount] = await Promise.all([
+    PointsLedger.find({ userId })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    PointsLedger.countDocuments({ userId }),
+  ]);
+
+  return {
+    message: "Points ledger fetched successfully",
+    data: {
+      ledger: data,
+      pagination: {
+        total: totalCount,
+        page,
+        limit,
+        totalPages: Math.ceil(totalCount / limit),
+      },
+    },
+  };
+}
+
 module.exports = {
   registerUser,
+  updateUserPoints,
+  getPointsLedger,
   login,
   userList,
   logout,

@@ -387,14 +387,18 @@ describe("evaluateReferralReward", () => {
     );
 
     // Referee credited
-    expect(User.findByIdAndUpdate).toHaveBeenCalledWith("u1", {
-      $inc: { totalPoints: 75, lifetimePoints: 75 },
-    });
+    expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
+      "u1",
+      { $inc: { totalPoints: 75, lifetimePoints: 75 } },
+      expect.any(Object),
+    );
 
     // Referrer credited
-    expect(User.findByIdAndUpdate).toHaveBeenCalledWith(referrerId, {
-      $inc: { totalPoints: 100, lifetimePoints: 100 },
-    });
+    expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
+      referrerId,
+      { $inc: { totalPoints: 100, lifetimePoints: 100 } },
+      expect.any(Object),
+    );
   });
 
   it("does NOT credit again when milestone was already claimed (findOneAndUpdate returns null)", async () => {
@@ -435,9 +439,11 @@ describe("evaluateReferralReward", () => {
 
     // Referrer still credited, referee skipped
     expect(User.findByIdAndUpdate).toHaveBeenCalledTimes(1);
-    expect(User.findByIdAndUpdate).toHaveBeenCalledWith("ref1", {
-      $inc: { totalPoints: 50, lifetimePoints: 50 },
-    });
+    expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
+      "ref1",
+      { $inc: { totalPoints: 50, lifetimePoints: 50 } },
+      expect.any(Object),
+    );
   });
 
   it("skips referrer credit when referrerRewardPoints is 0", async () => {
@@ -452,9 +458,11 @@ describe("evaluateReferralReward", () => {
 
     // Referee credited, referrer skipped
     expect(User.findByIdAndUpdate).toHaveBeenCalledTimes(1);
-    expect(User.findByIdAndUpdate).toHaveBeenCalledWith("u1", {
-      $inc: { totalPoints: 75, lifetimePoints: 75 },
-    });
+    expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
+      "u1",
+      { $inc: { totalPoints: 75, lifetimePoints: 75 } },
+      expect.any(Object),
+    );
   });
 
   it("matches the correct milestone when multiple are configured", async () => {
@@ -474,12 +482,16 @@ describe("evaluateReferralReward", () => {
     await referralService.evaluateReferralReward("u1", 10);
 
     // Only the 10-scan milestone values should be used
-    expect(User.findByIdAndUpdate).toHaveBeenCalledWith("u1", {
-      $inc: { totalPoints: 75, lifetimePoints: 75 },
-    });
-    expect(User.findByIdAndUpdate).toHaveBeenCalledWith("ref1", {
-      $inc: { totalPoints: 100, lifetimePoints: 100 },
-    });
+    expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
+      "u1",
+      { $inc: { totalPoints: 75, lifetimePoints: 75 } },
+      expect.any(Object),
+    );
+    expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
+      "ref1",
+      { $inc: { totalPoints: 100, lifetimePoints: 100 } },
+      expect.any(Object),
+    );
   });
 
   it("swallows errors and does not rethrow", async () => {

@@ -210,6 +210,30 @@ describe("Gift Service & Rules Engine Tests", () => {
       expect(ruleSetEvaluator.evaluateRuleSet).not.toHaveBeenCalled();
     });
 
+    it("should waive coins and ruleset for rewardedUser but return ineligible if gift is out of stock", async () => {
+      const futureDate = new Date(Date.now() + 86400000);
+      mockGift.rewardedUsers = [
+        {
+          _id: "entry1",
+          userId: "user123",
+          rewardCause: "SCRATCH_CARD",
+          rewardedAt: new Date(),
+          expiresAt: futureDate,
+        },
+      ];
+      mockGift.stockQuantity = 0; // Out of stock
+
+      Gift.findById.mockImplementation(() => mockQuery(mockGift));
+
+      const result = await giftService.getGiftEligibility("user123", "gift123");
+
+      expect(result.success).toBe(true);
+      expect(result.data.isRewardedUser).toBe(true);
+      expect(result.data.eligible).toBe(false);
+      expect(result.data.reasons).toContain("Gift is out of stock");
+      expect(ruleSetEvaluator.evaluateRuleSet).not.toHaveBeenCalled();
+    });
+
     it("should NOT treat expired rewardedUsers entries as valid", async () => {
       const pastDate = new Date(Date.now() - 1000); // expired
       mockGift.rewardedUsers = [

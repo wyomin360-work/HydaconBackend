@@ -22,7 +22,7 @@ const {
  * @param {any} session - Mongoose session for transaction safety.
  * @returns {Object} The mutated match object.
  */
-const applyScopeFilter = async (match, scope, session) => {
+const applyScopeFilter = async (match, scope, session, context = {}) => {
   if (scope === RuleScope.MONTH) {
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
@@ -34,9 +34,12 @@ const applyScopeFilter = async (match, scope, session) => {
     startOfWeek.setHours(0, 0, 0, 0);
     match.createdAt = { $gte: startOfWeek };
   } else if (scope === RuleScope.SEASON) {
-    const activeSeason = await LoyaltySeason.findOne({ active: true }).session(
-      session,
-    );
+    if (!context.activeSeason && context.activeSeason !== null) {
+      context.activeSeason = await LoyaltySeason.findOne({
+        active: true,
+      }).session(session);
+    }
+    const activeSeason = context.activeSeason;
     if (activeSeason) {
       match.createdAt = {
         $gte: activeSeason.startDate,
@@ -133,7 +136,7 @@ const extractActualValue = async (rule, user, context, session) => {
       }
 
       // Apply temporal scope filtering (MONTH/WEEK/SEASON/TOTAL)
-      await applyScopeFilter(match, scope, session);
+      await applyScopeFilter(match, scope, session, context);
       const count = await Redeem.countDocuments(match).session(session);
       return count;
     }
@@ -153,9 +156,12 @@ const extractActualValue = async (rule, user, context, session) => {
     case RuleType.SEASON_POINTS:
     case RuleType.SEASON_TIER:
     case RuleType.SEASON_RANK: {
-      const activeSeason = await LoyaltySeason.findOne({
-        active: true,
-      }).session(session);
+      if (!context.activeSeason && context.activeSeason !== null) {
+        context.activeSeason = await LoyaltySeason.findOne({
+          active: true,
+        }).session(session);
+      }
+      const activeSeason = context.activeSeason;
       if (!activeSeason) return -1;
 
       if (!context.seasonProgress) {
@@ -239,7 +245,7 @@ const extractActualValue = async (rule, user, context, session) => {
       } else if (metadata && metadata.targetId) {
         match.productId = metadata.targetId;
       }
-      await applyScopeFilter(match, scope, session);
+      await applyScopeFilter(match, scope, session, context);
       const count = await Redeem.countDocuments(match).session(session);
       return count;
     }
@@ -256,7 +262,7 @@ const extractActualValue = async (rule, user, context, session) => {
         const productIds = productsInCat.map((p) => p._id);
         match.productId = { $in: productIds };
       }
-      await applyScopeFilter(match, scope, session);
+      await applyScopeFilter(match, scope, session, context);
       const count = await Redeem.countDocuments(match).session(session);
       return count;
     }
@@ -483,8 +489,23 @@ exports.evaluateRuleSet = async (
   };
 
   if (auditMode) {
-    // Run all rules concurrently to avoid N+1 query latency
-    const results = await Promise.all(ruleSet.rules.map(evaluateSingleRule));
+    // Run all rules concurrently using Promise.allSettled for maximum fault tolerance and speed
+    const settledResults = await Promise.allSettled(
+      ruleSet.rules.map(evaluateSingleRule),
+    );
+    const results = settledResults.map((res, index) => {
+      if (res.status === "fulfilled") return res.value;
+      const rule = ruleSet.rules[index];
+      return {
+        type: rule.type,
+        scope: rule.scope,
+        operator: rule.operator,
+        expectedValue: rule.value,
+        actualValue: null,
+        satisfied: false,
+        error: res.reason?.message || "Evaluation failed",
+      };
+    });
     evaluatedRules.push(...results);
   } else {
     // Sequential evaluation for short-circuiting DB queries (Fast-Fail)
@@ -496,16 +517,14 @@ exports.evaluateRuleSet = async (
     }
   }
 
-  // Evaluate each rule and collect reasons
+  // Evaluate eligibility based on logic operator (AND -> all satisfied, OR -> at least one satisfied)
   for (const evaluation of evaluatedRules) {
     if (!evaluation.satisfied) {
       const errorMsg = evaluation.error ? ` (Error: ${evaluation.error})` : "";
       if (isAnd) {
-        // Preserve original error message for AND logic
         reasons.push(`Requirement not met for ${evaluation.type}${errorMsg}`);
         eligible = false;
       } else {
-        // OR logic – collect generic unsatisfied rule message
         reasons.push(`Rule not satisfied: ${evaluation.type}${errorMsg}`);
       }
     } else {
@@ -515,7 +534,7 @@ exports.evaluateRuleSet = async (
     }
   }
 
-  // If OR logic and no rule satisfied, add a generic reason
+  // If OR logic and no rule satisfied, add generic reason
   if (!isAnd && !eligible) {
     reasons.push("None of the rules in the Rule Set were satisfied.");
   }

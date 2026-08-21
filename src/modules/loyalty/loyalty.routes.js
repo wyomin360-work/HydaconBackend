@@ -3,6 +3,16 @@ const { handleError } = require("../../utils/heplers");
 const controller = require("./loyalty.controller");
 const loyaltyPaths = require("./loyalty.paths");
 const verification = require("../../middlewares/jwtVerification");
+const validateRequest = require("../../middlewares/validator");
+const {
+  loyaltyClaimRewardRequestType,
+  loyaltyTierCreateRequestType,
+  loyaltyTierUpdateRequestType,
+  loyaltySeasonCreateRequestType,
+  loyaltySeasonUpdateRequestType,
+  loyaltyTierConfigCreateRequestType,
+  loyaltyTierConfigUpdateRequestType,
+} = require("../../validations/loyalty.validations");
 
 const router = express.Router();
 
@@ -20,10 +30,25 @@ router.get(
   handleError(controller.getTierProgression),
 );
 
+// User Claim Tier Reward Endpoints (Mobile App integration)
+router.post(
+  loyaltyPaths.claimReward,
+  verification.verifyUser,
+  validateRequest(loyaltyClaimRewardRequestType),
+  handleError(controller.claimTierReward),
+);
+router.post(
+  loyaltyPaths.claimSeasonTierReward,
+  verification.verifyUser,
+  validateRequest(loyaltyClaimRewardRequestType),
+  handleError(controller.claimTierReward),
+);
+
 // Admin Loyalty Tier Management Endpoints
 router.post(
   loyaltyPaths.admin.tiers,
   verification.verifyAdmin,
+  validateRequest(loyaltyTierCreateRequestType),
   handleError(controller.createTier),
 );
 router.get(
@@ -34,6 +59,7 @@ router.get(
 router.patch(
   loyaltyPaths.admin.tiersDetail,
   verification.verifyAdmin,
+  validateRequest(loyaltyTierUpdateRequestType),
   handleError(controller.updateTier),
 );
 router.delete(
@@ -46,6 +72,7 @@ router.delete(
 router.post(
   loyaltyPaths.admin.seasons,
   verification.verifyAdmin,
+  validateRequest(loyaltySeasonCreateRequestType),
   handleError(controller.createSeason),
 );
 router.get(
@@ -71,6 +98,7 @@ router.patch(
 router.patch(
   loyaltyPaths.admin.seasonsDetail,
   verification.verifyAdmin,
+  validateRequest(loyaltySeasonUpdateRequestType),
   handleError(controller.updateSeason),
 );
 router.delete(
@@ -88,6 +116,7 @@ router.get(
 router.post(
   loyaltyPaths.admin.tierConfigurations,
   verification.verifyAdmin,
+  validateRequest(loyaltyTierConfigCreateRequestType),
   handleError(controller.createTierConfiguration),
 );
 router.get(
@@ -113,34 +142,13 @@ router.get(
 router.patch(
   loyaltyPaths.admin.tierConfigurationsDetail,
   verification.verifyAdmin,
+  validateRequest(loyaltyTierConfigUpdateRequestType),
   handleError(controller.updateTierConfiguration),
 );
 router.delete(
   loyaltyPaths.admin.tierConfigurationsDetail,
   verification.verifyAdmin,
   handleError(controller.deleteTierConfiguration),
-);
-
-// Admin Benefits Endpoints
-router.post(
-  loyaltyPaths.admin.benefits,
-  verification.verifyAdmin,
-  handleError(controller.createBenefit),
-);
-router.get(
-  loyaltyPaths.admin.benefits,
-  verification.verifyAdmin,
-  handleError(controller.listBenefits),
-);
-router.patch(
-  loyaltyPaths.admin.benefitsDetail,
-  verification.verifyAdmin,
-  handleError(controller.updateBenefit),
-);
-router.delete(
-  loyaltyPaths.admin.benefitsDetail,
-  verification.verifyAdmin,
-  handleError(controller.deleteBenefit),
 );
 
 module.exports = router;
