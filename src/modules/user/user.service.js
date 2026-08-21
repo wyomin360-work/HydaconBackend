@@ -1516,29 +1516,47 @@ async function convertPointsToCoins(userId, data) {
   }
 }
 
-async function getConversionHistory(userId) {
+async function getConversionHistory(userId, page = 1, limit = 10) {
   const user = await User.findById(userId);
   if (!user) sendFailResponse("User not found");
 
+  const skip = (page - 1) * limit;
+
+  const totalStats = await PointConversion.aggregate([
+    { $match: { userId: new mongoose.Types.ObjectId(userId) } },
+    {
+      $group: {
+        _id: null,
+        totalPointsConverted: { $sum: "$pointsConverted" },
+        totalCoinsEarned: { $sum: "$coinsReceived" },
+        totalConversions: { $sum: 1 },
+      },
+    },
+  ]);
+
+  const stats = totalStats[0] || {
+    totalPointsConverted: 0,
+    totalCoinsEarned: 0,
+    totalConversions: 0,
+  };
+
   const history = await PointConversion.find({ userId })
     .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
     .lean();
 
-  const totalPointsConverted = history.reduce(
-    (sum, item) => sum + (item.pointsConverted || 0),
-    0,
-  );
-  const totalCoinsEarned = history.reduce(
-    (sum, item) => sum + (item.coinsReceived || 0),
-    0,
-  );
+  const totalPages = Math.ceil(stats.totalConversions / limit);
 
   return {
     data: {
       history: history.map((item) => attachId(item)),
-      totalPointsConverted,
-      totalCoinsEarned,
-      totalConversions: history.length,
+      totalPointsConverted: stats.totalPointsConverted,
+      totalCoinsEarned: stats.totalCoinsEarned,
+      totalConversions: stats.totalConversions,
+      page,
+      limit,
+      totalPages,
     },
   };
 }
