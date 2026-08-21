@@ -522,6 +522,7 @@ async function getUserLoyaltySummary(userId) {
       redeemableBalance: user?.totalPoints || 0,
       activeSeason: null,
       levelUpEvent: { upgraded: false },
+      seasonChangeEvent: { seasonChanged: false },
     };
   }
 
@@ -585,6 +586,29 @@ async function getUserLoyaltySummary(userId) {
     // Mark as celebrated in DB so it won't show again on subsequent requests
     await UserTierProgress.findByIdAndUpdate(progress._id, {
       lastCelebratedTierId: currentTier._id,
+    });
+  }
+
+  // Evaluate Season Change Event
+  let seasonChangeEvent = { seasonChanged: false };
+  const lastCelebratedSeasonIdStr = progress.lastCelebratedSeasonId?.toString();
+  const activeSeasonIdStr = activeSeason._id.toString();
+
+  if (!lastCelebratedSeasonIdStr || lastCelebratedSeasonIdStr !== activeSeasonIdStr) {
+    seasonChangeEvent = {
+      seasonChanged: true,
+      season: {
+        id: activeSeason._id,
+        name: activeSeason.name || "Season",
+        code: activeSeason.code,
+        startDate: activeSeason.startDate,
+        endDate: activeSeason.endDate,
+        bannerImages: activeSeason.bannerImages ?? [],
+      },
+    };
+
+    await UserTierProgress.findByIdAndUpdate(progress._id, {
+      lastCelebratedSeasonId: activeSeason._id,
     });
   }
 
@@ -687,6 +711,7 @@ async function getUserLoyaltySummary(userId) {
       bannerImages: activeSeason?.bannerImages ?? [],
     },
     levelUpEvent,
+    seasonChangeEvent,
   };
 }
 
@@ -1124,6 +1149,7 @@ async function claimTierReward(userId, { seasonId, tierId } = {}) {
       data: {
         claims: claimsProcessed,
         rewards: allClaimedRewards,
+        rewardsClalimed:true
       },
     };
   } catch (error) {
