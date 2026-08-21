@@ -269,12 +269,13 @@ const checkEligibility = async (
   session = null,
   isRewardedUser = false,
 ) => {
-  // --- Rewarded-user fast path: waive everything ---
+  // --- Rewarded-user path: waive coins & RuleSet, check out of stock only ---
   if (isRewardedUser) {
+    const isOutOfStock = (gift.stockQuantity ?? 0) <= 0;
     return {
-      eligible: true,
+      eligible: !isOutOfStock,
       isRewardedUser: true,
-      reasons: [],
+      reasons: isOutOfStock ? ["Gift is out of stock"] : [],
       rules: {
         coins: {
           required: 0,

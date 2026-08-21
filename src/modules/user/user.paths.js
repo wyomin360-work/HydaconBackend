@@ -9,6 +9,7 @@ module.exports = {
   profilePhoto: "/profile/photo",
   flagUser: "/flag/:id",
   toggleStatus: "/status/:id",
+  deleteAccount: "/account/delete",
   deleteUser: "/delete/:id",
   releaseBan: "/release-ban/:id",
   updatePreferences: "/preference/update",

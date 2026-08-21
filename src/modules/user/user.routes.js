@@ -191,6 +191,12 @@ router.patch(
 );
 
 router.delete(
+  userPaths.deleteAccount,
+  verification.verifyUser,
+  handleError(controller.deleteOwnAccount),
+);
+
+router.delete(
   userPaths.deleteUser,
   verification.verifyAdmin,
   handleError(controller.deleteUser),

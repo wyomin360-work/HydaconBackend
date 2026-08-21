@@ -205,6 +205,12 @@ exports.deleteUser = async (req, res, next) => {
   return sendResponse(res, response);
 };
 
+exports.deleteOwnAccount = async (req, res, next) => {
+  const userId = req.userId;
+  const response = await userService.deleteUser(userId);
+  return sendResponse(res, response);
+};
+
 exports.releaseBan = async (req, res, next) => {
   const userId = req.params?.id;
   const response = await userService.releaseBan(userId);
