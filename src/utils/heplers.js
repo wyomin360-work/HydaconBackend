@@ -107,7 +107,11 @@ function formatNotification(template, data) {
   });
 }
 
-const calculateProfileCompletion = (user, roleName = "") => {
+const calculateProfileCompletion = (
+  user,
+  roleName = "",
+  hasBankDetails = false,
+) => {
   let totalFields = 10;
   let filledFields = 0;
 
@@ -136,11 +140,6 @@ const calculateProfileCompletion = (user, roleName = "") => {
   if (user.kycStatus && user.kycStatus !== "NOT_STARTED") filledFields++;
 
   // 9. Bank Details (must contain accountNumber, ifscCode, and userName)
-  const hasBankDetails =
-    user.bankDetails &&
-    user.bankDetails.accountNumber &&
-    user.bankDetails.ifscCode &&
-    user.bankDetails.userName;
   if (hasBankDetails) filledFields++;
 
   // 10. Agreed to Terms

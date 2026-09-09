@@ -1,4 +1,5 @@
 const { default: mongoose } = require("mongoose");
+require("./user-bank-account.schema");
 const { hashData, calculateProfileCompletion } = require("../utils/heplers");
 const {
   AuthTypes,
@@ -19,18 +20,6 @@ const kycDocumentSchema = new mongoose.Schema(
       default: KYC_DOCUMENT_STATUS.PENDING,
     },
     rejectionReason: { type: String, default: null },
-  },
-  { _id: false },
-);
-const bankDetailsSchema = new mongoose.Schema(
-  {
-    accountNumber: { type: String },
-    userName: { type: String },
-    ifscCode: { type: String },
-    bankName: { type: String },
-    branchName: { type: String },
-    accountIv: { type: String },
-    ifscIv: { type: String },
   },
   { _id: false },
 );
@@ -77,10 +66,7 @@ const userSchema = new mongoose.Schema(
       required: true,
       default: AuthTypes.EMAIL,
     },
-    bankDetails: {
-      type: bankDetailsSchema,
-      default: () => ({}),
-    },
+    razorpayContactId: { type: String, default: null },
     roleId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Role",
@@ -142,6 +128,8 @@ const userSchema = new mongoose.Schema(
 userSchema.methods.calculateCompletionPercentage = async function () {
   try {
     const Role = mongoose.model("Role");
+    // Dynamically require UserBankAccount to avoid circular dependencies in schema
+    const UserBankAccount = mongoose.model("UserBankAccount");
     let roleName = "";
     if (this.roleId) {
       const role = await Role.findById(this.roleId);
@@ -150,9 +138,19 @@ userSchema.methods.calculateCompletionPercentage = async function () {
       }
     }
 
+    let hasBankDetails = false;
+    if (this._id) {
+      const bankAccount = await UserBankAccount.findOne({
+        userId: this._id,
+        isActive: true,
+      }).lean();
+      hasBankDetails = !!bankAccount;
+    }
+
     this.profileCompletionPercentage = calculateProfileCompletion(
       this,
       roleName,
+      hasBankDetails,
     );
   } catch (err) {
     console.error("Error calculating profile completion percentage:", err);

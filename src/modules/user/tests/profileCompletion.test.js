@@ -1,17 +1,25 @@
 const mongoose = require("mongoose");
 const Role = require("../../../schemas/role.schema");
 const User = require("../../../schemas/user.schema");
+require("../../../schemas/user-bank-account.schema"); // Ensure it's registered
 
 describe("User Profile Completion Percentage Calculation", () => {
   let mockRoleFindById;
+  let mockUserBankAccountFindOne;
 
   beforeAll(() => {
     // Mock Role.findById to return custom roles
     mockRoleFindById = jest.spyOn(mongoose.model("Role"), "findById");
+    // Mock UserBankAccount.findOne to mock bank details existence
+    mockUserBankAccountFindOne = jest.spyOn(
+      mongoose.model("UserBankAccount"),
+      "findOne",
+    );
   });
 
   afterAll(() => {
     mockRoleFindById.mockRestore();
+    mockUserBankAccountFindOne.mockRestore();
   });
 
   beforeEach(() => {
@@ -21,6 +29,9 @@ describe("User Profile Completion Percentage Calculation", () => {
   it("should calculate 100% completion for Contractor (10 fields filled)", async () => {
     mockRoleFindById.mockResolvedValue({
       name: "Contractor",
+    });
+    mockUserBankAccountFindOne.mockReturnValue({
+      lean: jest.fn().mockResolvedValue({ _id: "bank_id" }),
     });
 
     const user = new User({
@@ -33,11 +44,6 @@ describe("User Profile Completion Percentage Calculation", () => {
       kycStatus: "PENDING",
       email: "contractor@example.com",
       phone: "1234567890",
-      bankDetails: {
-        accountNumber: "123456789",
-        ifscCode: "ABCD0123456",
-        userName: "John Contractor",
-      },
       agreedToTerms: true,
       shopName: null, // Shop name is N/A for Contractor
     });
@@ -51,6 +57,9 @@ describe("User Profile Completion Percentage Calculation", () => {
     mockRoleFindById.mockResolvedValue({
       name: "Retailer",
     });
+    mockUserBankAccountFindOne.mockReturnValue({
+      lean: jest.fn().mockResolvedValue({ _id: "bank_id" }),
+    });
 
     const user = new User({
       roleId: new mongoose.Types.ObjectId(),
@@ -62,11 +71,6 @@ describe("User Profile Completion Percentage Calculation", () => {
       kycStatus: "APPROVED",
       email: "retailer@example.com",
       phone: "9876543210",
-      bankDetails: {
-        accountNumber: "987654321",
-        ifscCode: "XYZB0123456",
-        userName: "Shopkeeper Joe",
-      },
       agreedToTerms: true,
       shopName: "Joe's hardware store",
     });
@@ -80,6 +84,9 @@ describe("User Profile Completion Percentage Calculation", () => {
     mockRoleFindById.mockResolvedValue({
       name: "Retailer",
     });
+    mockUserBankAccountFindOne.mockReturnValue({
+      lean: jest.fn().mockResolvedValue({ _id: "bank_id" }),
+    });
 
     const user = new User({
       roleId: new mongoose.Types.ObjectId(),
@@ -91,11 +98,6 @@ describe("User Profile Completion Percentage Calculation", () => {
       kycStatus: "APPROVED",
       email: "retailer@example.com",
       phone: "9876543210",
-      bankDetails: {
-        accountNumber: "987654321",
-        ifscCode: "XYZB0123456",
-        userName: "Shopkeeper Joe",
-      },
       agreedToTerms: true,
       shopName: null, // Missing shopName
     });
@@ -110,6 +112,9 @@ describe("User Profile Completion Percentage Calculation", () => {
     mockRoleFindById.mockResolvedValue({
       name: "Mason",
     });
+    mockUserBankAccountFindOne.mockReturnValue({
+      lean: jest.fn().mockResolvedValue(null), // No bank details
+    });
 
     const user = new User({
       roleId: new mongoose.Types.ObjectId(),
@@ -121,7 +126,6 @@ describe("User Profile Completion Percentage Calculation", () => {
       kycStatus: "NOT_STARTED", // counts as missing
       email: null, // missing
       phone: null, // missing
-      bankDetails: null, // missing
       agreedToTerms: false, // missing
     });
 

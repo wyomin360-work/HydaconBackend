@@ -11,6 +11,7 @@ const swaggerSpec = require("./config/swagger.config");
 const logger = require("./config/pino.config");
 const errorHandler = require("./middlewares/errorHandler");
 const globalRoutes = require("./routes/global.routes");
+const webhookRoutes = require("./modules/webhooks/webhooks.routes");
 const AppError = require("./utils/appError");
 const translate = require("./utils/translator");
 
@@ -48,7 +49,13 @@ app.use(
 );
 
 // app.use(morgan("dev"));
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req, res, buf) => {
+      req.rawBody = buf;
+    },
+  }),
+);
 
 app.use(
   pinoHttp({
@@ -112,6 +119,7 @@ app.use((req, res, next) => {
 });
 
 app.use("/api/v1", globalRoutes);
+app.use("/webhooks", webhookRoutes);
 
 // Handle 404
 app.use((req, res, next) => {
