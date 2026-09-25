@@ -32,6 +32,18 @@ exports.updateReward = async (req, res) => {
   return sendResponse(res, response);
 };
 
+exports.bulkUpdateRewards = async (req, res) => {
+  const data = req?.body;
+  const response = await rewardService.bulkUpdateRewards(data);
+  return sendResponse(res, response);
+};
+
+exports.batchUpdateRewards = async (req, res) => {
+  const data = req?.body;
+  const response = await rewardService.batchUpdateRewards(data);
+  return sendResponse(res, response);
+};
+
 exports.deleteReward = async (req, res) => {
   const rewardId = req?.params?.rewardId;
   const response = await rewardService.deleteReward(rewardId);

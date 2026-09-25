@@ -7,6 +7,8 @@ const {
   listRewardRequestType,
   createRewardRequestType,
   updateRewardRequestType,
+  bulkUpdateRewardRequestType,
+  batchUpdateRewardRequestType,
   listGroupedRewardsRequestType,
 } = require("../../validations/rewards.validations");
 
@@ -32,6 +34,16 @@ router.patch(
   rewardsPath.update,
   validateRequest(updateRewardRequestType),
   handleError(rewardsController.updateReward),
+);
+router.patch(
+  rewardsPath.bulkUpdate,
+  validateRequest(bulkUpdateRewardRequestType),
+  handleError(rewardsController.bulkUpdateRewards),
+);
+router.patch(
+  rewardsPath.batchUpdate,
+  validateRequest(batchUpdateRewardRequestType),
+  handleError(rewardsController.batchUpdateRewards),
 );
 router.delete(rewardsPath.delete, handleError(rewardsController.deleteReward));
 

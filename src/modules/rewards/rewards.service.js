@@ -335,6 +335,103 @@ async function updateReward(rewardData, rewardId) {
   return { message: "reward updated", data: { rewardsUpdated: true } };
 }
 
+async function _executeBulkUpdateRewards({
+  rewardIds,
+  rewardPoints,
+  expiresAt,
+}) {
+  const updateFields = {};
+  if (rewardPoints !== undefined) {
+    updateFields.point = rewardPoints;
+  }
+  if (expiresAt !== undefined) {
+    updateFields.expiresAt = new Date(expiresAt);
+  }
+
+  if (Object.keys(updateFields).length === 0) {
+    sendFailResponse("No update fields provided");
+  }
+
+  if (!rewardIds || rewardIds.length === 0) {
+    return {
+      message: "no rewards found to update",
+      data: {
+        matchedCount: 0,
+        modifiedCount: 0,
+        rewardsUpdated: false,
+      },
+    };
+  }
+
+  const result = await Reward.updateMany(
+    {
+      _id: { $in: rewardIds },
+      active: { $ne: false },
+    },
+    {
+      $set: updateFields,
+    },
+  );
+
+  return {
+    message: "rewards updated",
+    data: {
+      matchedCount: result.matchedCount ?? result.n ?? 0,
+      modifiedCount: result.modifiedCount ?? result.nModified ?? 0,
+      rewardsUpdated: true,
+    },
+  };
+}
+
+async function bulkUpdateRewards(rewardData) {
+  const { rewardIds, rewardPoints, expiresAt } = rewardData;
+  return _executeBulkUpdateRewards({ rewardIds, rewardPoints, expiresAt });
+}
+
+async function batchUpdateRewards(batchData) {
+  const { productId, createdDate, rewardPoints, expiresAt } = batchData;
+
+  const startOfDay = new Date(createdDate);
+  startOfDay.setUTCHours(0, 0, 0, 0);
+  const endOfDay = new Date(createdDate);
+  endOfDay.setUTCHours(23, 59, 59, 999);
+
+  const startId = mongoose.Types.ObjectId.createFromTime(
+    Math.floor(startOfDay.getTime() / 1000),
+  );
+  const endId = mongoose.Types.ObjectId.createFromTime(
+    Math.floor(endOfDay.getTime() / 1000),
+  );
+
+  const query = {
+    productId: new mongoose.Types.ObjectId(productId),
+    active: { $ne: false },
+    $or: [
+      { createdAt: { $gte: startOfDay, $lte: endOfDay } },
+      {
+        createdAt: { $exists: false },
+        _id: { $gte: startId, $lte: endId },
+      },
+    ],
+  };
+
+  const rewards = await Reward.find(query, { _id: 1 }).lean();
+  const rewardIds = rewards.map((r) => r._id);
+
+  if (rewardIds.length === 0) {
+    return {
+      message: "no active rewards found for the specified batch",
+      data: {
+        matchedCount: 0,
+        modifiedCount: 0,
+        rewardsUpdated: false,
+      },
+    };
+  }
+
+  return  await _executeBulkUpdateRewards({ rewardIds, rewardPoints, expiresAt });
+}
+
 async function deleteReward(rewardId) {
   await Reward.findByIdAndDelete(rewardId);
   return { message: "reward deleted", data: { rewardDeleted: true } };
@@ -449,6 +546,8 @@ module.exports = {
   rewardDetails,
   createRewards,
   updateReward,
+  bulkUpdateRewards,
+  batchUpdateRewards,
   deleteReward,
   deleteAllReward,
   awardRewardToUser,

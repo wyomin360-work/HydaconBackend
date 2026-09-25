@@ -84,9 +84,40 @@ const listGroupedRewardsRequestType = {
   additionalProperties: false,
 };
 
+const bulkUpdateRewardRequestType = {
+  type: "object",
+  properties: {
+    rewardIds: {
+      type: "array",
+      items: { type: "string", pattern: "^[0-9a-fA-F]{24}$" },
+      minItems: 1,
+    },
+    rewardPoints: { type: "integer", minimum: 0 },
+    expiresAt: { type: "string", format: "date-time" },
+  },
+  required: ["rewardIds"],
+  anyOf: [{ required: ["rewardPoints"] }, { required: ["expiresAt"] }],
+  additionalProperties: false,
+};
+
+const batchUpdateRewardRequestType = {
+  type: "object",
+  properties: {
+    productId: { type: "string", pattern: "^[0-9a-fA-F]{24}$" },
+    createdDate: { type: "string" },
+    rewardPoints: { type: "integer", minimum: 0 },
+    expiresAt: { type: "string", format: "date-time" },
+  },
+  required: ["productId", "createdDate"],
+  anyOf: [{ required: ["rewardPoints"] }, { required: ["expiresAt"] }],
+  additionalProperties: false,
+};
+
 module.exports = {
   createRewardRequestType,
   updateRewardRequestType,
+  bulkUpdateRewardRequestType,
+  batchUpdateRewardRequestType,
   listRewardRequestType,
   listGroupedRewardsRequestType,
 };

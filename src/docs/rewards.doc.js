@@ -237,6 +237,101 @@ module.exports = {
       },
     },
   },
+  "/rewards/bulk-update": {
+    patch: {
+      summary: "Bulk update active rewards",
+      tags: ["Rewards"],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["rewardIds"],
+              properties: {
+                rewardIds: {
+                  type: "array",
+                  items: { type: "string" },
+                  example: ["64a1b2c3d4e5f67890123456", "64a1b2c3d4e5f67890123457"],
+                },
+                rewardPoints: { type: "integer", minimum: 0, example: 100 },
+                expiresAt: { type: "string", format: "date-time", example: "2026-12-31T23:59:59.999Z" },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Rewards bulk updated",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  message: { type: "string", example: "rewards updated" },
+                  data: {
+                    type: "object",
+                    properties: {
+                      matchedCount: { type: "integer", example: 5 },
+                      modifiedCount: { type: "integer", example: 5 },
+                      rewardsUpdated: { type: "boolean", example: true },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  "/rewards/batch-update": {
+    patch: {
+      summary: "Batch update rewards by created date and product ID",
+      tags: ["Rewards"],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["productId", "createdDate"],
+              properties: {
+                productId: { type: "string", example: "64a1b2c3d4e5f67890123456" },
+                createdDate: { type: "string", example: "2026-09-25" },
+                rewardPoints: { type: "integer", minimum: 0, example: 100 },
+                expiresAt: { type: "string", format: "date-time", example: "2026-12-31T23:59:59.999Z" },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Rewards batch updated",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  message: { type: "string", example: "rewards updated" },
+                  data: {
+                    type: "object",
+                    properties: {
+                      matchedCount: { type: "integer", example: 10 },
+                      modifiedCount: { type: "integer", example: 10 },
+                      rewardsUpdated: { type: "boolean", example: true },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
   "/rewards/delete/{rewardId}": {
     delete: {
       summary: "Delete reward by ID",
