@@ -15,7 +15,7 @@ const {
   generateToken,
   parseUserAgent,
 } = require("../../utils/heplers");
-const { sendMail } = require("../../functions/nodemailer");
+const { sendMail, sendTemplateEmail } = require("../../functions/nodemailer");
 
 async function generateAndSaveToken(admin) {
   const accessPayload = {
@@ -79,54 +79,210 @@ async function generateAndSaveToken(admin) {
 // }
 
 // ----------------------
+// Create Admin (Admin Panel - sends temporary password via welcome email template)
+// ----------------------
+async function createAdmin(adminData, createdBy) {
+  const name = (adminData.userfullname || adminData.name || "").trim();
+  const email = (adminData.useremail || adminData.email || "").toLowerCase().trim();
+  const phone = (adminData.usermobile || adminData.phone || adminData.mobile || "").trim();
+  const role = adminData.usertype || adminData.role || "ADMIN";
+  const active =
+    adminData.active !== undefined
+      ? Number(adminData.active) === 1
+        ? 1
+        : 0
+      : 1;
+  const status = adminData.status || (active === 1 ? "active" : "inactive");
+
+  if (!name) sendFailResponse("Admin name is required");
+  if (!email) sendFailResponse("Admin email is required");
+
+  //  Check if admin already exists
+  const adminExist = await Admin.findOne({ email });
+  if (adminExist) sendFailResponse("An admin with this email address already exists");
+
+  // 2Generate a secure temporary password if not provided
+  const temporaryPassword =
+    adminData.password ||
+    crypto.randomBytes(4).toString("hex").toUpperCase() +
+      "@" +
+      Math.floor(1000 + Math.random() * 9000);
+
+  //  Create new admin
+  const newAdminData = {
+    name,
+    email,
+    password: temporaryPassword,
+    phone,
+    role,
+    active,
+    status,
+  };
+  if (createdBy) newAdminData.createdBy = createdBy;
+
+  const admin = await Admin.create(newAdminData);
+
+  // Send Welcome Email using .hbs template
+  const loginUrl =
+    process.env.FRONTEND_URL ||
+    "https://hydaconadminwebapp.onrender.com";
+
+  try {
+    await sendTemplateEmail(
+      admin.email,
+      "admin/welcome-admin",
+      "Welcome to Hydacon Admin Portal 🎉",
+      {
+        name: admin.name,
+        userfullname: admin.name,
+        email: admin.email,
+        useremail: admin.email,
+        password: temporaryPassword,
+        role: admin.role,
+        usertype: admin.role,
+        loginUrl,
+        currentYear: new Date().getFullYear(),
+      },
+    );
+    console.log("📨 Welcome email template sent to:", admin.email);
+  } catch (error) {
+    console.error("⚠️ Failed to send welcome email template:", error.message);
+  }
+
+  const { password: pw, ...rest } = admin.toObject();
+
+  return {
+    status: "Success",
+    message: "Admin created successfully and credentials sent via email",
+    data: {
+      ...rest,
+      id: rest._id,
+      userfullname: rest.name,
+      useremail: rest.email,
+      usermobile: rest.phone || "",
+      usertype: rest.role || "ADMIN",
+      active: rest.active !== undefined ? rest.active : 1,
+      status: rest.status || "active",
+    },
+  };
+}
+
+// ----------------------
+// Update Admin
+// ----------------------
+async function updateAdmin(adminData) {
+  const adminId = adminData.id || adminData._id || adminData.adminId;
+  if (!adminId) sendFailResponse("Admin ID is required");
+
+  const admin = await Admin.findById(adminId);
+  if (!admin) sendFailResponse("Admin not found");
+
+  if (adminData.userfullname || adminData.name) {
+    admin.name = (adminData.userfullname || adminData.name).trim();
+  }
+  if (adminData.usermobile || adminData.phone || adminData.mobile) {
+    admin.phone = (
+      adminData.usermobile ||
+      adminData.phone ||
+      adminData.mobile
+    ).trim();
+  }
+  if (adminData.usertype || adminData.role) {
+    admin.role = adminData.usertype || adminData.role;
+  }
+  if (adminData.active !== undefined) {
+    admin.active = Number(adminData.active) === 1 ? 1 : 0;
+    admin.status = admin.active === 1 ? "active" : "inactive";
+  }
+  if (adminData.status) {
+    admin.status = adminData.status;
+  }
+
+  await admin.save();
+  const { password: pw, ...rest } = admin.toObject();
+
+  return {
+    status: "Success",
+    message: "Admin updated successfully",
+    data: {
+      ...rest,
+      id: rest._id,
+      userfullname: rest.name,
+      useremail: rest.email,
+      usermobile: rest.phone || "",
+      usertype: rest.role || "ADMIN",
+      active: rest.active !== undefined ? rest.active : 1,
+      status: rest.status || "active",
+    },
+  };
+}
+
+// ----------------------
+// Get Admin Details
+// ----------------------
+async function getAdminDetails(adminId) {
+  if (!adminId) sendFailResponse("Admin ID is required");
+  const admin = await Admin.findById(adminId).lean();
+  if (!admin) sendFailResponse("Admin not found");
+
+  const { password, ...rest } = admin;
+  return {
+    status: "Success",
+    data: {
+      ...rest,
+      id: rest._id,
+      userfullname: rest.name,
+      useremail: rest.email,
+      usermobile: rest.phone || "",
+      usertype: rest.role || "ADMIN",
+      active: rest.active !== undefined ? rest.active : 1,
+      status: rest.status || "active",
+    },
+  };
+}
+
+// ----------------------
 // Register Admin
 // ----------------------
 async function registerAdmin(adminData, createdBy) {
   const { name, email, password } = adminData;
 
-  // 1️⃣ Check if admin already exists
+  //  Check if admin already exists
   const adminExist = await Admin.findOne({ email });
   if (adminExist) sendFailResponse("The mail id exist");
 
-  // 2️⃣ Create new admin
+  // Create new admin
   const newAdminData = { name, email, password };
   if (createdBy) newAdminData.createdBy = createdBy;
 
   const admin = await Admin.create(newAdminData);
 
-  // 3️⃣ Generate tokens
+  //  Generate tokens
   const { accessToken, refreshToken } = await generateAndSaveToken(admin);
 
   const { password: pw, ...rest } = admin.toObject();
 
-  // 4️⃣ Send Welcome Email
-  const mailOptions = {
-    from: process.env.GOOGLE_USER_MAIL,
-    to: admin.email, // the newly registered admin
-    subject: "Welcome to Hydacon Admin Panel 🎉",
-    text: `Hello ${admin.name},
-
-Your admin account has been created successfully.
-
-Login Credentials:
-Email: ${admin.email}
-Password: ${password}
-
-You can log in at: ${process.env.FRONTEND_URL || "http://localhost:3000"}/admin/login
-
-⚠️ Please change your password after your first login.
-
-Regards,
-Hydacon Team`,
-  };
+  // Send Welcome Email
+  const loginUrl =
+    process.env.FRONTEND_URL ||
+    "https://hydaconadminwebapp.onrender.com";
 
   try {
-    const mailInfo = await sendMail(mailOptions);
-    console.log(
-      "📨 Welcome mail sent to:",
+    await sendTemplateEmail(
       admin.email,
-      " | Message ID:",
-      mailInfo?.messageId,
+      "admin/welcome-admin",
+      "Welcome to Hydacon Admin Panel 🎉",
+      {
+        name: admin.name,
+        userfullname: admin.name,
+        email: admin.email,
+        useremail: admin.email,
+        password,
+        role: admin.role || "ADMIN",
+        usertype: admin.role || "ADMIN",
+        loginUrl,
+        currentYear: new Date().getFullYear(),
+      },
     );
   } catch (error) {
     console.error("⚠️ Failed to send welcome email:", error.message);
@@ -261,15 +417,13 @@ async function updateDetails(adminId, updateData) {
 // ----------------------
 // Admin List
 // ----------------------
-async function adminList(data) {
-  const {
-    page = 1,
-    limit = 10,
-    search = "",
-    sortBy = "createdAt",
-    sortOrder = "desc",
-    filters = {},
-  } = data;
+async function adminList(data = {}) {
+  const page = Math.max(Number(data.page || data.pageno || 1), 1);
+  const limit = Math.max(Number(data.limit || data.recordcount || 10), 1);
+  const search = (data.search || data.search_text || "").trim();
+  const sortBy = data.sortBy || "createdAt";
+  const sortOrder = data.sortOrder || "desc";
+  const filters = data.filters || {};
 
   const skip = (page - 1) * limit;
 
@@ -278,11 +432,19 @@ async function adminList(data) {
     query.$or = [
       { name: { $regex: search, $options: "i" } },
       { email: { $regex: search, $options: "i" } },
+      { phone: { $regex: search, $options: "i" } },
+      { role: { $regex: search, $options: "i" } },
     ];
   }
 
   if (filters.authType) {
     query.authType = filters.authType;
+  }
+  if (filters.role) {
+    query.role = filters.role;
+  }
+  if (filters.active !== undefined) {
+    query.active = Number(filters.active);
   }
   if (filters.enableNotification !== undefined) {
     query.enableNotification = filters.enableNotification;
@@ -290,30 +452,41 @@ async function adminList(data) {
   if (filters.agreedToTerms !== undefined) {
     query.agreedToTerms = filters.agreedToTerms;
   }
-  if (filters.minPoints !== undefined || filters.maxPoints !== undefined) {
-    query.totalPoints = {};
-    if (filters.minPoints !== undefined)
-      query.totalPoints.$gte = Number(filters.minPoints);
-    if (filters.maxPoints !== undefined)
-      query.totalPoints.$lte = Number(filters.maxPoints);
-  }
 
   const sort = {};
   sort[sortBy] = sortOrder === "asc" ? 1 : -1;
 
-  // ✅ Use Admin instead of User
   const admins =
     (await Admin.find(query).sort(sort).skip(skip).limit(limit).lean()) ?? [];
 
   const totalAdmins = await Admin.countDocuments(query);
 
+  const formattedAdmins = admins.map((admin) => {
+    const { password, ...rest } = admin;
+    return {
+      ...rest,
+      id: rest._id,
+      userfullname: rest.name,
+      useremail: rest.email,
+      usermobile: rest.phone || "",
+      usertype: rest.role || "ADMIN",
+      active: rest.active !== undefined ? rest.active : 1,
+      status: rest.status || (rest.active === 0 ? "inactive" : "active"),
+    };
+  });
+
   return {
+    status: "Success",
     data: {
-      admins, // changed from users -> admins
+      admins: formattedAdmins,
       limit,
+      pagesize: limit,
       totalPages: Math.ceil(totalAdmins / limit),
+      totalPageCount: Math.ceil(totalAdmins / limit),
       total: totalAdmins,
+      totalCount: totalAdmins,
       page,
+      currentPage: page,
     },
   };
 }
@@ -465,6 +638,9 @@ async function phoneNumberChangeAuditLogs(data = {}) {
 }
 
 module.exports = {
+  createAdmin,
+  updateAdmin,
+  getAdminDetails,
   registerAdmin,
   login,
   logout,

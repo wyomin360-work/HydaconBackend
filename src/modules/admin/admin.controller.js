@@ -1,6 +1,25 @@
 const { sendResponse } = require("../../utils/responseHandlers");
 const adminService = require("./admin.service");
 
+exports.createAdmin = async (req, res, next) => {
+  let data = req?.body;
+  let createdBy = req?.userId;
+  const response = await adminService.createAdmin(data, createdBy);
+  return sendResponse(res, response);
+};
+
+exports.updateAdmin = async (req, res, next) => {
+  let data = req?.body;
+  const response = await adminService.updateAdmin(data);
+  return sendResponse(res, response);
+};
+
+exports.adminDetails = async (req, res, next) => {
+  const adminId = req?.body?.id || req?.body?.adminId || req?.params?.adminId;
+  const response = await adminService.getAdminDetails(adminId);
+  return sendResponse(res, response);
+};
+
 exports.register = async (req, res, next) => {
   let data = req?.body;
   let createdBy = req?.userId;

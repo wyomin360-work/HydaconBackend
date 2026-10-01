@@ -43,8 +43,49 @@ const adminAuditLogsRequestType = {
   additionalProperties: false,
 };
 
+const adminCreateRequestType = {
+  type: "object",
+  properties: {
+    userfullname: { type: "string" },
+    useremail: { type: "string", format: "email" },
+    usermobile: { type: "string" },
+    usertype: { type: "string" },
+    active: { type: ["number", "string", "boolean"] },
+    name: { type: "string" },
+    email: { type: "string", format: "email" },
+    phone: { type: "string" },
+    password: { type: "string" },
+    role: { type: "string" },
+  },
+  anyOf: [
+    { required: ["useremail", "userfullname"] },
+    { required: ["email", "name"] },
+  ],
+  additionalProperties: true,
+};
+
+const adminUpdateRequestType = {
+  type: "object",
+  properties: {
+    id: { type: "string" },
+    _id: { type: "string" },
+    userfullname: { type: "string" },
+    useremail: { type: "string", format: "email" },
+    usermobile: { type: "string" },
+    usertype: { type: "string" },
+    active: { type: ["number", "string", "boolean"] },
+    name: { type: "string" },
+    email: { type: "string", format: "email" },
+    phone: { type: "string" },
+    role: { type: "string" },
+  },
+  additionalProperties: true,
+};
+
 module.exports = {
   adminLoginRequestType,
   adminRegisterRequestType,
   adminAuditLogsRequestType,
+  adminCreateRequestType,
+  adminUpdateRequestType,
 };

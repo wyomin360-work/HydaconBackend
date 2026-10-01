@@ -1,6 +1,9 @@
 module.exports = {
   root: "/admin",
   list: "/list",
+  create: "/create",
+  update: "/update",
+  details: "/details",
   delete: "/delete/:adminId",
   auditLogs: {
     phoneNumberChanges: "/audit-logs/phone-number-changes",

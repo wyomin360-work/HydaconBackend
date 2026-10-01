@@ -7,10 +7,33 @@ const {
   adminRegisterRequestType,
   adminLoginRequestType,
   adminAuditLogsRequestType,
+  adminCreateRequestType,
+  adminUpdateRequestType,
 } = require("../../validations/admin.validations");
 const verification = require("../../middlewares/jwtVerification");
 
 const router = express.Router();
+
+// Admin Management (Protected: Only valid admin can create/manage admins)
+router.post(
+  adminPaths.create,
+  verification.verifyAdmin,
+  validateRequest(adminCreateRequestType),
+  handleError(controller.createAdmin),
+);
+
+router.post(
+  adminPaths.update,
+  verification.verifyAdmin,
+  validateRequest(adminUpdateRequestType),
+  handleError(controller.updateAdmin),
+);
+
+router.post(
+  adminPaths.details,
+  verification.verifyAdmin,
+  handleError(controller.adminDetails),
+);
 
 // Auth
 router.post(

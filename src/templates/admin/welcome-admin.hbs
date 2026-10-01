@@ -1,0 +1,182 @@
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Welcome to Hydacon Admin Panel</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        font-family: "Plus Jakarta Sans", Arial, sans-serif;
+        background-color: #f4f6f8;
+        color: #212b36;
+        margin: 0;
+        padding: 24px;
+      }
+
+      .container {
+        max-width: 600px;
+        margin: auto;
+        background: #ffffff;
+        padding: 36px;
+        border-radius: 16px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+      }
+
+      .header {
+        text-align: center;
+        margin-bottom: 28px;
+      }
+
+      .logo {
+        font-size: 24px;
+        font-weight: 700;
+        color: #00a76f;
+        letter-spacing: 0.5px;
+        margin-bottom: 8px;
+      }
+
+      h2 {
+        color: #1c252e;
+        font-weight: 700;
+        font-size: 22px;
+        margin-top: 6px;
+        margin-bottom: 8px;
+      }
+
+      p {
+        line-height: 1.6;
+        font-size: 15px;
+        color: #637381;
+        margin: 12px 0;
+      }
+
+      .credentials-box {
+        background-color: #f9fafb;
+        border: 1px solid #e5e8eb;
+        border-radius: 12px;
+        padding: 20px;
+        margin: 24px 0;
+      }
+
+      .credentials-title {
+        font-weight: 600;
+        font-size: 14px;
+        color: #1c252e;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 12px;
+      }
+
+      .credential-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px dashed #e5e8eb;
+        font-size: 14px;
+      }
+
+      .credential-row:last-child {
+        border-bottom: none;
+      }
+
+      .credential-label {
+        font-weight: 500;
+        color: #637381;
+      }
+
+      .credential-value {
+        font-weight: 600;
+        color: #1c252e;
+        font-family: monospace;
+        font-size: 14px;
+      }
+
+      .btn-container {
+        text-align: center;
+        margin: 28px 0;
+      }
+
+      .btn {
+        display: inline-block;
+        background-color: #00a76f;
+        color: #ffffff !important;
+        text-decoration: none;
+        padding: 12px 28px;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 15px;
+        box-shadow: 0 4px 12px rgba(0, 167, 111, 0.24);
+      }
+
+      .security-box {
+        background-color: #fff8e6;
+        border-left: 4px solid #ffab00;
+        padding: 14px 16px;
+        border-radius: 6px;
+        font-size: 13px;
+        color: #b76e00;
+        margin-top: 20px;
+      }
+
+      .footer {
+        margin-top: 36px;
+        text-align: center;
+        font-size: 12px;
+        color: #919eab;
+        border-top: 1px solid #f4f6f8;
+        padding-top: 20px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <div class="header">
+        <div class="logo">HYDACON</div>
+        <h2>Welcome to the Admin Portal 🎉</h2>
+      </div>
+
+      <p>Hello <strong>{{name}}</strong>,</p>
+
+      <p>
+        An administrative account has been created for you on the Hydacon Management Portal. You can now log in using the credentials below:
+      </p>
+
+      <div class="credentials-box">
+        <div class="credentials-title">Your Login Credentials</div>
+        <div class="credential-row">
+          <span class="credential-label">Email Address:</span>
+          <span class="credential-value">{{email}}</span>
+        </div>
+        <div class="credential-row">
+          <span class="credential-label">Temporary Password:</span>
+          <span class="credential-value">{{password}}</span>
+        </div>
+        {{#if role}}
+        <div class="credential-row">
+          <span class="credential-label">Role:</span>
+          <span class="credential-value">{{role}}</span>
+        </div>
+        {{/if}}
+      </div>
+
+      <div class="btn-container">
+        <a href="{{loginUrl}}" target="_blank" class="btn">Log In to Dashboard</a>
+      </div>
+
+      <div class="security-box">
+        <strong>⚠️ Security Notice:</strong> For your security, please log in and change your temporary password immediately from your account settings.
+      </div>
+
+      <div class="footer">
+        <p>If you did not expect this invitation or need assistance, please contact our support team.</p>
+        <p>&copy; {{currentYear}} Hydacon. All rights reserved.</p>
+      </div>
+    </div>
+  </body>
+
+</html>
