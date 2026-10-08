@@ -9,13 +9,19 @@ async function appConfigurations() {
 }
 
 async function updateAppConfig(updateData, adminId) {
-  const config = await AppConfig.find().lean();
-  if (!config || !config[0]) sendFailResponse("Failed to get app config");
-
   updateData.lastUpdated = new Date();
   updateData.lastUpdatedBy = adminId;
 
-  await AppConfig.findOneAndUpdate({}, { $set: updateData }, { new: true });
+  await AppConfig.findOneAndUpdate(
+    {},
+    { $set: updateData },
+    {
+      new: true,
+      upsert: true,
+      runValidators: true,
+      setDefaultsOnInsert: true,
+    },
+  );
   return {
     message: "App configuration updated",
     data: { appConfigUpdated: true },
