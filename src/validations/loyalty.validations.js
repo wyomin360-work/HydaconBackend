@@ -19,6 +19,8 @@ const loyaltyTierCreateRequestType = {
     key: { type: "string", minLength: 1 },
     rank: { type: "integer", minimum: 0 },
     colorIdentity: { type: "string" },
+    badgeUrl: { type: "string" },
+    active: { type: "boolean" },
     qualificationPoint: { type: "number", minimum: 0 },
     threshold: { type: "number", minimum: 0 },
     rewardPoints: { type: "number", minimum: 0 },
