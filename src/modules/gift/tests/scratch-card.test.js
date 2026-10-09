@@ -30,6 +30,12 @@ jest.mock("../../../schemas/redeem.schema", () => ({
   create: jest.fn(),
   countDocuments: jest.fn(),
 }));
+// These tests cover redeem and scratch-card decisions. Keep the asynchronous
+// post-scan worker out of scope so it does not require separate Reward query
+// mocks for its transactional updates.
+jest.mock("../../../utils/queueService", () => ({
+  addJob: jest.fn().mockResolvedValue(undefined),
+}));
 
 jest.mock("../../../schemas/tier-configuration.schema", () => ({
   findOne: jest.fn().mockReturnValue({
