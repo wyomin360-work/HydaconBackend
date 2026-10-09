@@ -1,7 +1,8 @@
 const service = require("./webhooks.service");
 const { sendResponse } = require("../../utils/responseHandlers");
+const logger = require("../../config/pino.config");
 
-exports.handleRazorpayXWebhook = async (req, res, next) => {
+exports.handlePayoutWebhook = async (req, res, next) => {
   try {
     const headers = req.headers;
     const rawBody = req.rawBody;
@@ -13,12 +14,20 @@ exports.handleRazorpayXWebhook = async (req, res, next) => {
       ...result,
     });
   } catch (error) {
-    console.error("Webhook processing error:", error);
     const statusCode =
       error.statusCode || (error instanceof SyntaxError ? 400 : 500);
+    logger.error("Payout provider webhook request failed", {
+      statusCode,
+      error: String(error.message)
+        .replace(/\d{6,}/g, "[redacted]")
+        .slice(0, 500),
+    });
     return res.status(statusCode).json({
       status: "Fail",
-      message: error.message || "Failed to process webhook",
+      message:
+        statusCode >= 500
+          ? "Webhook processing failed; the provider should retry delivery"
+          : error.message || "Failed to process webhook",
     });
   }
 };

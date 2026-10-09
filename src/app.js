@@ -52,7 +52,7 @@ app.use(
 app.use(
   express.json({
     verify: (req, res, buf) => {
-      if (req.originalUrl.startsWith("/webhooks/razorpayx")) {
+      if (req.originalUrl.startsWith("/webhooks/")) {
         req.rawBody = Buffer.from(buf);
       }
     },

@@ -6,6 +6,9 @@ const { initCronJobs } = require("./src/cron");
 const app = require("./src/app");
 const Database = require("./src/config/mongodb.config");
 const { logger } = require("./src/config/pino.config");
+const {
+  ensurePayoutAuditIndexes,
+} = require("./src/config/payout-audit-indexes");
 
 const PORT = process.env.PORT || 5000;
 const db = new Database();
@@ -38,6 +41,7 @@ app.use((req, res, next) => {
 const startServer = async () => {
   try {
     await db.connectDb();
+    await ensurePayoutAuditIndexes();
     // await seedDefaultLoyaltyData();
     initCronJobs();
     app.listen(PORT, () => {

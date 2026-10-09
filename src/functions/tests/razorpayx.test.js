@@ -8,8 +8,9 @@ const originalEnv = {
 
 describe("RazorpayX payout request", () => {
   let axios;
-  let createRazorpayPayout;
-  let payoutIdempotencyKey;
+  let createPayout;
+  let createIdempotencyKey;
+  let fetchPayoutByReference;
 
   beforeEach(() => {
     jest.resetModules();
@@ -18,7 +19,11 @@ describe("RazorpayX payout request", () => {
     process.env.RAZORPAYX_ACCOUNT_NUMBER = "account_test";
     axios = require("axios");
     axios.mockResolvedValue({ data: { id: "pout_test_123" } });
-    ({ createRazorpayPayout, payoutIdempotencyKey } = require("../razorpayx"));
+    ({
+      createPayout,
+      createIdempotencyKey,
+      fetchPayoutByReference,
+    } = require("../razorpayx"));
   });
 
   afterEach(() => {
@@ -34,17 +39,17 @@ describe("RazorpayX payout request", () => {
 
   test("uses the same valid UUID idempotency key for retries of a withdrawal", async () => {
     const referenceId = "507f1f77bcf86cd799439011";
-    const firstKey = payoutIdempotencyKey(referenceId);
-    const retryKey = payoutIdempotencyKey(referenceId);
+    const firstKey = createIdempotencyKey(referenceId);
+    const retryKey = createIdempotencyKey(referenceId);
 
     expect(firstKey).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
     );
     expect(retryKey).toBe(firstKey);
-    expect(payoutIdempotencyKey("another-withdrawal")).not.toBe(firstKey);
+    expect(createIdempotencyKey("another-withdrawal")).not.toBe(firstKey);
 
-    await createRazorpayPayout("fa_test_123", 20000, referenceId, "Payout");
-    await createRazorpayPayout("fa_test_123", 20000, referenceId, "Payout");
+    await createPayout("fa_test_123", 20000, referenceId, "Payout");
+    await createPayout("fa_test_123", 20000, referenceId, "Payout");
 
     expect(axios).toHaveBeenCalledTimes(2);
     expect(axios.mock.calls[0][0].headers["X-Payout-Idempotency"]).toBe(
@@ -65,12 +70,45 @@ describe("RazorpayX payout request", () => {
       message: "Request failed",
     });
     await expect(
-      createRazorpayPayout("fa_test_123", 20000, "withdrawal-1", "Payout"),
+      createPayout("fa_test_123", 20000, "withdrawal-1", "Payout"),
     ).rejects.toMatchObject({ providerStatusCode: 400, definitive: true });
 
     axios.mockRejectedValueOnce(new Error("socket timeout"));
     await expect(
-      createRazorpayPayout("fa_test_123", 20000, "withdrawal-2", "Payout"),
+      createPayout("fa_test_123", 20000, "withdrawal-2", "Payout"),
     ).rejects.toMatchObject({ definitive: false });
+  });
+
+  test("fetches reconciliation snapshots using the account and withdrawal reference", async () => {
+    axios.mockResolvedValueOnce({
+      status: 200,
+      data: {
+        items: [
+          {
+            id: "pout_test_123",
+            reference_id: "withdrawal-123",
+            status: "processed",
+          },
+        ],
+      },
+    });
+
+    const payout = await fetchPayoutByReference("withdrawal-123");
+
+    expect(payout).toMatchObject({
+      id: "pout_test_123",
+      reference_id: "withdrawal-123",
+      status: "processed",
+      _httpStatus: 200,
+    });
+    expect(axios).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "GET",
+        params: expect.objectContaining({
+          account_number: "account_test",
+          reference_id: "withdrawal-123",
+        }),
+      }),
+    );
   });
 });
