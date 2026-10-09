@@ -52,7 +52,9 @@ app.use(
 app.use(
   express.json({
     verify: (req, res, buf) => {
-      req.rawBody = buf;
+      if (req.originalUrl.startsWith("/webhooks/")) {
+        req.rawBody = Buffer.from(buf);
+      }
     },
   }),
 );

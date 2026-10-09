@@ -1109,7 +1109,7 @@ async function getUserBankDetails(userId) {
     userName: bankAccount.accountHolderName,
     bankName: bankAccount.bankName,
     branchName: bankAccount.branchName,
-    razorpayFundAccountId: bankAccount.razorpayFundAccountId,
+    payoutFundAccountId: bankAccount.payoutFundAccountId,
   };
 }
 

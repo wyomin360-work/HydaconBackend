@@ -15,7 +15,7 @@ const userBankAccountSchema = new mongoose.Schema(
     ifscIv: { type: String, required: true },
     bankName: { type: String, required: true },
     branchName: { type: String, required: true },
-    razorpayFundAccountId: { type: String, default: null },
+    payoutFundAccountId: { type: String, default: null },
     isActive: { type: Boolean, default: true },
   },
   { timestamps: true },

@@ -1,4 +1,72 @@
 module.exports = {
+  "/admin/create": {
+    post: {
+      summary: "Create a new admin user (Protected)",
+      tags: ["Admin"],
+      security: [{ bearerAuth: [] }],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["userfullname", "useremail"],
+              properties: {
+                userfullname: { type: "string", example: "John Doe" },
+                useremail: {
+                  type: "string",
+                  format: "email",
+                  example: "admin@example.com",
+                },
+                usermobile: { type: "string", example: "9876543210" },
+                usertype: { type: "string", example: "ADMIN" },
+                active: { type: "integer", example: 1 },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Admin created successfully and welcome email sent",
+        },
+        400: { description: "Validation error or email already exists" },
+        401: { description: "Unauthorized - Admin only" },
+      },
+    },
+  },
+
+  "/admin/update": {
+    post: {
+      summary: "Update an admin user (Protected)",
+      tags: ["Admin"],
+      security: [{ bearerAuth: [] }],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["id"],
+              properties: {
+                id: { type: "string", example: "64b5f4c8a4e6f9c7e3a4a8b1" },
+                userfullname: { type: "string", example: "John Doe" },
+                usermobile: { type: "string", example: "9876543210" },
+                usertype: { type: "string", example: "ADMIN" },
+                active: { type: "integer", example: 1 },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: { description: "Admin updated successfully" },
+        400: { description: "Validation error" },
+        401: { description: "Unauthorized - Admin only" },
+      },
+    },
+  },
+
   "/admin/auth/register": {
     post: {
       summary: "Register a new admin",

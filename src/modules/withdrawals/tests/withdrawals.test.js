@@ -6,8 +6,25 @@ const User = require("../../../schemas/user.schema");
 const UserBankAccount = require("../../../schemas/user-bank-account.schema");
 const Withdrawal = require("../../../schemas/withdrawal.schema");
 const AppConfig = require("../../../schemas/app-config.schema");
+const LedgerEntry = require("../../../schemas/ledger-entry.schema");
+const PayoutAttempt = require("../../../schemas/payout-attempt.schema");
 const Role = require("../../../schemas/role.schema");
 const { decrypt } = require("../../../utils/encryption");
+const crypto = require("crypto");
+
+async function processSignedWebhook(payload) {
+  const rawBody = Buffer.from(JSON.stringify(payload));
+  const secret = process.env.RAZORPAYX_WEBHOOK_SECRET;
+  const headers = secret
+    ? {
+        "x-razorpay-signature": crypto
+          .createHmac("sha256", secret)
+          .update(rawBody)
+          .digest("hex"),
+      }
+    : {};
+  return webhookService.processWebhook(headers, rawBody, payload);
+}
 
 // Mock the external Razorpay functions
 jest.mock("../../../functions/razorPay", () => ({
@@ -17,9 +34,14 @@ jest.mock("../../../functions/razorPay", () => ({
 }));
 
 jest.mock("../../../functions/razorpayx", () => ({
-  createRazorpayContact: jest.fn().mockResolvedValue({ id: "cont_test123" }),
-  createRazorpayFundAccount: jest.fn().mockResolvedValue({ id: "fa_test123" }),
-  createRazorpayPayout: jest.fn().mockResolvedValue({ id: "pout_test123" }),
+  createPayoutContact: jest.fn().mockResolvedValue({ id: "cont_test123" }),
+  createPayoutFundAccount: jest.fn().mockResolvedValue({ id: "fa_test123" }),
+  createPayout: jest.fn().mockResolvedValue({ id: "pout_test123" }),
+  createIdempotencyKey: jest.fn().mockReturnValue("idempotency-test-key"),
+  verifyPayoutWebhook: jest.fn(),
+  getPayoutWebhookDeliveryId: jest.fn(
+    (headers) => headers["x-razorpay-event-id"] || null,
+  ),
 }));
 
 jest.mock("../../../functions/fcm", () => ({
@@ -60,6 +82,8 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
     await User.deleteMany({});
     await UserBankAccount.deleteMany({});
     await Withdrawal.deleteMany({});
+    await LedgerEntry.deleteMany({});
+    await PayoutAttempt.deleteMany({});
     await AppConfig.deleteMany({});
 
     // Setup default app config
@@ -132,6 +156,15 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
     // Verify user coins deducted
     const user = await User.findById(userId);
     expect(user.hydaconCoins).toBe(400); // 500 - 100
+    const debit = await LedgerEntry.findOne({
+      withdrawalId: withdrawalRes.data.id,
+      movement: "WITHDRAWAL_COIN_DEBIT",
+    });
+    expect(debit).toMatchObject({
+      amount: 100,
+      balanceBefore: 500,
+      balanceAfter: 400,
+    });
   });
 
   test("3. Approve Withdrawal - Create Contact, Fund Account, & Payout", async () => {
@@ -152,22 +185,29 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
     // Approve the withdrawal
     const approveRes = await service.approveWithdrawal(adminId, withdrawalId);
     expect(approveRes.data.status).toBe("PROCESSING");
-    expect(approveRes.data.razorpayPayoutId).toBe("pout_test123");
+    expect(approveRes.data.providerPayoutId).toBe("pout_test123");
 
     // Verify User has Contact ID
     const user = await User.findById(userId);
-    expect(user.razorpayContactId).toBe("cont_test123");
+    expect(user.payoutContactId).toBe("cont_test123");
 
     // Verify Bank Account has Fund Account ID
     const bankAccount = await UserBankAccount.findOne({
       userId,
       isActive: true,
     });
-    expect(bankAccount.razorpayFundAccountId).toBe("fa_test123");
+    expect(bankAccount.payoutFundAccountId).toBe("fa_test123");
 
     // Verify Withdrawal is in PROCESSING state
     const withdrawal = await Withdrawal.findById(withdrawalId);
     expect(withdrawal.status).toBe("PROCESSING");
+    const attempt = await PayoutAttempt.findOne({ withdrawalId });
+    expect(attempt).toMatchObject({
+      attemptNumber: 1,
+      idempotencyKey: "idempotency-test-key",
+      payoutId: "pout_test123",
+      outcome: "SUCCEEDED",
+    });
   });
 
   test("4. Cancel Withdrawal - Refund Coins & CANCELLED status", async () => {
@@ -195,6 +235,15 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
     // Verify User coins credited back
     const user = await User.findById(userId);
     expect(user.hydaconCoins).toBe(500); // restored back to 500
+    const refund = await LedgerEntry.findOne({
+      withdrawalId,
+      movement: "WITHDRAWAL_COIN_REFUND",
+    });
+    expect(refund).toMatchObject({
+      amount: 100,
+      balanceBefore: 400,
+      balanceAfter: 500,
+    });
   });
 
   test("5. Webhook - payout.processed updates status to COMPLETED & totals", async () => {
@@ -215,7 +264,7 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
     // Set payout ID
     await Withdrawal.findByIdAndUpdate(withdrawalId, {
       status: "PROCESSING",
-      razorpayPayoutId: "pout_processed_123",
+      providerPayoutId: "pout_processed_123",
     });
 
     // Mock Webhook request
@@ -233,7 +282,7 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
       },
     };
 
-    const webhookRes = await webhookService.processWebhook({}, "", payload);
+    const webhookRes = await processSignedWebhook(payload);
     expect(webhookRes.status).toBe("success");
 
     // Verify Withdrawal is COMPLETED
@@ -244,6 +293,15 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
     // Verify User totalWithdraw updated
     const user = await User.findById(userId);
     expect(user.totalWithdraw).toBe(200); // ₹200 added
+    const payoutLedger = await LedgerEntry.findOne({
+      withdrawalId,
+      movement: "PAYOUT_COMPLETED",
+    });
+    expect(payoutLedger).toMatchObject({
+      amount: 200,
+      asset: "INR",
+      payoutId: "pout_processed_123",
+    });
   });
 
   test("6. Webhook - payout.failed/reversed refunds coins", async () => {
@@ -264,7 +322,7 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
     // Set payout ID
     await Withdrawal.findByIdAndUpdate(withdrawalId, {
       status: "PROCESSING",
-      razorpayPayoutId: "pout_failed_123",
+      providerPayoutId: "pout_failed_123",
     });
 
     // Mock Failed Webhook request
@@ -282,11 +340,7 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
       },
     };
 
-    const webhookRes = await webhookService.processWebhook(
-      {},
-      "",
-      failedPayload,
-    );
+    const webhookRes = await processSignedWebhook(failedPayload);
     expect(webhookRes.status).toBe("success");
 
     // Verify Withdrawal is FAILED
@@ -299,5 +353,14 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
     // Verify coins refunded to user
     const user = await User.findById(userId);
     expect(user.hydaconCoins).toBe(500); // 400 + 100
+    const refund = await LedgerEntry.findOne({
+      withdrawalId,
+      movement: "WITHDRAWAL_COIN_REFUND",
+    });
+    expect(refund).toMatchObject({
+      amount: 100,
+      balanceBefore: 400,
+      balanceAfter: 500,
+    });
   });
 });

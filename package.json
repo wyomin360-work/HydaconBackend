@@ -9,6 +9,7 @@
     "seed:events": "node scripts/seed-kerala-events.js",
     "seed:contests": "node scripts/seed-demo-contests.js",
     "seed:scratch-cards": "node scripts/seed-demo-scratch-cards.js",
+    "migrate:payout-contract": "node scripts/migrate-payout-contract.js",
     "format": "prettier --write .",
     "notify:test": "node src/scripts/sendTestNotification.js"
   },
