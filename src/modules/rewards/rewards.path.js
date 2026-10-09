@@ -8,6 +8,8 @@ module.exports = {
   batchDeactivate: "/batches/:batchId/deactivate",
   batchUpdateById: "/batches/:batchId",
   batchDelete: "/batches/:batchId",
+  batchDownload: "/batches/:batchId/download",
+  batchDownloadStatus: "/batches/download-jobs/:jobId",
   create: "/create",
   delete: "/delete/:rewardId",
   update: "/update/:rewardId",

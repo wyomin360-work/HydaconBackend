@@ -1,5 +1,18 @@
 const { sendResponse } = require("../../utils/responseHandlers");
 const rewardService = require("./rewards.service");
+const rewardBatchDownloadService = require("./reward-batch-download.service");
+const rewardBatchDownloadQueue = require("./reward-batch-download.queue");
+const { createHash } = require("crypto");
+const { sendFailResponse } = require("../../utils/responseHandlers");
+
+const archiveDownloadUrl = (req, archive) => {
+  if (archive.downloadUrl) return archive.downloadUrl;
+  const forwardedProto = req.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const protocol = forwardedProto || req.protocol;
+  const host = req.get("x-forwarded-host")?.split(",")[0]?.trim() || req.get("host");
+  const fileName = encodeURIComponent(archive.fileName || "reward-batch-vouchers.zip");
+  return `${protocol}://${host}/reward-batch-downloads/${archive.token}?filename=${fileName}`;
+};
 
 exports.listRewards = async (req, res) => {
   const data = req?.body;
@@ -42,6 +55,74 @@ exports.deleteRewardBatch = async (req, res) => {
   const response = await rewardService.deleteRewardBatch(req.params?.batchId);
   return sendResponse(res, response);
 };
+
+exports.createRewardBatchDownload = async (req, res) => {
+  const batchId = req.params?.batchId;
+  const rewardIds = req.body?.rewardIds || null;
+  const queue = rewardBatchDownloadQueue.getRewardBatchDownloadQueue();
+  if (queue) {
+    try {
+      // A stable BullMQ job ID makes duplicate clicks share one queued/active job
+      // across all app instances connected to the same Redis queue.
+      const normalizedRewardIds = Array.isArray(rewardIds) ? [...rewardIds].sort() : null;
+      const jobId = `batchzip-${createHash("sha256")
+        .update(JSON.stringify([String(batchId), normalizedRewardIds]))
+        .digest("hex")}`;
+      const job = await queue.add(
+        "generate-reward-batch-zip",
+        { batchId, rewardIds },
+        {
+          jobId,
+          attempts: 2,
+          backoff: { type: "exponential", delay: 3000 },
+          removeOnComplete: 1000,
+          removeOnFail: 1000,
+        },
+      );
+      return sendResponse(res, {
+        data: { status: "processing", jobId: job.id },
+      });
+    } catch (error) {
+      console.error("Unable to queue reward batch download; generating inline:", error);
+    }
+  }
+
+  const archive = await rewardBatchDownloadService.createRewardBatchArchive(
+    batchId,
+    undefined,
+    rewardIds,
+  );
+  return sendResponse(res, {
+    data: {
+      status: "completed",
+      ...archive,
+      downloadUrl: archiveDownloadUrl(req, archive),
+    },
+  });
+};
+
+exports.rewardBatchDownloadStatus = async (req, res) => {
+  const job = await rewardBatchDownloadQueue.getRewardBatchDownloadJob(req.params?.jobId);
+  if (!job) sendFailResponse("reward batch download job not found", 404);
+  if (job.state === "failed") {
+    sendFailResponse(job.error || "reward batch download failed", 500);
+  }
+  const result = job.result || {};
+  return sendResponse(res, {
+    data: {
+      status: job.state === "completed" ? "completed" : "processing",
+      progress: typeof job.progress === "number" ? job.progress : 0,
+      ...result,
+      ...(result.downloadUrl || result.token
+        ? {
+            downloadUrl:
+              archiveDownloadUrl(req, result),
+          }
+        : {}),
+    },
+  });
+};
+
 
 exports.rewardDetails = async (req, res) => {
   const rewardId = req.params?.rewardId;

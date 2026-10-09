@@ -31,6 +31,14 @@ router.post(
   validateRequest(listRewardBatchesRequestType),
   handleError(rewardsController.listRewardBatches),
 );
+router.post(
+  rewardsPath.batchDownload,
+  handleError(rewardsController.createRewardBatchDownload),
+);
+router.get(
+  rewardsPath.batchDownloadStatus,
+  handleError(rewardsController.rewardBatchDownloadStatus),
+);
 router.get(rewardsPath.batchDetails, handleError(rewardsController.rewardBatchDetails));
 router.post(
   rewardsPath.batchRewards,
