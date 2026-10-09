@@ -244,6 +244,16 @@ function normalizeString(str) {
   return "";
 }
 
+function makeRewardBatchUidPrefix(productName) {
+  const prefix = (productName || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z]/gi, "")
+    .slice(0, 3)
+    .toUpperCase();
+  return prefix || "PRD";
+}
+
 module.exports = {
   handleError,
   hashData,
@@ -261,4 +271,5 @@ module.exports = {
   parseUserAgent,
   getPaginationParams,
   normalizeString,
+  makeRewardBatchUidPrefix,
 };

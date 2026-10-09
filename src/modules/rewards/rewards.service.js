@@ -8,7 +8,11 @@ const giftService = require("../gift/gift.service");
 const loyaltyService = require("../loyalty/loyalty.service");
 const { LOYALTY_TRANSACTION_SOURCES } = require("../../constants/loyalty");
 const { MAX_REWARD_BATCH_SIZE } = require("../../constants/rewards");
-const { randomHex, attachId } = require("../../utils/heplers");
+const {
+  randomHex,
+  attachId,
+  makeRewardBatchUidPrefix,
+} = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 
 async function listRewards(data) {
@@ -127,12 +131,22 @@ async function listRewards(data) {
   // Fetch rewards with product populated
   const rewards = await Reward.find(query)
     .populate("product")
+    .populate("batchId", "batchUid batchNumber createdAt")
     .sort(sort)
     .skip(skip)
     .limit(limit)
     .lean();
 
-  const rewardsWithId = attachId(rewards);
+  const rewardsWithId = attachId(rewards).map((reward) => {
+    const batch = reward.batchId;
+    return {
+      ...reward,
+      batchId: batch?._id || batch || null,
+      batchUid: batch?.batchUid,
+      batchNumber: batch?.batchNumber,
+      batchCreatedAt: batch?.createdAt,
+    };
+  });
   const totalDocuments = await Reward.countDocuments(query);
 
   return {
@@ -219,16 +233,6 @@ async function listRewardsByBatch(batchId, data = {}) {
   if (!batch) sendFailResponse("reward batch not found", 404);
   const result = await listRewards({ ...data, batchId });
   return { data: { batch, ...result.data } };
-}
-
-function makeBatchUidPrefix(productName) {
-  const prefix = (productName || "")
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z]/gi, "")
-    .slice(0, 3)
-    .toUpperCase();
-  return prefix || "PRD";
 }
 
 async function deactivateRewardBatch(batchId) {
@@ -509,9 +513,19 @@ async function listRewardsGroupedByDate(data) {
 async function rewardDetails(rewardId) {
   const reward = await Reward.findOne({ _id: rewardId, isDeleted: { $ne: true } })
     .populate("product")
+    .populate("batchId", "batchUid batchNumber createdAt")
     .lean();
   if (!reward) sendFailResponse("reward not found");
-  return { data: reward };
+  const batch = reward.batchId;
+  return {
+    data: {
+      ...reward,
+      batchId: batch?._id || batch || null,
+      batchUid: batch?.batchUid,
+      batchNumber: batch?.batchNumber,
+      batchCreatedAt: batch?.createdAt,
+    },
+  };
 }
 
 async function createRewards(rewardData) {
@@ -523,7 +537,7 @@ async function createRewards(rewardData) {
     count > MAX_REWARD_BATCH_SIZE
   ) {
     sendFailResponse(
-      `count must be an integer between 1 and ${MAX_REWARD_BATCH_SIZE}`,
+      `For a single batch, a maximum of ${MAX_REWARD_BATCH_SIZE} rewards is allowed to create.`,
       400,
     );
   }
@@ -538,7 +552,7 @@ async function createRewards(rewardData) {
   ).lean();
   if (!sequencedProduct) sendFailResponse("product not found");
   const batchNumber = sequencedProduct.rewardBatchSequence;
-  const batchUid = `${makeBatchUidPrefix(product.name)}_${String(batchNumber).padStart(2, "0")}`;
+  const batchUid = `${makeRewardBatchUidPrefix(product.name)}_${String(batchNumber).padStart(2, "0")}`;
 
   // Calculate the expiry with the 90-day buffer
   const expiresAtWithBuffer = new Date(expiresAt);

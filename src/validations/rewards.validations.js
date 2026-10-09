@@ -5,7 +5,13 @@ const createRewardRequestType = {
   properties: {
     expiresAt: { type: "string", format: "date-time" },
     productId: { type: "string", pattern: "^[0-9a-fA-F]{24}$" },
-    count: { type: "integer", minimum: 1, maximum: MAX_REWARD_BATCH_SIZE },
+    count: {
+      type: "integer",
+      minimum: 1,
+      maximum: MAX_REWARD_BATCH_SIZE,
+      errorMessage:
+        "For a single batch, a maximum of 10,000 rewards is allowed to create.",
+    },
   },
   required: ["expiresAt", "productId", "count"],
   additionalProperties: false,

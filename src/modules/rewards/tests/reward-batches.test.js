@@ -5,7 +5,10 @@ const RewardBatch = require("../../../schemas/reward-batch.schema");
 const Product = require("../../../schemas/product.schema");
 const AppError = require("../../../utils/appError");
 const validateRequest = require("../../../middlewares/validator");
-const { createRewardRequestType } = require("../../../validations/rewards.validations");
+const {
+  createRewardRequestType,
+  listRewardRequestType,
+} = require("../../../validations/rewards.validations");
 const { MAX_REWARD_BATCH_SIZE } = require("../../../constants/rewards");
 
 jest.mock("../../../schemas/reward.schema");
@@ -39,6 +42,55 @@ describe("Reward batches", () => {
     expect(validNext).toHaveBeenCalledWith();
     expect(invalidNext).toHaveBeenCalledWith(expect.any(AppError));
     expect(invalidNext.mock.calls[0][0].statusCode).toBe(400);
+    expect(invalidNext.mock.calls[0][0].message).toContain(
+      "For a single batch, a maximum of 10,000 rewards is allowed to create.",
+    );
+  });
+
+  it("accepts batchId in the reward list API and scopes the query to that batch", async () => {
+    const batchId = "64a1b2c3d4e5f67890123457";
+    const middleware = validateRequest(listRewardRequestType);
+    const next = jest.fn();
+    middleware({ body: { page: 1, limit: 10, batchId } }, null, next);
+    expect(next).toHaveBeenCalledWith();
+
+    const query = {
+      populate: jest.fn().mockReturnThis(),
+      sort: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue([
+        {
+          _id: new mongoose.Types.ObjectId(),
+          productId: new mongoose.Types.ObjectId(),
+          batchId: {
+            _id: new mongoose.Types.ObjectId(batchId),
+            batchUid: "REG_01",
+            batchNumber: 1,
+            createdAt: new Date("2026-10-09T00:00:00.000Z"),
+          },
+        },
+      ]),
+    };
+    Reward.find.mockReturnValue(query);
+    Reward.countDocuments.mockResolvedValue(1);
+
+    const response = await rewardsService.listRewards({ page: 1, limit: 10, batchId });
+
+    expect(Reward.find).toHaveBeenCalledWith({
+      isDeleted: { $ne: true },
+      batchId: new mongoose.Types.ObjectId(batchId),
+    });
+    expect(query.populate).toHaveBeenCalledWith(
+      "batchId",
+      "batchUid batchNumber createdAt",
+    );
+    expect(response.data.rewards[0]).toMatchObject({
+      batchId: new mongoose.Types.ObjectId(batchId),
+      batchUid: "REG_01",
+      batchNumber: 1,
+      batchCreatedAt: new Date("2026-10-09T00:00:00.000Z"),
+    });
   });
 
   it("creates one batch and assigns its ID to every reward in the request", async () => {
