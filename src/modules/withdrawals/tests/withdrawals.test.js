@@ -8,6 +8,21 @@ const Withdrawal = require("../../../schemas/withdrawal.schema");
 const AppConfig = require("../../../schemas/app-config.schema");
 const Role = require("../../../schemas/role.schema");
 const { decrypt } = require("../../../utils/encryption");
+const crypto = require("crypto");
+
+async function processSignedWebhook(payload) {
+  const rawBody = Buffer.from(JSON.stringify(payload));
+  const secret = process.env.RAZORPAYX_WEBHOOK_SECRET;
+  const headers = secret
+    ? {
+        "x-razorpay-signature": crypto
+          .createHmac("sha256", secret)
+          .update(rawBody)
+          .digest("hex"),
+      }
+    : {};
+  return webhookService.processWebhook(headers, rawBody, payload);
+}
 
 // Mock the external Razorpay functions
 jest.mock("../../../functions/razorPay", () => ({
@@ -233,7 +248,7 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
       },
     };
 
-    const webhookRes = await webhookService.processWebhook({}, "", payload);
+    const webhookRes = await processSignedWebhook(payload);
     expect(webhookRes.status).toBe("success");
 
     // Verify Withdrawal is COMPLETED
@@ -282,11 +297,7 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
       },
     };
 
-    const webhookRes = await webhookService.processWebhook(
-      {},
-      "",
-      failedPayload,
-    );
+    const webhookRes = await processSignedWebhook(failedPayload);
     expect(webhookRes.status).toBe("success");
 
     // Verify Withdrawal is FAILED

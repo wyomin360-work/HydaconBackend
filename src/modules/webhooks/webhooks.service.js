@@ -9,224 +9,172 @@ const {
 } = require("../../constants/notifications");
 const { formatNotification } = require("../../utils/heplers");
 
-/**
- * Verify webhook signature using HMAC SHA256.
- */
+const TERMINAL_STATUSES = ["COMPLETED", "FAILED", "REVERSED", "CANCELLED"];
+
 function verifySignature(rawBody, signature, secret) {
-  if (!secret) return true; // If no secret is configured, skip verification (useful for dev/test)
-  if (!signature) return false;
-
-  const hmac = crypto.createHmac("sha256", secret);
-  hmac.update(rawBody);
-  const digest = hmac.digest("hex");
-  return crypto.timingSafeEqual(
-    Buffer.from(digest, "ascii"),
-    Buffer.from(signature, "ascii"),
+  if (!Buffer.isBuffer(rawBody) || !signature || !secret) return false;
+  const expected = crypto
+    .createHmac("sha256", secret)
+    .update(rawBody)
+    .digest("hex");
+  const receivedBuffer = Buffer.from(String(signature), "ascii");
+  const expectedBuffer = Buffer.from(expected, "ascii");
+  return (
+    receivedBuffer.length === expectedBuffer.length &&
+    crypto.timingSafeEqual(expectedBuffer, receivedBuffer)
   );
 }
 
-/**
- * Process RazorpayX webhook event.
- */
-async function processWebhook(headers, rawBody, body) {
-  const signature = headers["x-razorpay-signature"];
-  const secret = process.env.RAZORPAYX_WEBHOOK_SECRET;
+function signatureError(message) {
+  const error = new Error(message);
+  error.statusCode = 401;
+  return error;
+}
 
-  if (secret) {
-    if (!verifySignature(rawBody, signature, secret)) {
-      throw new Error("Invalid webhook signature");
-    }
-  } else {
-    console.warn(
-      "⚠️ RAZORPAYX_WEBHOOK_SECRET is not configured. Webhook signature verification was bypassed.",
-    );
-  }
-
-  const { event, payload } = body;
-  if (!payload || !payload.payout || !payload.payout.entity) {
-    console.log("Ignored non-payout webhook event:", event);
-    return { status: "ignored", reason: "no payout entity" };
-  }
-
-  const payoutEntity = payload.payout.entity;
-  const payoutId = payoutEntity.id;
-  const referenceId = payoutEntity.reference_id; // Matches withdrawal _id
-
-  // Find the withdrawal request
-  let withdrawal;
-  if (mongoose.Types.ObjectId.isValid(referenceId)) {
-    withdrawal = await Withdrawal.findById(referenceId).populate("userId");
-  }
-
-  if (!withdrawal) {
-    withdrawal = await Withdrawal.findOne({
-      razorpayPayoutId: payoutId,
-    }).populate("userId");
-  }
-
-  if (!withdrawal) {
-    console.error(
-      `Withdrawal not found for webhook reference_id: ${referenceId}, payout_id: ${payoutId}`,
-    );
-    return { status: "error", reason: "withdrawal not found" };
-  }
-
-  const user = withdrawal.userId;
-  if (!user) {
-    console.error(`User not found for withdrawal: ${withdrawal._id}`);
-    return { status: "error", reason: "user not found" };
-  }
-
-  console.log(
-    `Processing Webhook Event: ${event} for Withdrawal: ${withdrawal._id}`,
-  );
-
-  // Prevent processing if status is already in terminal states (COMPLETED, CANCELLED)
-  if (["COMPLETED", "CANCELLED"].includes(withdrawal.status)) {
-    console.log(
-      `Withdrawal ${withdrawal._id} is already in terminal status: ${withdrawal.status}`,
-    );
-    return { status: "success", info: "already completed/cancelled" };
-  }
-
+function getTargetStatus(event, entity) {
   switch (event) {
+    case "payout.processed":
+      return "COMPLETED";
+    case "payout.failed":
+    case "payout.rejected":
+    case "payout.cancelled":
+      return "FAILED";
+    case "payout.reversed":
+      return "REVERSED";
+    case "payout.queued":
+    case "payout.pending":
     case "payout.initiated":
-    case "transaction.created":
-      // Payout is processing
-      if (withdrawal.status !== "PROCESSING") {
-        withdrawal.status = "PROCESSING";
-        if (!withdrawal.razorpayPayoutId) {
-          withdrawal.razorpayPayoutId = payoutId;
-        }
-        await withdrawal.save();
-      }
-      break;
-
-    case "payout.processed": {
-      const session = await mongoose.startSession();
-      try {
-        await session.withTransaction(async () => {
-          withdrawal.status = "COMPLETED";
-          withdrawal.utr = payoutEntity.utr || withdrawal.utr;
-          withdrawal.completedAt = new Date();
-          await withdrawal.save({ session });
-
-          // Add to user's total withdraw cash amount
-          user.totalWithdraw =
-            (user.totalWithdraw || 0) + withdrawal.cashAmount;
-          await user.save({ session });
-        });
-
-        // Send FCM notification
-        if (user.fcmTokens?.length && user.enableNotification) {
-          const localizedNotif = getNotification(
-            APP_NOTIFICATIONS.withdraw.success,
-            user.language,
-          );
-          sendFcmNotifications(
-            user.fcmTokens,
-            localizedNotif.title,
-            formatNotification(localizedNotif.body, {
-              amount: withdrawal.cashAmount,
-            }),
-          ).catch((err) =>
-            console.error("[FCM] Webhook processed notification failed:", err),
-          );
-        }
-      } catch (err) {
-        console.error("Failed to commit payout.processed transaction:", err);
-        throw err;
-      } finally {
-        await session.endSession();
-      }
-      break;
-    }
-
-    case "payout.failed": {
-      const failureReason = payoutEntity.failure_reason || "Payout failed";
-      const session = await mongoose.startSession();
-      try {
-        await session.withTransaction(async () => {
-          withdrawal.status = "FAILED";
-          withdrawal.failureReason = failureReason;
-          await withdrawal.save({ session });
-
-          // Refund coins back to user
-          user.hydaconCoins = (user.hydaconCoins || 0) + withdrawal.coinAmount;
-          await user.save({ session });
-        });
-
-        // Send FCM notification
-        if (user.fcmTokens?.length && user.enableNotification) {
-          const localizedNotif = getNotification(
-            APP_NOTIFICATIONS.withdraw.failed,
-            user.language,
-          );
-          sendFcmNotifications(
-            user.fcmTokens,
-            localizedNotif.title,
-            localizedNotif.body,
-          ).catch((err) =>
-            console.error("[FCM] Webhook failed notification failed:", err),
-          );
-        }
-      } catch (err) {
-        console.error("Failed to commit payout.failed transaction:", err);
-        throw err;
-      } finally {
-        await session.endSession();
-      }
-      break;
-    }
-
-    case "payout.reversed": {
-      const failureReason =
-        payoutEntity.failure_reason || "Payout reversed by bank";
-      const session = await mongoose.startSession();
-      try {
-        await session.withTransaction(async () => {
-          withdrawal.status = "REVERSED";
-          withdrawal.failureReason = failureReason;
-          await withdrawal.save({ session });
-
-          // Refund coins back to user
-          user.hydaconCoins = (user.hydaconCoins || 0) + withdrawal.coinAmount;
-          await user.save({ session });
-        });
-
-        // Send FCM notification (custom reversed message if configured, else fall back to failed)
-        if (user.fcmTokens?.length && user.enableNotification) {
-          const withdrawNotification = APP_NOTIFICATIONS.withdraw;
-          // Use custom reversed notification if defined, otherwise fall back to failed
-          const reversedNotif =
-            withdrawNotification.reversed || withdrawNotification.failed;
-          const localizedNotif = getNotification(reversedNotif, user.language);
-          sendFcmNotifications(
-            user.fcmTokens,
-            localizedNotif.title,
-            formatNotification(localizedNotif.body, {
-              amount: withdrawal.cashAmount,
-            }),
-          ).catch((err) =>
-            console.error("[FCM] Webhook reversed notification failed:", err),
-          );
-        }
-      } catch (err) {
-        console.error("Failed to commit payout.reversed transaction:", err);
-        throw err;
-      } finally {
-        await session.endSession();
-      }
-      break;
-    }
-
+    case "payout.updated":
+      if (entity.status === "processed") return "COMPLETED";
+      if (entity.status === "reversed") return "REVERSED";
+      if (["failed", "rejected", "cancelled"].includes(entity.status))
+        return "FAILED";
+      return "PROCESSING";
     default:
-      console.log("Unhandled webhook event type:", event);
+      return null;
   }
-
-  return { status: "success", processed: true };
 }
 
-module.exports = {
-  processWebhook,
-};
+async function processWebhook(headers, rawBody, body) {
+  const secret = process.env.RAZORPAYX_WEBHOOK_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      throw signatureError("RazorpayX webhook secret is not configured");
+    }
+    console.warn(
+      "RazorpayX webhook signature verification bypassed outside production",
+    );
+  } else if (
+    !verifySignature(rawBody, headers["x-razorpay-signature"], secret)
+  ) {
+    throw signatureError("Invalid webhook signature");
+  }
+
+  if (
+    !body ||
+    typeof body.event !== "string" ||
+    !body.payload?.payout?.entity
+  ) {
+    return { status: "ignored", reason: "invalid or non-payout payload" };
+  }
+  const { event, payload } = body;
+  const payout = payload.payout.entity;
+  const payoutId = payout.id;
+  const referenceId = payout.reference_id;
+  if (!payoutId) return { status: "ignored", reason: "payout id missing" };
+
+  const targetStatus = getTargetStatus(event, payout);
+  if (!targetStatus) return { status: "ignored", reason: "unsupported event" };
+
+  const lookup = [];
+  if (referenceId && mongoose.Types.ObjectId.isValid(referenceId))
+    lookup.push({ _id: referenceId });
+  lookup.push({ razorpayPayoutId: payoutId });
+  const withdrawal = await Withdrawal.findOne({ $or: lookup });
+  if (!withdrawal) {
+    // Acknowledge unknown payouts to stop retries; the warning allows operational follow-up.
+    console.error(
+      `RazorpayX payout webhook has no matching withdrawal: ${payoutId}`,
+    );
+    return { status: "ignored", reason: "withdrawal not found" };
+  }
+
+  const session = await mongoose.startSession();
+  let applied = false;
+  try {
+    await session.withTransaction(async () => {
+      applied = false;
+      const filter = {
+        _id: withdrawal._id,
+        status: { $nin: TERMINAL_STATUSES },
+      };
+      // A late non-terminal event must never regress a terminal state.
+      if (targetStatus === "PROCESSING")
+        filter.status = { $nin: TERMINAL_STATUSES };
+      const update = { $set: { status: targetStatus } };
+      if (payoutId) update.$set.razorpayPayoutId = payoutId;
+      if (targetStatus === "COMPLETED") {
+        update.$set.completedAt = new Date();
+        if (payout.utr) update.$set.utr = payout.utr;
+      }
+      if (["FAILED", "REVERSED"].includes(targetStatus)) {
+        update.$set.failureReason =
+          payout.failure_reason || `Payout ${targetStatus.toLowerCase()}`;
+      }
+
+      const result = await Withdrawal.updateOne(filter, update, { session });
+      if (!result.modifiedCount) return;
+      applied = true;
+
+      if (targetStatus === "COMPLETED") {
+        const userUpdate = await User.updateOne(
+          { _id: withdrawal.userId },
+          { $inc: { totalWithdraw: withdrawal.cashAmount } },
+          { session },
+        );
+        if (!userUpdate.matchedCount)
+          throw new Error("Withdrawal user not found");
+      } else if (["FAILED", "REVERSED"].includes(targetStatus)) {
+        const userUpdate = await User.updateOne(
+          { _id: withdrawal.userId },
+          { $inc: { hydaconCoins: withdrawal.coinAmount } },
+          { session },
+        );
+        if (!userUpdate.matchedCount)
+          throw new Error("Withdrawal user not found");
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  if (applied && ["COMPLETED", "FAILED", "REVERSED"].includes(targetStatus)) {
+    const user = await User.findById(withdrawal.userId);
+    if (user?.fcmTokens?.length && user.enableNotification) {
+      const notificationKey =
+        targetStatus === "COMPLETED" ? "success" : "failed";
+      const localized = getNotification(
+        APP_NOTIFICATIONS.withdraw[notificationKey],
+        user.language,
+      );
+      const message =
+        targetStatus === "COMPLETED"
+          ? formatNotification(localized.body, {
+              amount: withdrawal.cashAmount,
+            })
+          : localized.body;
+      sendFcmNotifications(user.fcmTokens, localized.title, message).catch(
+        (error) =>
+          console.error("[FCM] Withdrawal webhook notification failed:", error),
+      );
+    }
+  }
+
+  return {
+    status: "success",
+    processed: applied,
+    duplicateOrTerminal: !applied,
+  };
+}
+
+module.exports = { processWebhook, verifySignature };

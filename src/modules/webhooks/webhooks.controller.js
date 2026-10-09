@@ -14,8 +14,9 @@ exports.handleRazorpayXWebhook = async (req, res, next) => {
     });
   } catch (error) {
     console.error("Webhook processing error:", error);
-    // Respond with 400 to indicate failure to verify/process, but keep standard format
-    return res.status(400).json({
+    const statusCode =
+      error.statusCode || (error instanceof SyntaxError ? 400 : 500);
+    return res.status(statusCode).json({
       status: "Fail",
       message: error.message || "Failed to process webhook",
     });

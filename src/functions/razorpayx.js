@@ -5,11 +5,28 @@ const KEY_ID = process.env.RAZORPAYX_KEY_ID;
 const KEY_SECRET = process.env.RAZORPAYX_KEY_SECRET;
 const ACCOUNT_NUMBER = process.env.RAZORPAYX_ACCOUNT_NUMBER;
 
+// Use a deterministic UUID so a retry after a timeout carries the same key.
+// Deriving it from the immutable withdrawal reference makes retries safe even
+// when the original request timed out after Razorpay accepted it.
+function payoutIdempotencyKey(referenceId) {
+  const bytes = crypto
+    .createHash("sha256")
+    .update(String(referenceId))
+    .digest()
+    .subarray(0, 16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 const getAuthHeaders = () => {
   if (!KEY_ID || !KEY_SECRET) {
-    throw new Error(
+    const error = new Error(
       "RazorpayX key ID or key secret is not configured in environment variables",
     );
+    error.definitive = true;
+    throw error;
   }
   const token = Buffer.from(`${KEY_ID}:${KEY_SECRET}`).toString("base64");
   return {
@@ -90,9 +107,11 @@ async function createRazorpayPayout(
   narration,
 ) {
   if (!ACCOUNT_NUMBER) {
-    throw new Error(
+    const error = new Error(
       "RazorpayX account number is not configured in environment variables",
     );
+    error.definitive = true;
+    throw error;
   }
   try {
     const body = {
@@ -106,19 +125,12 @@ async function createRazorpayPayout(
       reference_id: referenceId,
       narration: narration || "Hydacon Payout",
     };
-    const bodyHash = crypto
-      .createHash("md5")
-      .update(JSON.stringify(body))
-      .digest("hex")
-      .substring(0, 8);
-    const idempotencyKey = `${referenceId}_${bodyHash}`;
-
     const response = await axios({
       method: "POST",
       url: "https://api.razorpay.com/v1/payouts",
       headers: {
         ...getAuthHeaders(),
-        "X-Payout-Idempotency": idempotencyKey,
+        "X-Payout-Idempotency": payoutIdempotencyKey(referenceId),
       },
       data: body,
     });
@@ -128,10 +140,15 @@ async function createRazorpayPayout(
       "Error creating RazorpayX payout:",
       error?.response?.data || error.message,
     );
-    throw new Error(
+    const payoutError = new Error(
       error?.response?.data?.error?.description ||
         "Failed to create RazorpayX payout",
     );
+    payoutError.providerStatusCode = error?.response?.status;
+    payoutError.definitive =
+      error?.definitive ||
+      (error?.response?.status >= 400 && error.response.status < 500);
+    throw payoutError;
   }
 }
 
@@ -139,4 +156,5 @@ module.exports = {
   createRazorpayContact,
   createRazorpayFundAccount,
   createRazorpayPayout,
+  payoutIdempotencyKey,
 };
