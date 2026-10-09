@@ -38,6 +38,10 @@ jest.mock("../../../functions/razorpayx", () => ({
   createPayoutFundAccount: jest.fn().mockResolvedValue({ id: "fa_test123" }),
   createPayout: jest.fn().mockResolvedValue({ id: "pout_test123" }),
   createIdempotencyKey: jest.fn().mockReturnValue("idempotency-test-key"),
+  verifyPayoutWebhook: jest.fn(),
+  getPayoutWebhookDeliveryId: jest.fn(
+    (headers) => headers["x-razorpay-event-id"] || null,
+  ),
 }));
 
 jest.mock("../../../functions/fcm", () => ({
