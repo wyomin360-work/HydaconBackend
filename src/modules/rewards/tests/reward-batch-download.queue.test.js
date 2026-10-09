@@ -2,6 +2,7 @@ jest.mock("../../../config/redis", () => null);
 jest.mock("bullmq", () => ({}));
 jest.mock("../reward-batch-download.service", () => ({
   createRewardBatchArchive: jest.fn(),
+  isRewardBatchArchiveAvailable: jest.fn().mockResolvedValue(true),
 }));
 jest.mock("../../../schemas/reward-batch-download-job.schema", () => ({
   findOne: jest.fn(),
@@ -15,6 +16,7 @@ jest.mock("../../../schemas/reward-batch-download-job.schema", () => ({
 const RewardBatchDownloadJob = require("../../../schemas/reward-batch-download-job.schema");
 const {
   createRewardBatchArchive,
+  isRewardBatchArchiveAvailable,
 } = require("../reward-batch-download.service");
 const {
   startInlineRewardBatchDownload,
@@ -59,6 +61,42 @@ describe("Mongo-backed inline reward ZIP jobs", () => {
       job.batchId,
       expect.any(Function),
       null,
+    );
+  });
+
+  it("reclaims a completed inline job when its cached S3 object is missing", async () => {
+    const oldJob = {
+      _id: "64c76dce4b8e9ca5ce208c61",
+      batchId: "64c76dce4b8e9ca5ce208c62",
+      rewardIds: [],
+      leaseOwner: "worker-old",
+      state: "completed",
+      finishedAt: new Date(),
+      updatedAt: new Date(),
+      result: { s3Key: "reward-batch-downloads/missing.zip" },
+    };
+    const replacementJob = {
+      ...oldJob,
+      leaseOwner: "worker-new",
+      state: "active",
+      toObject() {
+        return this;
+      },
+    };
+    RewardBatchDownloadJob.findOne.mockResolvedValue(oldJob);
+    RewardBatchDownloadJob.findOneAndUpdate.mockResolvedValue(replacementJob);
+    isRewardBatchArchiveAvailable.mockResolvedValueOnce(false);
+
+    const jobId = await startInlineRewardBatchDownload(oldJob.batchId);
+
+    expect(isRewardBatchArchiveAvailable).toHaveBeenCalledWith(oldJob.result);
+    expect(jobId).toBe(oldJob._id);
+    expect(RewardBatchDownloadJob.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: oldJob._id }),
+      expect.objectContaining({
+        $set: expect.objectContaining({ state: "active" }),
+      }),
+      { new: true },
     );
   });
 

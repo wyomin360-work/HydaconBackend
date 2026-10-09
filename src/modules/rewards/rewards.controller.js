@@ -32,8 +32,19 @@ async function enqueueRewardBatchZip(queue, batchId, rewardIds) {
       await existing.remove();
     } else if (state === "completed") {
       const completedAt = existing.finishedOn || existing.timestamp;
-      if (completedAt && Date.now() - completedAt < 50 * 60 * 1000)
-        return existing;
+      if (completedAt && Date.now() - completedAt < 50 * 60 * 1000) {
+        const archiveAvailable = Boolean(
+          existing.returnvalue &&
+            (await rewardBatchDownloadService.isRewardBatchArchiveAvailable(
+              existing.returnvalue,
+            )),
+        );
+        if (archiveAvailable) return existing;
+        console.warn("Cached reward ZIP is missing from S3; regenerating it", {
+          jobId,
+          s3Key: existing.returnvalue?.s3Key,
+        });
+      }
       await existing.remove();
     } else {
       return existing;

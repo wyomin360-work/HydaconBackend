@@ -44,11 +44,6 @@ function getArchiveStorage() {
 async function createS3ArchiveDownloadUrl(key, fileName) {
   const storage = getArchiveStorage();
   if (!storage) throw new Error("S3 archive storage is not configured");
-  // Signing succeeds without validating IAM access. Check read permission so
-  // an AccessDenied archive is not reported as ready to the administrator.
-  await storage.client.send(
-    new HeadObjectCommand({ Bucket: storage.bucket, Key: key }),
-  );
   return getSignedUrl(
     storage.client,
     new GetObjectCommand({
@@ -63,6 +58,27 @@ async function createS3ArchiveDownloadUrl(key, fileName) {
 async function refreshRewardBatchArchiveUrl(archive) {
   if (!archive?.s3Key) return archive?.downloadUrl;
   return createS3ArchiveDownloadUrl(archive.s3Key, archive.fileName);
+}
+
+async function isRewardBatchArchiveAvailable(archive) {
+  if (!archive?.s3Key) return true;
+  const storage = getArchiveStorage();
+  if (!storage) return false;
+  try {
+    await storage.client.send(
+      new HeadObjectCommand({ Bucket: storage.bucket, Key: archive.s3Key }),
+    );
+    return true;
+  } catch (error) {
+    if (
+      error?.name === "NotFound" ||
+      error?.name === "NoSuchKey" ||
+      error?.$metadata?.httpStatusCode === 404
+    ) {
+      return false;
+    }
+    throw error;
+  }
 }
 
 const safeFilePart = (value) =>
@@ -280,6 +296,8 @@ async function generateRewardBatchArchive(
     process.env.NODE_ENV === "test" ? null : getArchiveStorage();
   if (archiveStorage) {
     const key = `reward-batch-downloads/${token}.zip`;
+    let uploadResult;
+    let uploadSucceeded = false;
     try {
       const stats = await fsp.stat(archivePath);
       const uploadStartedAt = Date.now();
@@ -334,7 +352,7 @@ async function generateRewardBatchArchive(
         elapsedSeconds: 0,
         etaSeconds: null,
       });
-      await archiveStorage.client.send(
+      uploadResult = await archiveStorage.client.send(
         new PutObjectCommand({
           Bucket: archiveStorage.bucket,
           Key: key,
@@ -343,15 +361,27 @@ async function generateRewardBatchArchive(
           ContentType: "application/zip",
         }),
       );
+      uploadSucceeded = true;
       await uploadProgressChain;
-      const downloadUrl = await createS3ArchiveDownloadUrl(key, fileName);
-      await onProgress({
-        phase: "ready",
-        percent: 100,
-        completed: rewardCount,
-        total: totalItems,
-        etaSeconds: 0,
+      console.info("Reward batch ZIP uploaded to S3", {
+        bucket: archiveStorage.bucket,
+        key,
+        bytes: stats.size,
+        eTag: uploadResult?.ETag,
+        versionId: uploadResult?.VersionId,
       });
+      const downloadUrl = await createS3ArchiveDownloadUrl(key, fileName);
+      try {
+        await onProgress({
+          phase: "ready",
+          percent: 100,
+          completed: rewardCount,
+          total: totalItems,
+          etaSeconds: 0,
+        });
+      } catch (progressError) {
+        console.error("Unable to report completed ZIP progress:", progressError);
+      }
       await fsp.rm(archivePath, { force: true });
       return { fileName, rewardCount, downloadUrl, s3Key: key };
     } catch (error) {
@@ -361,19 +391,23 @@ async function generateRewardBatchArchive(
           : "Unable to store batch archive in S3; using local temporary storage:",
         error,
       );
-      await archiveStorage.client
-        .send(
-          new DeleteObjectsCommand({
-            Bucket: archiveStorage.bucket,
-            Delete: { Objects: [{ Key: key }], Quiet: true },
-          }),
-        )
-        .catch((cleanupError) => {
-          console.warn(
-            "Unable to remove incomplete reward ZIP from S3:",
-            cleanupError,
-          );
-        });
+      // Once PutObject succeeds, preserve the completed object even if URL
+      // signing or progress persistence fails. The TTL cleanup removes it later.
+      if (!uploadSucceeded) {
+        await archiveStorage.client
+          .send(
+            new DeleteObjectsCommand({
+              Bucket: archiveStorage.bucket,
+              Delete: { Objects: [{ Key: key }], Quiet: true },
+            }),
+          )
+          .catch((cleanupError) => {
+            console.warn(
+              "Unable to remove incomplete reward ZIP from S3:",
+              cleanupError,
+            );
+          });
+      }
       if (requiresRemoteArchive) {
         await fsp.rm(archivePath, { force: true }).catch(() => {});
         throw new Error(
@@ -509,4 +543,5 @@ module.exports = {
   cleanupExpiredArchives,
   cleanupExpiredS3Archives,
   refreshRewardBatchArchiveUrl,
+  isRewardBatchArchiveAvailable,
 };

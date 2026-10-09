@@ -2,6 +2,7 @@ jest.mock("../rewards.service", () => ({}));
 jest.mock("../reward-batch-download.service", () => ({
   createRewardBatchArchive: jest.fn(),
   getRewardBatchArchive: jest.fn(),
+  isRewardBatchArchiveAvailable: jest.fn().mockResolvedValue(true),
 }));
 jest.mock("../reward-batch-download.queue", () => ({
   getRewardBatchDownloadQueue: jest.fn(),
@@ -72,6 +73,35 @@ describe("reward batch download controller", () => {
     ).rejects.toMatchObject({
       statusCode: 410,
       message: expect.stringContaining("Please start the download again"),
+    });
+  });
+
+  it("includes the stable job ID in every status response", async () => {
+    downloadQueue.hasConfiguredSharedQueue.mockReturnValue(false);
+    downloadQueue.getRewardBatchDownloadJob.mockResolvedValue({
+      state: "active",
+      progress: { phase: "generating", percent: 12 },
+    });
+    const res = response();
+
+    await controller.rewardBatchDownloadStatus(
+      {
+        params: { jobId: "zip-job-123" },
+        protocol: "http",
+        get: () => "localhost",
+      },
+      res,
+    );
+
+    expect(res.json).toHaveBeenCalledWith({
+      status: "success",
+      data: {
+        data: {
+          status: "processing",
+          jobId: "zip-job-123",
+          progress: { phase: "generating", percent: 12 },
+        },
+      },
     });
   });
 
@@ -185,6 +215,39 @@ describe("reward batch download controller", () => {
       res,
     );
 
+    expect(staleJob.remove).toHaveBeenCalledTimes(1);
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(res.json).toHaveBeenCalledWith({
+      status: "success",
+      data: { data: { status: "processing", jobId: "fresh-job" } },
+    });
+  });
+
+  it("rebuilds a recently completed ZIP when its cached S3 object is missing", async () => {
+    archiveService.isRewardBatchArchiveAvailable.mockResolvedValueOnce(false);
+    const staleJob = {
+      id: "stale-job",
+      finishedOn: Date.now() - 1000,
+      returnvalue: { s3Key: "reward-batch-downloads/missing.zip" },
+      getState: jest.fn().mockResolvedValue("completed"),
+      remove: jest.fn().mockResolvedValue(undefined),
+    };
+    const add = jest.fn().mockResolvedValue({ id: "fresh-job" });
+    const getJob = jest
+      .fn()
+      .mockResolvedValueOnce(staleJob)
+      .mockResolvedValueOnce(null);
+    downloadQueue.getRewardBatchDownloadQueue.mockReturnValue({ add, getJob });
+
+    const res = response();
+    await controller.createRewardBatchDownload(
+      { params: { batchId: "64c76dce4b8e9ca5ce208c61" } },
+      res,
+    );
+
+    expect(archiveService.isRewardBatchArchiveAvailable).toHaveBeenCalledWith(
+      staleJob.returnvalue,
+    );
     expect(staleJob.remove).toHaveBeenCalledTimes(1);
     expect(add).toHaveBeenCalledTimes(1);
     expect(res.json).toHaveBeenCalledWith({

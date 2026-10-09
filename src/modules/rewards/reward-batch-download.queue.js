@@ -1,4 +1,7 @@
-const { createRewardBatchArchive } = require("./reward-batch-download.service");
+const {
+  createRewardBatchArchive,
+  isRewardBatchArchiveAvailable,
+} = require("./reward-batch-download.service");
 const { createHash, randomUUID } = require("crypto");
 const mongoose = require("mongoose");
 const RewardBatchDownloadJob = require("../../schemas/reward-batch-download-job.schema");
@@ -126,10 +129,22 @@ async function startInlineRewardBatchDownload(batchId, rewardIds = null) {
   let existing = await RewardBatchDownloadJob.findOne({ requestKey });
   if (existing) {
     const active = existing.state === "active" && existing.leaseUntil > now;
-    const reusable =
+    let reusable =
       existing.state === "completed" &&
       existing.finishedAt &&
       now - existing.finishedAt < INLINE_JOB_DEDUPE_MS;
+    if (reusable) {
+      reusable = Boolean(
+        existing.result &&
+          (await isRewardBatchArchiveAvailable(existing.result)),
+      );
+      if (!reusable) {
+        console.warn("Cached inline reward ZIP is missing from S3; regenerating it", {
+          jobId: String(existing._id),
+          s3Key: existing.result?.s3Key,
+        });
+      }
+    }
     if (active || reusable) return String(existing._id);
 
     const claimed = await RewardBatchDownloadJob.findOneAndUpdate(
