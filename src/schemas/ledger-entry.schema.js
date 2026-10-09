@@ -61,7 +61,4 @@ const ledgerEntrySchema = new mongoose.Schema(
 ledgerEntrySchema.index({ userId: 1, createdAt: -1 });
 ledgerEntrySchema.index({ withdrawalId: 1, createdAt: 1 });
 
-module.exports = mongoose.model(
-  "LedgerEntry",
-  ledgerEntrySchema,
-);
+module.exports = mongoose.model("LedgerEntry", ledgerEntrySchema);

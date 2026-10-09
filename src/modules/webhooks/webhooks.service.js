@@ -150,9 +150,7 @@ async function processWebhook(headers, rawBody, body, options = {}) {
   const eventType = typeof body?.event === "string" ? body.event : "unknown";
   const payout = body?.payload?.payout?.entity || null;
   const providerEventId =
-    deliverySource === "WEBHOOK"
-      ? getPayoutWebhookDeliveryId(headers)
-      : null;
+    deliverySource === "WEBHOOK" ? getPayoutWebhookDeliveryId(headers) : null;
   const payloadHash = crypto.createHash("sha256").update(rawBody).digest("hex");
   const dedupeKey = `${deliverySource.toLowerCase()}:sha256:${payloadHash}`;
   const safePayload = safeWebhookPayload(eventType, payout);

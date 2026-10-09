@@ -271,17 +271,15 @@ async function providerAuth(data) {
 
     if (userExist?.fcmTokens?.length && userExist?.enableNotification) {
       const localizedNotif = getNotification(
-        
         APP_NOTIFICATIONS.auth.login,
-       
+
         userExist.language,
       );
       sendFcmNotifications(
-        
         userExist.fcmTokens,
-       
+
         localizedNotif.title,
-       
+
         localizedNotif.body,
       ).catch((err) =>
         console.error("[FCM] provider login notification failed:", err),

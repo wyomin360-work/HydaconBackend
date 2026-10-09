@@ -32,7 +32,4 @@ const payoutEventSchema = new mongoose.Schema(
 
 payoutEventSchema.index({ processingStatus: 1, updatedAt: 1 });
 
-module.exports = mongoose.model(
-  "PayoutEvent",
-  payoutEventSchema,
-);
+module.exports = mongoose.model("PayoutEvent", payoutEventSchema);

@@ -113,16 +113,14 @@ describe("RazorpayX webhook handling", () => {
         return event;
       },
     );
-    PayoutEvent.updateOne.mockImplementation(
-      async (filter, update) => {
-        const event = [...events.values()].find(
-          (item) => String(item._id) === String(filter._id),
-        );
-        if (!event) return { modifiedCount: 0 };
-        Object.assign(event, update.$set);
-        return { modifiedCount: 1 };
-      },
-    );
+    PayoutEvent.updateOne.mockImplementation(async (filter, update) => {
+      const event = [...events.values()].find(
+        (item) => String(item._id) === String(filter._id),
+      );
+      if (!event) return { modifiedCount: 0 };
+      Object.assign(event, update.$set);
+      return { modifiedCount: 1 };
+    });
   });
 
   afterEach(() => {

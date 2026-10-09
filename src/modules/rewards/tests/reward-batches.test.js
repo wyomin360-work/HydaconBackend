@@ -75,7 +75,11 @@ describe("Reward batches", () => {
     Reward.find.mockReturnValue(query);
     Reward.countDocuments.mockResolvedValue(1);
 
-    const response = await rewardsService.listRewards({ page: 1, limit: 10, batchId });
+    const response = await rewardsService.listRewards({
+      page: 1,
+      limit: 10,
+      batchId,
+    });
 
     expect(Reward.find).toHaveBeenCalledWith({
       isDeleted: { $ne: true },
@@ -97,10 +101,17 @@ describe("Reward batches", () => {
     const batchId = "64a1b2c3d4e5f67890123457";
     const productId = "64a1b2c3d4e5f67890123456";
     Product.findById.mockReturnValue({
-      lean: jest.fn().mockResolvedValue({ name: "Regular 501 Grey", rewardPoints: 25 }),
+      lean: jest
+        .fn()
+        .mockResolvedValue({ name: "Regular 501 Grey", rewardPoints: 25 }),
     });
     Product.findByIdAndUpdate.mockReturnValue({
-      lean: jest.fn().mockResolvedValue({ name: "Regular 501 Grey", rewardBatchSequence: 1 }),
+      lean: jest
+        .fn()
+        .mockResolvedValue({
+          name: "Regular 501 Grey",
+          rewardBatchSequence: 1,
+        }),
     });
     RewardBatch.create.mockResolvedValue({ _id: batchId });
     Reward.insertMany.mockResolvedValue([]);
@@ -123,7 +134,9 @@ describe("Reward batches", () => {
     });
     const insertedRewards = Reward.insertMany.mock.calls[0][0];
     expect(insertedRewards).toHaveLength(3);
-    expect(insertedRewards.every((reward) => reward.batchId === batchId)).toBe(true);
+    expect(insertedRewards.every((reward) => reward.batchId === batchId)).toBe(
+      true,
+    );
     expect(RewardBatch.updateOne).toHaveBeenCalledWith(
       { _id: batchId },
       { $set: { status: "complete" } },
@@ -208,7 +221,9 @@ describe("Reward batches", () => {
     jest.spyOn(mongoose, "startSession").mockResolvedValue(session);
     const rewardQuery = {
       session: jest.fn().mockReturnThis(),
-      lean: jest.fn().mockResolvedValue({ _id: rewardId, batchId, active: true }),
+      lean: jest
+        .fn()
+        .mockResolvedValue({ _id: rewardId, batchId, active: true }),
     };
     Reward.findById.mockReturnValue(rewardQuery);
     Reward.findByIdAndUpdate.mockResolvedValue({ _id: rewardId });
@@ -238,12 +253,17 @@ describe("Reward batches", () => {
     jest.spyOn(mongoose, "startSession").mockResolvedValue(session);
     Reward.findById.mockReturnValue({
       session: jest.fn().mockReturnThis(),
-      lean: jest.fn().mockResolvedValue({ _id: rewardId, batchId, active: false }),
+      lean: jest
+        .fn()
+        .mockResolvedValue({ _id: rewardId, batchId, active: false }),
     });
     Reward.findByIdAndUpdate.mockResolvedValue({ _id: rewardId });
     RewardBatch.updateOne.mockResolvedValue({ modifiedCount: 1 });
 
-    await rewardsService.updateReward({ active: true, rewardPoints: 10 }, rewardId);
+    await rewardsService.updateReward(
+      { active: true, rewardPoints: 10 },
+      rewardId,
+    );
 
     expect(RewardBatch.updateOne).toHaveBeenCalledWith(
       { _id: batchId },
@@ -297,7 +317,10 @@ describe("Reward batches", () => {
       { batchId, isRedeemed: { $ne: true }, isDeleted: { $ne: true } },
       { $set: { expiresAt: new Date("2099-01-01T00:00:00.000Z"), point: 90 } },
     );
-    expect(response.data).toMatchObject({ matchedCount: 4, scannedRewardsSkipped: 1 });
+    expect(response.data).toMatchObject({
+      matchedCount: 4,
+      scannedRewardsSkipped: 1,
+    });
     await expect(
       rewardsService.updateRewardBatch(batchId, {
         expiresAt: "2000-01-01T00:00:00.000Z",
@@ -331,7 +354,10 @@ describe("Reward batches", () => {
       { batchId, active: { $ne: false }, isDeleted: { $ne: true } },
       { session },
     );
-    expect(response.data).toEqual({ physicallyDeletedCount: 3, softDeletedCount: 2 });
+    expect(response.data).toEqual({
+      physicallyDeletedCount: 3,
+      softDeletedCount: 2,
+    });
   });
 
   it("moves a scanned reward from active to inactive counts once", async () => {
@@ -344,12 +370,22 @@ describe("Reward batches", () => {
     jest.spyOn(mongoose, "startSession").mockResolvedValue(session);
     Reward.findById.mockReturnValue({
       session: jest.fn().mockReturnThis(),
-      lean: jest.fn().mockResolvedValue({ _id: rewardId, batchId, active: true, isRedeemed: false }),
+      lean: jest
+        .fn()
+        .mockResolvedValue({
+          _id: rewardId,
+          batchId,
+          active: true,
+          isRedeemed: false,
+        }),
     });
     Reward.findByIdAndUpdate.mockResolvedValue({ _id: rewardId });
     RewardBatch.updateOne.mockResolvedValue({ modifiedCount: 1 });
 
-    await rewardsService.markRewardRedeemed(rewardId, "64a1b2c3d4e5f67890123459");
+    await rewardsService.markRewardRedeemed(
+      rewardId,
+      "64a1b2c3d4e5f67890123459",
+    );
 
     expect(RewardBatch.updateOne).toHaveBeenCalledWith(
       { _id: batchId },

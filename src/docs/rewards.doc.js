@@ -12,13 +12,27 @@ module.exports = {
               required: ["page", "limit"],
               properties: {
                 page: { type: "integer", minimum: 1, default: 1 },
-                limit: { type: "integer", minimum: 1, maximum: 200, default: 20 },
+                limit: {
+                  type: "integer",
+                  minimum: 1,
+                  maximum: 200,
+                  default: 20,
+                },
                 productId: { type: "string" },
-                search: { type: "string", description: "Prefix search on batchUid" },
+                search: {
+                  type: "string",
+                  description: "Prefix search on batchUid",
+                },
                 startDate: { type: "string" },
                 endDate: { type: "string" },
-                activityStatus: { type: "string", enum: ["active", "inactive"] },
-                status: { type: "string", enum: ["creating", "complete", "failed"] },
+                activityStatus: {
+                  type: "string",
+                  enum: ["active", "inactive"],
+                },
+                status: {
+                  type: "string",
+                  enum: ["creating", "complete", "failed"],
+                },
               },
             },
           },
@@ -26,7 +40,8 @@ module.exports = {
       },
       responses: {
         200: {
-          description: "Paginated batches with product and active/inactive/total counts",
+          description:
+            "Paginated batches with product and active/inactive/total counts",
         },
       },
     },
@@ -35,13 +50,30 @@ module.exports = {
     get: {
       summary: "Get reward batch metadata by ID",
       tags: ["Rewards"],
-      parameters: [{ name: "batchId", in: "path", required: true, schema: { type: "string" } }],
-      responses: { 200: { description: "Reward batch metadata" }, 404: { description: "Batch not found" } },
+      parameters: [
+        {
+          name: "batchId",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+        },
+      ],
+      responses: {
+        200: { description: "Reward batch metadata" },
+        404: { description: "Batch not found" },
+      },
     },
     patch: {
       summary: "Update unscanned rewards in a batch",
       tags: ["Rewards"],
-      parameters: [{ name: "batchId", in: "path", required: true, schema: { type: "string" } }],
+      parameters: [
+        {
+          name: "batchId",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+        },
+      ],
       requestBody: {
         required: true,
         content: {
@@ -49,37 +81,76 @@ module.exports = {
             schema: {
               type: "object",
               properties: {
-                expiresAt: { type: "string", format: "date-time", description: "Must be in the future" },
-                endDate: { type: "string", format: "date-time", description: "Alias for expiresAt; must be in the future" },
+                expiresAt: {
+                  type: "string",
+                  format: "date-time",
+                  description: "Must be in the future",
+                },
+                endDate: {
+                  type: "string",
+                  format: "date-time",
+                  description: "Alias for expiresAt; must be in the future",
+                },
                 rewardPoints: { type: "integer", minimum: 0 },
               },
             },
           },
         },
       },
-      responses: { 200: { description: "Updated unscanned batch rewards" }, 400: { description: "Expiry date must be in the future" } },
+      responses: {
+        200: { description: "Updated unscanned batch rewards" },
+        400: { description: "Expiry date must be in the future" },
+      },
     },
     delete: {
       summary: "Delete a reward batch",
-      description: "Hard-deletes active rewards, soft-deletes inactive rewards, and hides the batch from batch listings.",
+      description:
+        "Hard-deletes active rewards, soft-deletes inactive rewards, and hides the batch from batch listings.",
       tags: ["Rewards"],
-      parameters: [{ name: "batchId", in: "path", required: true, schema: { type: "string" } }],
-      responses: { 200: { description: "Batch deleted" }, 404: { description: "Batch not found" } },
+      parameters: [
+        {
+          name: "batchId",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+        },
+      ],
+      responses: {
+        200: { description: "Batch deleted" },
+        404: { description: "Batch not found" },
+      },
     },
   },
   "/rewards/batches/{batchId}/deactivate": {
     patch: {
       summary: "Deactivate all active rewards in a batch",
       tags: ["Rewards"],
-      parameters: [{ name: "batchId", in: "path", required: true, schema: { type: "string" } }],
-      responses: { 200: { description: "Active batch rewards deactivated" }, 404: { description: "Batch not found" } },
+      parameters: [
+        {
+          name: "batchId",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+        },
+      ],
+      responses: {
+        200: { description: "Active batch rewards deactivated" },
+        404: { description: "Batch not found" },
+      },
     },
   },
   "/rewards/batches/{batchId}/rewards": {
     post: {
       summary: "List rewards belonging to a batch",
       tags: ["Rewards"],
-      parameters: [{ name: "batchId", in: "path", required: true, schema: { type: "string" } }],
+      parameters: [
+        {
+          name: "batchId",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+        },
+      ],
       requestBody: {
         required: true,
         content: {
@@ -87,12 +158,19 @@ module.exports = {
             schema: {
               type: "object",
               required: ["page", "limit"],
-              properties: { page: { type: "integer" }, limit: { type: "integer" }, search: { type: "string" } },
+              properties: {
+                page: { type: "integer" },
+                limit: { type: "integer" },
+                search: { type: "string" },
+              },
             },
           },
         },
       },
-      responses: { 200: { description: "Paginated rewards and batch metadata" }, 404: { description: "Batch not found" } },
+      responses: {
+        200: { description: "Paginated rewards and batch metadata" },
+        404: { description: "Batch not found" },
+      },
     },
   },
   "/rewards/list": {
@@ -232,7 +310,10 @@ module.exports = {
                     type: "object",
                     properties: {
                       rewardsAdded: { type: "boolean", example: true },
-                      batchId: { type: "string", example: "64a1b2c3d4e5f67890123456" },
+                      batchId: {
+                        type: "string",
+                        example: "64a1b2c3d4e5f67890123456",
+                      },
                       totalCount: { type: "integer", example: 10 },
                     },
                   },
@@ -350,10 +431,17 @@ module.exports = {
                 rewardIds: {
                   type: "array",
                   items: { type: "string" },
-                  example: ["64a1b2c3d4e5f67890123456", "64a1b2c3d4e5f67890123457"],
+                  example: [
+                    "64a1b2c3d4e5f67890123456",
+                    "64a1b2c3d4e5f67890123457",
+                  ],
                 },
                 rewardPoints: { type: "integer", minimum: 0, example: 100 },
-                expiresAt: { type: "string", format: "date-time", example: "2026-12-31T23:59:59.999Z" },
+                expiresAt: {
+                  type: "string",
+                  format: "date-time",
+                  example: "2026-12-31T23:59:59.999Z",
+                },
               },
             },
           },
@@ -396,10 +484,17 @@ module.exports = {
               type: "object",
               required: ["productId", "createdDate"],
               properties: {
-                productId: { type: "string", example: "64a1b2c3d4e5f67890123456" },
+                productId: {
+                  type: "string",
+                  example: "64a1b2c3d4e5f67890123456",
+                },
                 createdDate: { type: "string", example: "2026-09-25" },
                 rewardPoints: { type: "integer", minimum: 0, example: 100 },
-                expiresAt: { type: "string", format: "date-time", example: "2026-12-31T23:59:59.999Z" },
+                expiresAt: {
+                  type: "string",
+                  format: "date-time",
+                  example: "2026-12-31T23:59:59.999Z",
+                },
               },
             },
           },

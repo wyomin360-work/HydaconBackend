@@ -9,7 +9,15 @@ const path = require("path");
 const { createHash, randomUUID } = require("crypto");
 const { finished } = require("stream/promises");
 const { once } = require("events");
-const { S3Client, PutObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { Transform } = require("stream");
+const {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  ListObjectsV2Command,
+  DeleteObjectsCommand,
+} = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const Reward = require("../../schemas/reward.schema");
 const RewardBatch = require("../../schemas/reward-batch.schema");
@@ -23,23 +31,46 @@ let s3Client;
 const inlineArchivePromises = new Map();
 
 function getArchiveStorage() {
-  const { AWS_BUCKET_NAME, AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY } = process.env;
-  if (!AWS_BUCKET_NAME || !AWS_REGION || !AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY) {
-    return null;
-  }
+  const { AWS_BUCKET_NAME, AWS_REGION } = process.env;
+  if (!AWS_BUCKET_NAME || !AWS_REGION) return null;
   if (!s3Client) {
-    s3Client = new S3Client({
-      region: AWS_REGION,
-      credentials: { accessKeyId: AWS_ACCESS_KEY_ID, secretAccessKey: AWS_SECRET_ACCESS_KEY },
-    });
+    // Let the AWS SDK credential provider chain support environment keys,
+    // web identity, and ECS/EC2 task or instance roles.
+    s3Client = new S3Client({ region: AWS_REGION });
   }
   return { client: s3Client, bucket: AWS_BUCKET_NAME };
 }
 
-const safeFilePart = (value) =>
-  String(value || "Batch").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80);
+async function createS3ArchiveDownloadUrl(key, fileName) {
+  const storage = getArchiveStorage();
+  if (!storage) throw new Error("S3 archive storage is not configured");
+  // Signing succeeds without validating IAM access. Check read permission so
+  // an AccessDenied archive is not reported as ready to the administrator.
+  await storage.client.send(
+    new HeadObjectCommand({ Bucket: storage.bucket, Key: key }),
+  );
+  return getSignedUrl(
+    storage.client,
+    new GetObjectCommand({
+      Bucket: storage.bucket,
+      Key: key,
+      ResponseContentDisposition: `attachment; filename="${fileName}"`,
+    }),
+    { expiresIn: 60 * 60 },
+  );
+}
 
-async function createVoucherPdf(reward, productName, templateBytes) {
+async function refreshRewardBatchArchiveUrl(archive) {
+  if (!archive?.s3Key) return archive?.downloadUrl;
+  return createS3ArchiveDownloadUrl(archive.s3Key, archive.fileName);
+}
+
+const safeFilePart = (value) =>
+  String(value || "Batch")
+    .replace(/[^a-zA-Z0-9_-]/g, "_")
+    .slice(0, 80);
+
+async function createVoucherPdf(reward, productName, templateDoc) {
   const qrPayload = {
     productId: String(reward.productId),
     rewardId: String(reward._id),
@@ -47,13 +78,16 @@ async function createVoucherPdf(reward, productName, templateBytes) {
   };
   const qrBytes = await QRCode.toBuffer(JSON.stringify(qrPayload), {
     type: "png",
-    width: 1000,
+    // The voucher prints this QR at 84pt (~1.17in); 400px is enough for sharp
+    // print output and avoids generating unnecessarily large PNGs per reward.
+    width: 400,
     margin: 1,
     errorCorrectionLevel: "H",
   });
 
-  const pdfDoc = await PDFDocument.load(templateBytes);
-  const page = pdfDoc.getPages()[0];
+  const pdfDoc = await PDFDocument.create();
+  const [page] = await pdfDoc.copyPages(templateDoc, [0]);
+  pdfDoc.addPage(page);
   const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const qrImage = await pdfDoc.embedPng(qrBytes);
   const qrCenterX = 194.703 + 95 / 2;
@@ -91,7 +125,11 @@ async function createVoucherPdf(reward, productName, templateBytes) {
   return Buffer.from(await pdfDoc.save());
 }
 
-async function generateRewardBatchArchive(batchId, onProgress = () => {}, rewardIds = null) {
+async function generateRewardBatchArchive(
+  batchId,
+  onProgress = () => {},
+  rewardIds = null,
+) {
   if (!mongoose.isValidObjectId(batchId)) {
     sendFailResponse("invalid reward batch id", 400);
   }
@@ -102,13 +140,24 @@ async function generateRewardBatchArchive(batchId, onProgress = () => {}, reward
       rewardIds.length > 10000 ||
       rewardIds.some((id) => !mongoose.isValidObjectId(id)))
   ) {
-    sendFailResponse("rewardIds must contain between 1 and 10,000 valid reward IDs", 400);
+    sendFailResponse(
+      "rewardIds must contain between 1 and 10,000 valid reward IDs",
+      400,
+    );
   }
   const batch = await RewardBatch.findOne({
     _id: batchId,
     isDeleted: { $ne: true },
   }).lean();
   if (!batch) sendFailResponse("reward batch not found", 404);
+
+  const requiresRemoteArchive = process.env.NODE_ENV === "production";
+  if (requiresRemoteArchive && !getArchiveStorage()) {
+    sendFailResponse(
+      "S3 archive storage is required for production ZIP downloads. Configure AWS_BUCKET_NAME and AWS_REGION.",
+      503,
+    );
+  }
 
   const product = await Product.findById(batch.productId).select("name").lean();
   const productName = product?.name || "Batch";
@@ -117,6 +166,7 @@ async function generateRewardBatchArchive(batchId, onProgress = () => {}, reward
     isDeleted: { $ne: true },
   };
   if (rewardIds) rewardQuery._id = { $in: rewardIds };
+  const totalItems = rewardIds?.length || batch.totalCount || 0;
   const rewards = Reward.find(rewardQuery)
     .select("_id productId uidCode point active expiresAt")
     .lean()
@@ -138,24 +188,62 @@ async function generateRewardBatchArchive(batchId, onProgress = () => {}, reward
   archive.pipe(output);
 
   let rewardCount = 0;
+  const generationStartedAt = Date.now();
+  const rewardConcurrency = 4;
+  const reportProgress = async (phase, values = {}) => {
+    const elapsedSeconds = (Date.now() - generationStartedAt) / 1000;
+    const remainingItems = Math.max(0, totalItems - rewardCount);
+    const etaSeconds =
+      rewardCount > 0
+        ? Math.ceil((elapsedSeconds / rewardCount) * remainingItems)
+        : null;
+    const generatedPercent =
+      totalItems > 0 ? Math.floor((rewardCount / totalItems) * 85) : 0;
+    await onProgress({
+      phase,
+      percent: values.percent ?? generatedPercent,
+      completed: rewardCount,
+      total: totalItems,
+      elapsedSeconds: Math.floor(elapsedSeconds),
+      etaSeconds: values.etaSeconds ?? etaSeconds,
+      ...values,
+    });
+  };
+
   try {
     const templateBytes = await fsp.readFile(TEMPLATE_PATH);
-    for await (const reward of rewards) {
-      const pdf = await createVoucherPdf(reward, productName, templateBytes);
-      const voucherName = safeFilePart(reward.uidCode || reward._id);
-      const entryFinished = once(archive, "entry");
-      archive.append(pdf, { name: `Voucher_${voucherName}.pdf` });
-      await entryFinished;
-      rewardCount += 1;
-      const progressTotal = rewardIds?.length || batch.totalCount;
-      if (rewardCount % 50 === 0 || rewardCount === progressTotal) {
-        await onProgress(
-          progressTotal > 0
-            ? Math.min(99, Math.floor((rewardCount / progressTotal) * 100))
-            : 0,
+    const templateDoc = await PDFDocument.load(templateBytes);
+    await reportProgress("generating", { percent: 0, etaSeconds: null });
+    const appendRewardBatch = async (batchRewards) => {
+      const pdfs = await Promise.all(
+        batchRewards.map((reward) =>
+          createVoucherPdf(reward, productName, templateDoc),
+        ),
+      );
+      for (let index = 0; index < batchRewards.length; index += 1) {
+        const reward = batchRewards[index];
+        const voucherName = safeFilePart(
+          `${reward.uidCode || "Voucher"}_${reward._id}`,
         );
+        const entryFinished = once(archive, "entry");
+        archive.append(pdfs[index], { name: `Voucher_${voucherName}.pdf` });
+        await entryFinished;
+        rewardCount += 1;
+        if (rewardCount % 10 === 0 || rewardCount === totalItems) {
+          await reportProgress("generating");
+        }
+      }
+    };
+
+    let batchRewards = [];
+    for await (const reward of rewards) {
+      batchRewards.push(reward);
+      if (batchRewards.length >= rewardConcurrency) {
+        await appendRewardBatch(batchRewards);
+        batchRewards = [];
       }
     }
+    if (batchRewards.length) await appendRewardBatch(batchRewards);
 
     if (rewardCount === 0) {
       archive.abort();
@@ -164,9 +252,15 @@ async function generateRewardBatchArchive(batchId, onProgress = () => {}, reward
       sendFailResponse("No rewards found in this batch", 404);
     }
 
+    await reportProgress("finalizing", {
+      percent: 86,
+      etaSeconds: Math.max(
+        1,
+        Math.ceil(((Date.now() - generationStartedAt) / 1000) * 0.04),
+      ),
+    });
     await archive.finalize();
     await outputFinished;
-    await onProgress(100);
   } catch (error) {
     archive.abort();
     output.destroy();
@@ -182,35 +276,120 @@ async function generateRewardBatchArchive(batchId, onProgress = () => {}, reward
     : new Date().toISOString().slice(0, 10).replace(/-/g, "");
 
   const fileName = `Vouchers_${safeFilePart(productName)}_${createdDate}.zip`;
-  const archiveStorage = process.env.NODE_ENV === "test" ? null : getArchiveStorage();
+  const archiveStorage =
+    process.env.NODE_ENV === "test" ? null : getArchiveStorage();
   if (archiveStorage) {
     const key = `reward-batch-downloads/${token}.zip`;
     try {
       const stats = await fsp.stat(archivePath);
+      const uploadStartedAt = Date.now();
+      let bytesUploaded = 0;
+      let nextUploadReport = 0;
+      let uploadProgressChain = Promise.resolve();
+      const uploadProgressStream = new Transform({
+        transform(chunk, encoding, callback) {
+          bytesUploaded += chunk.length;
+          const uploadRatio = stats.size > 0 ? bytesUploaded / stats.size : 1;
+          const percent = Math.min(99, 86 + Math.floor(uploadRatio * 13));
+          if (percent >= nextUploadReport || bytesUploaded === stats.size) {
+            nextUploadReport = percent + 2;
+            const elapsedSeconds = (Date.now() - uploadStartedAt) / 1000;
+            const bytesPerSecond =
+              elapsedSeconds > 0 ? bytesUploaded / elapsedSeconds : 0;
+            const etaSeconds =
+              bytesPerSecond > 0
+                ? Math.ceil((stats.size - bytesUploaded) / bytesPerSecond)
+                : null;
+            uploadProgressChain = uploadProgressChain
+              .then(() =>
+                onProgress({
+                  phase: "uploading",
+                  percent,
+                  completed: rewardCount,
+                  total: totalItems,
+                  bytesUploaded,
+                  totalBytes: stats.size,
+                  elapsedSeconds: Math.floor(elapsedSeconds),
+                  etaSeconds,
+                }),
+              )
+              .catch((error) =>
+                console.error("Unable to report ZIP upload progress:", error),
+              );
+          }
+          callback(null, chunk);
+        },
+      });
+      const uploadReadStream = fs.createReadStream(archivePath);
+      uploadReadStream.on("error", (error) =>
+        uploadProgressStream.destroy(error),
+      );
+      await onProgress({
+        phase: "uploading",
+        percent: 86,
+        completed: rewardCount,
+        total: totalItems,
+        bytesUploaded: 0,
+        totalBytes: stats.size,
+        elapsedSeconds: 0,
+        etaSeconds: null,
+      });
       await archiveStorage.client.send(
         new PutObjectCommand({
           Bucket: archiveStorage.bucket,
           Key: key,
-          Body: fs.createReadStream(archivePath),
+          Body: uploadReadStream.pipe(uploadProgressStream),
           ContentLength: stats.size,
           ContentType: "application/zip",
         }),
       );
-      const downloadUrl = await getSignedUrl(
-        archiveStorage.client,
-        new GetObjectCommand({
-          Bucket: archiveStorage.bucket,
-          Key: key,
-          ResponseContentDisposition: `attachment; filename="${fileName}"`,
-        }),
-        { expiresIn: 60 * 60 },
-      );
+      await uploadProgressChain;
+      const downloadUrl = await createS3ArchiveDownloadUrl(key, fileName);
+      await onProgress({
+        phase: "ready",
+        percent: 100,
+        completed: rewardCount,
+        total: totalItems,
+        etaSeconds: 0,
+      });
       await fsp.rm(archivePath, { force: true });
-      return { fileName, rewardCount, downloadUrl };
+      return { fileName, rewardCount, downloadUrl, s3Key: key };
     } catch (error) {
-      console.error("Unable to store batch archive in S3; using local temporary storage:", error);
+      console.error(
+        requiresRemoteArchive
+          ? "Unable to store production batch archive in S3; failing the job:"
+          : "Unable to store batch archive in S3; using local temporary storage:",
+        error,
+      );
+      await archiveStorage.client
+        .send(
+          new DeleteObjectsCommand({
+            Bucket: archiveStorage.bucket,
+            Delete: { Objects: [{ Key: key }], Quiet: true },
+          }),
+        )
+        .catch((cleanupError) => {
+          console.warn(
+            "Unable to remove incomplete reward ZIP from S3:",
+            cleanupError,
+          );
+        });
+      if (requiresRemoteArchive) {
+        await fsp.rm(archivePath, { force: true }).catch(() => {});
+        throw new Error(
+          `Unable to store the reward ZIP in S3: ${error.message}`,
+        );
+      }
     }
   }
+
+  await onProgress({
+    phase: "ready",
+    percent: 100,
+    completed: rewardCount,
+    total: totalItems,
+    etaSeconds: 0,
+  });
 
   return {
     token,
@@ -219,8 +398,14 @@ async function generateRewardBatchArchive(batchId, onProgress = () => {}, reward
   };
 }
 
-function createRewardBatchArchive(batchId, onProgress = () => {}, rewardIds = null) {
-  const normalizedRewardIds = Array.isArray(rewardIds) ? [...rewardIds].sort() : null;
+function createRewardBatchArchive(
+  batchId,
+  onProgress = () => {},
+  rewardIds = null,
+) {
+  const normalizedRewardIds = Array.isArray(rewardIds)
+    ? [...rewardIds].sort()
+    : null;
   const key = createHash("sha256")
     .update(JSON.stringify([String(batchId), normalizedRewardIds]))
     .digest("hex");
@@ -229,9 +414,12 @@ function createRewardBatchArchive(batchId, onProgress = () => {}, rewardIds = nu
 
   const generation = generateRewardBatchArchive(batchId, onProgress, rewardIds);
   inlineArchivePromises.set(key, generation);
-  generation.finally(() => {
-    if (inlineArchivePromises.get(key) === generation) inlineArchivePromises.delete(key);
-  }).catch(() => {});
+  generation
+    .finally(() => {
+      if (inlineArchivePromises.get(key) === generation)
+        inlineArchivePromises.delete(key);
+    })
+    .catch(() => {});
   return generation;
 }
 
@@ -274,8 +462,51 @@ async function cleanupExpiredArchives() {
   );
 }
 
+async function cleanupExpiredS3Archives() {
+  const storage = getArchiveStorage();
+  if (!storage) return;
+
+  let continuationToken;
+  do {
+    const page = await storage.client.send(
+      new ListObjectsV2Command({
+        Bucket: storage.bucket,
+        Prefix: "reward-batch-downloads/",
+        ContinuationToken: continuationToken,
+        MaxKeys: 1000,
+      }),
+    );
+    const expiredObjects = (page.Contents || [])
+      .filter(
+        (object) =>
+          object.Key &&
+          object.LastModified &&
+          Date.now() - object.LastModified.getTime() > ARCHIVE_TTL_MS,
+      )
+      .map((object) => ({ Key: object.Key }));
+    if (expiredObjects.length) {
+      const deletion = await storage.client.send(
+        new DeleteObjectsCommand({
+          Bucket: storage.bucket,
+          Delete: { Objects: expiredObjects, Quiet: true },
+        }),
+      );
+      if (deletion.Errors?.length) {
+        throw new Error(
+          `Unable to delete ${deletion.Errors.length} expired reward ZIP object(s)`,
+        );
+      }
+    }
+    continuationToken = page.IsTruncated
+      ? page.NextContinuationToken
+      : undefined;
+  } while (continuationToken);
+}
+
 module.exports = {
   createRewardBatchArchive,
   getRewardBatchArchive,
   cleanupExpiredArchives,
+  cleanupExpiredS3Archives,
+  refreshRewardBatchArchiveUrl,
 };

@@ -17,6 +17,7 @@ const translate = require("./utils/translator");
 const {
   getRewardBatchArchive,
   cleanupExpiredArchives: cleanupRewardBatchArchives,
+  cleanupExpiredS3Archives: cleanupRewardBatchS3Archives,
 } = require("./modules/rewards/reward-batch-download.service");
 
 const app = express();
@@ -25,11 +26,23 @@ app.disable("etag"); // Always return 200 with body instead of 304 Not Modified
 cleanupRewardBatchArchives().catch((error) =>
   console.warn("Unable to clean expired reward batch archives:", error),
 );
-const archiveCleanupTimer = setInterval(() => {
-  cleanupRewardBatchArchives().catch((error) =>
-    console.warn("Unable to clean expired reward batch archives:", error),
-  );
-}, 60 * 60 * 1000);
+cleanupRewardBatchS3Archives().catch((error) =>
+  console.warn("Unable to clean expired reward batch archives from S3:", error),
+);
+const archiveCleanupTimer = setInterval(
+  () => {
+    cleanupRewardBatchArchives().catch((error) =>
+      console.warn("Unable to clean expired reward batch archives:", error),
+    );
+    cleanupRewardBatchS3Archives().catch((error) =>
+      console.warn(
+        "Unable to clean expired reward batch archives from S3:",
+        error,
+      ),
+    );
+  },
+  60 * 60 * 1000,
+);
 archiveCleanupTimer.unref();
 
 // Log every incoming request in the console
@@ -123,7 +136,9 @@ app.get("/reward-batch-downloads/:token", async (req, res, next) => {
   try {
     const archivePath = await getRewardBatchArchive(req.params?.token);
     if (!archivePath) {
-      return res.status(404).json({ status: "fail", message: "reward batch download has expired" });
+      return res
+        .status(404)
+        .json({ status: "fail", message: "reward batch download has expired" });
     }
     const fileName = String(req.query?.filename || "reward-batch-vouchers.zip")
       .replace(/[\\/\r\n"]/g, "_")

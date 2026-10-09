@@ -133,7 +133,10 @@ async function backfillExistingBatchUids() {
     }
     maxBatchNumberByProduct.set(
       productId.toString(),
-      Math.max(maxBatchNumberByProduct.get(productId.toString()) || 0, batchNumber),
+      Math.max(
+        maxBatchNumberByProduct.get(productId.toString()) || 0,
+        batchNumber,
+      ),
     );
 
     const batchUid =
@@ -176,7 +179,9 @@ async function updateBatchCounts(batchId) {
 }
 
 async function reconcileMigrationBatchCounts() {
-  const cursor = RewardBatch.find({}, { _id: 1 }).lean().cursor({ batchSize: 500 });
+  const cursor = RewardBatch.find({}, { _id: 1 })
+    .lean()
+    .cursor({ batchSize: 500 });
   let batchChunk = [];
 
   async function reconcileChunk(batches) {
@@ -194,7 +199,9 @@ async function reconcileMigrationBatchCounts() {
         },
       },
     ]);
-    const batchCounts = new Map(counts.map((count) => [count._id.toString(), count]));
+    const batchCounts = new Map(
+      counts.map((count) => [count._id.toString(), count]),
+    );
 
     await RewardBatch.bulkWrite(
       ids.map((id) => {
@@ -255,7 +262,9 @@ async function migrateRewardBatches() {
     { batchId: 1, productId: 1, createdAt: 1, _id: 1 },
     { name: REWARD_MIGRATION_INDEX },
   );
-  console.log("Connected to MongoDB. Grouping unbatched rewards by UTC date and product...");
+  console.log(
+    "Connected to MongoDB. Grouping unbatched rewards by UTC date and product...",
+  );
   await backfillExistingBatchUids();
 
   const cursor = Reward.aggregate([
@@ -298,10 +307,9 @@ async function migrateRewardBatches() {
   for await (const group of cursor) {
     const { productId, batchDate } = group._id;
     const batch = await getOrCreateMigrationBatch(productId, batchDate);
-    await Reward.updateMany(
-      makeGroupRewardQuery(productId, batchDate),
-      { $set: { batchId: batch._id } },
-    );
+    await Reward.updateMany(makeGroupRewardQuery(productId, batchDate), {
+      $set: { batchId: batch._id },
+    });
     const assignedCount = await updateBatchCounts(batch._id);
     groupCount += 1;
     rewardCount += assignedCount;
@@ -313,7 +321,9 @@ async function migrateRewardBatches() {
   await cursor.close();
   await reconcileMigrationBatchCounts();
   await Reward.collection.dropIndex(REWARD_MIGRATION_INDEX);
-  console.log(`Migration complete: ${groupCount} batches, ${rewardCount} rewards assigned.`);
+  console.log(
+    `Migration complete: ${groupCount} batches, ${rewardCount} rewards assigned.`,
+  );
 }
 
 if (require.main === module) {
@@ -327,4 +337,8 @@ if (require.main === module) {
     });
 }
 
-module.exports = { getBatchDateRange, makeGroupRewardQuery, migrateRewardBatches };
+module.exports = {
+  getBatchDateRange,
+  makeGroupRewardQuery,
+  migrateRewardBatches,
+};

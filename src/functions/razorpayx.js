@@ -52,15 +52,13 @@ function verifyPayoutWebhook(headers = {}, rawBody) {
       error.statusCode = 401;
       throw error;
     }
-    logger.warn("Payout webhook signature verification bypassed outside production");
+    logger.warn(
+      "Payout webhook signature verification bypassed outside production",
+    );
     return;
   }
   if (
-    !verifyWebhookSignature(
-      rawBody,
-      headers["x-razorpay-signature"],
-      secret,
-    )
+    !verifyWebhookSignature(rawBody, headers["x-razorpay-signature"], secret)
   ) {
     const error = new Error("Invalid webhook signature");
     error.statusCode = 401;

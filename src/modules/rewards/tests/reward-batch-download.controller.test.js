@@ -5,7 +5,9 @@ jest.mock("../reward-batch-download.service", () => ({
 }));
 jest.mock("../reward-batch-download.queue", () => ({
   getRewardBatchDownloadQueue: jest.fn(),
+  hasConfiguredSharedQueue: jest.fn(),
   getRewardBatchDownloadJob: jest.fn(),
+  startInlineRewardBatchDownload: jest.fn(),
 }));
 
 const controller = require("../rewards.controller");
@@ -20,57 +22,75 @@ const response = () => ({
 describe("reward batch download controller", () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it("generates inline and returns a download URL when the queue is unavailable", async () => {
+  it("starts inline generation with pollable progress when the queue is unavailable", async () => {
     downloadQueue.getRewardBatchDownloadQueue.mockReturnValue(null);
-    archiveService.createRewardBatchArchive.mockResolvedValue({
-      token: "123e4567-e89b-12d3-a456-426614174000",
-      fileName: "Vouchers_Product_20261009.zip",
-      rewardCount: 1001,
-    });
+    downloadQueue.hasConfiguredSharedQueue.mockReturnValue(false);
+    downloadQueue.startInlineRewardBatchDownload.mockReturnValue("inline-job");
     const res = response();
 
     await controller.createRewardBatchDownload(
       {
-        params: { batchId: "6ac76dce4b8e9ca5ce208c6" },
+        params: { batchId: "64c76dce4b8e9ca5ce208c61" },
         protocol: "https",
         get: (header) => (header === "host" ? "api.hydacon.test" : undefined),
       },
       res,
     );
 
-    expect(archiveService.createRewardBatchArchive).toHaveBeenCalledWith(
-      "6ac76dce4b8e9ca5ce208c6",
-      undefined,
+    expect(downloadQueue.startInlineRewardBatchDownload).toHaveBeenCalledWith(
+      "64c76dce4b8e9ca5ce208c61",
       null,
     );
     expect(res.json).toHaveBeenCalledWith({
       status: "success",
-      data: {
-        data: {
-          status: "completed",
-          token: "123e4567-e89b-12d3-a456-426614174000",
-          fileName: "Vouchers_Product_20261009.zip",
-          rewardCount: 1001,
-          downloadUrl:
-            "https://api.hydacon.test/reward-batch-downloads/123e4567-e89b-12d3-a456-426614174000?filename=Vouchers_Product_20261009.zip",
-        },
-      },
+      data: { data: { status: "processing", jobId: "inline-job" } },
+    });
+  });
+
+  it("returns a retryable error instead of creating a local job during a shared Redis outage", async () => {
+    downloadQueue.getRewardBatchDownloadQueue.mockReturnValue(null);
+    downloadQueue.hasConfiguredSharedQueue.mockReturnValue(true);
+
+    await expect(
+      controller.createRewardBatchDownload(
+        { params: { batchId: "64c76dce4b8e9ca5ce208c61" } },
+        response(),
+      ),
+    ).rejects.toMatchObject({ statusCode: 503 });
+    expect(downloadQueue.startInlineRewardBatchDownload).not.toHaveBeenCalled();
+  });
+
+  it("explains when a ZIP job was lost or expired and must be restarted", async () => {
+    downloadQueue.hasConfiguredSharedQueue.mockReturnValue(false);
+    downloadQueue.getRewardBatchDownloadJob.mockResolvedValue(null);
+
+    await expect(
+      controller.rewardBatchDownloadStatus(
+        { params: { jobId: "missing-job" } },
+        response(),
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 410,
+      message: expect.stringContaining("Please start the download again"),
     });
   });
 
   it("queues generation when BullMQ and Redis are available", async () => {
     const add = jest.fn().mockResolvedValue({ id: "job-123" });
-    downloadQueue.getRewardBatchDownloadQueue.mockReturnValue({ add });
+    downloadQueue.getRewardBatchDownloadQueue.mockReturnValue({
+      add,
+      getJob: jest.fn().mockResolvedValue(null),
+    });
     const res = response();
 
     await controller.createRewardBatchDownload(
-      { params: { batchId: "6ac76dce4b8e9ca5ce208c6" } },
+      { params: { batchId: "64c76dce4b8e9ca5ce208c61" } },
       res,
     );
 
     expect(add).toHaveBeenCalledWith(
       "generate-reward-batch-zip",
-      { batchId: "6ac76dce4b8e9ca5ce208c6", rewardIds: null },
+      { batchId: "64c76dce4b8e9ca5ce208c61", rewardIds: null },
       expect.objectContaining({
         attempts: 2,
         jobId: expect.stringMatching(/^batchzip-[a-f0-9]{64}$/),
@@ -85,20 +105,91 @@ describe("reward batch download controller", () => {
   });
 
   it("uses the same queue job for repeated requests for the same batch", async () => {
-    const add = jest.fn().mockResolvedValue({ id: "same-job" });
-    downloadQueue.getRewardBatchDownloadQueue.mockReturnValue({ add });
+    const jobs = new Map();
+    const add = jest.fn().mockImplementation(async (name, data, options) => {
+      const job = {
+        id: options.jobId,
+        getState: jest.fn().mockResolvedValue("active"),
+      };
+      jobs.set(options.jobId, job);
+      return job;
+    });
+    const getJob = jest
+      .fn()
+      .mockImplementation(async (jobId) => jobs.get(jobId) || null);
+    downloadQueue.getRewardBatchDownloadQueue.mockReturnValue({ add, getJob });
     const request = {
-      params: { batchId: "6ac76dce4b8e9ca5ce208c6" },
-      body: { rewardIds: ["6ac76dce4b8e9ca5ce208c7", "6ac76dce4b8e9ca5ce208c8"] },
+      params: { batchId: "64c76dce4b8e9ca5ce208c61" },
+      body: {
+        rewardIds: ["64c76dce4b8e9ca5ce208c62", "64c76dce4b8e9ca5ce208c63"],
+      },
     };
 
     await controller.createRewardBatchDownload(request, response());
     await controller.createRewardBatchDownload(
-      { ...request, body: { rewardIds: [...request.body.rewardIds].reverse() } },
+      {
+        ...request,
+        body: { rewardIds: [...request.body.rewardIds].reverse() },
+      },
       response(),
     );
 
-    expect(add).toHaveBeenCalledTimes(2);
-    expect(add.mock.calls[0][2].jobId).toBe(add.mock.calls[1][2].jobId);
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(getJob).toHaveBeenCalledTimes(2);
+  });
+
+  it("replaces failed queue jobs so users can retry a failed ZIP", async () => {
+    const failedJob = {
+      id: "old-job",
+      getState: jest.fn().mockResolvedValue("failed"),
+      remove: jest.fn().mockResolvedValue(undefined),
+    };
+    const add = jest.fn().mockResolvedValue({ id: "new-job" });
+    const getJob = jest
+      .fn()
+      .mockResolvedValueOnce(failedJob)
+      .mockResolvedValueOnce(null);
+    downloadQueue.getRewardBatchDownloadQueue.mockReturnValue({ add, getJob });
+
+    const res = response();
+    await controller.createRewardBatchDownload(
+      { params: { batchId: "64c76dce4b8e9ca5ce208c61" } },
+      res,
+    );
+
+    expect(failedJob.remove).toHaveBeenCalledTimes(1);
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(res.json).toHaveBeenCalledWith({
+      status: "success",
+      data: { data: { status: "processing", jobId: "new-job" } },
+    });
+  });
+
+  it("replaces completed jobs when their saved download URL is nearing expiry", async () => {
+    const staleJob = {
+      id: "stale-job",
+      finishedOn: Date.now() - 55 * 60 * 1000,
+      getState: jest.fn().mockResolvedValue("completed"),
+      remove: jest.fn().mockResolvedValue(undefined),
+    };
+    const add = jest.fn().mockResolvedValue({ id: "fresh-job" });
+    const getJob = jest
+      .fn()
+      .mockResolvedValueOnce(staleJob)
+      .mockResolvedValueOnce(null);
+    downloadQueue.getRewardBatchDownloadQueue.mockReturnValue({ add, getJob });
+
+    const res = response();
+    await controller.createRewardBatchDownload(
+      { params: { batchId: "64c76dce4b8e9ca5ce208c61" } },
+      res,
+    );
+
+    expect(staleJob.remove).toHaveBeenCalledTimes(1);
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(res.json).toHaveBeenCalledWith({
+      status: "success",
+      data: { data: { status: "processing", jobId: "fresh-job" } },
+    });
   });
 });

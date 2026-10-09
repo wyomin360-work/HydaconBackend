@@ -25,7 +25,4 @@ const payoutReconSchema = new mongoose.Schema(
 
 payoutReconSchema.index({ withdrawalId: 1, createdAt: -1 });
 
-module.exports = mongoose.model(
-  "PayoutRecon",
-  payoutReconSchema,
-);
+module.exports = mongoose.model("PayoutRecon", payoutReconSchema);

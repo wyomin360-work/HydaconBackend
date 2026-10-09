@@ -6,11 +6,11 @@ The `MongoDB backup` GitHub Actions workflow runs daily at midnight India time a
 
 In the repository, open **Settings → Secrets and variables → Actions** and add:
 
-| Name | Type | Value |
-| --- | --- | --- |
-| `MONGODB_BACKUP_URI` | Repository secret | MongoDB URI for a dedicated backup user with read-only access to the required database. |
-| `RCLONE_CONFIG_B64` | Repository secret | Base64-encoded rclone configuration file containing a Google Drive remote named `gdrive`. |
-| `AGE_RECIPIENT` | Repository variable | Public age recipient used to encrypt the archives. |
+| Name                 | Type                | Value                                                                                     |
+| -------------------- | ------------------- | ----------------------------------------------------------------------------------------- |
+| `MONGODB_BACKUP_URI` | Repository secret   | MongoDB URI for a dedicated backup user with read-only access to the required database.   |
+| `RCLONE_CONFIG_B64`  | Repository secret   | Base64-encoded rclone configuration file containing a Google Drive remote named `gdrive`. |
+| `AGE_RECIPIENT`      | Repository variable | Public age recipient used to encrypt the archives.                                        |
 
 Configure the `gdrive` remote locally with `rclone config`, then encode its config file without adding line breaks. For example, on macOS:
 

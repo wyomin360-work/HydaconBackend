@@ -83,8 +83,15 @@ async function generateAndSaveToken(admin) {
 // ----------------------
 async function createAdmin(adminData, createdBy) {
   const name = (adminData.userfullname || adminData.name || "").trim();
-  const email = (adminData.useremail || adminData.email || "").toLowerCase().trim();
-  const phone = (adminData.usermobile || adminData.phone || adminData.mobile || "").trim();
+  const email = (adminData.useremail || adminData.email || "")
+    .toLowerCase()
+    .trim();
+  const phone = (
+    adminData.usermobile ||
+    adminData.phone ||
+    adminData.mobile ||
+    ""
+  ).trim();
   const role = adminData.usertype || adminData.role || "ADMIN";
   const active =
     adminData.active !== undefined
@@ -99,7 +106,8 @@ async function createAdmin(adminData, createdBy) {
 
   //  Check if admin already exists
   const adminExist = await Admin.findOne({ email });
-  if (adminExist) sendFailResponse("An admin with this email address already exists");
+  if (adminExist)
+    sendFailResponse("An admin with this email address already exists");
 
   // 2Generate a secure temporary password if not provided
   const temporaryPassword =
@@ -124,8 +132,7 @@ async function createAdmin(adminData, createdBy) {
 
   // Send Welcome Email using .hbs template
   const loginUrl =
-    process.env.FRONTEND_URL ||
-    "https://hydaconadminwebapp.onrender.com";
+    process.env.FRONTEND_URL || "https://hydaconadminwebapp.onrender.com";
 
   try {
     await sendTemplateEmail(
@@ -264,8 +271,7 @@ async function registerAdmin(adminData, createdBy) {
 
   // Send Welcome Email
   const loginUrl =
-    process.env.FRONTEND_URL ||
-    "https://hydaconadminwebapp.onrender.com";
+    process.env.FRONTEND_URL || "https://hydaconadminwebapp.onrender.com";
 
   try {
     await sendTemplateEmail(

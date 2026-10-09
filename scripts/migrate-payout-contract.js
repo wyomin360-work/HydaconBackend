@@ -23,17 +23,15 @@ async function migratePayoutContract() {
     ["users", "razorpayContactId", "payoutContactId"],
     ["userbankaccounts", "razorpayFundAccountId", "payoutFundAccountId"],
     ["withdrawals", "razorpayPayoutId", "providerPayoutId"],
-    [
-      "withdrawals",
-      "lastRazorpayReconciledAt",
-      "lastPayoutReconciledAt",
-    ],
+    ["withdrawals", "lastRazorpayReconciledAt", "lastPayoutReconciledAt"],
   ];
   for (const [collection, oldField, newField] of fieldRenames) {
-    const conflict = await db.collection(collection).findOne(
-      { [oldField]: { $exists: true }, [newField]: { $exists: true } },
-      { projection: { _id: 1 } },
-    );
+    const conflict = await db
+      .collection(collection)
+      .findOne(
+        { [oldField]: { $exists: true }, [newField]: { $exists: true } },
+        { projection: { _id: 1 } },
+      );
     if (conflict) {
       throw new Error(
         `Both ${oldField} and ${newField} exist on ${collection} record ${conflict._id}`,
@@ -62,10 +60,12 @@ async function migratePayoutContract() {
   }
 
   for (const [collection, oldField, newField] of fieldRenames) {
-    const result = await db.collection(collection).updateMany(
-      { [oldField]: { $exists: true }, [newField]: { $exists: false } },
-      { $rename: { [oldField]: newField } },
-    );
+    const result = await db
+      .collection(collection)
+      .updateMany(
+        { [oldField]: { $exists: true }, [newField]: { $exists: false } },
+        { $rename: { [oldField]: newField } },
+      );
     if (result.modifiedCount) {
       console.info(
         `Renamed ${oldField} to ${newField} on ${result.modifiedCount} ${collection} records`,

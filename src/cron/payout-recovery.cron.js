@@ -2,7 +2,9 @@ const cron = require("node-cron");
 const Withdrawal = require("../schemas/withdrawal.schema");
 const PayoutRecon = require("../schemas/payout-recon.schema");
 const withdrawalsService = require("../modules/withdrawals/withdrawals.service");
-const { fetchPayoutByReference: fetchProviderPayoutByReference } = require("../functions/razorpayx");
+const {
+  fetchPayoutByReference: fetchProviderPayoutByReference,
+} = require("../functions/razorpayx");
 const { processWebhook } = require("../modules/webhooks/webhooks.service");
 const logger = require("../config/pino.config");
 

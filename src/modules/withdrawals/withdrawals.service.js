@@ -519,7 +519,8 @@ async function approveWithdrawal(adminId, withdrawalId) {
   if (!contactId) {
     try {
       const contact = await createPayoutContact(user);
-      if (!contact?.id) throw new Error("payout provider did not return a contact ID");
+      if (!contact?.id)
+        throw new Error("payout provider did not return a contact ID");
       contactId = contact.id;
       user.payoutContactId = contactId;
       await user.save();
@@ -529,7 +530,9 @@ async function approveWithdrawal(adminId, withdrawalId) {
         error: err.message,
       });
       await releaseClaim();
-      sendFailResponse(`payout provider Contact Creation Failed: ${err.message}`);
+      sendFailResponse(
+        `payout provider Contact Creation Failed: ${err.message}`,
+      );
     }
   }
 
@@ -558,7 +561,9 @@ async function approveWithdrawal(adminId, withdrawalId) {
         error: err.message,
       });
       await releaseClaim();
-      sendFailResponse(`payout provider Fund Account Creation Failed: ${err.message}`);
+      sendFailResponse(
+        `payout provider Fund Account Creation Failed: ${err.message}`,
+      );
     }
   }
 
@@ -656,7 +661,9 @@ async function approveWithdrawal(adminId, withdrawalId) {
     });
 
     if (definitive) await releaseClaim();
-    sendFailResponse(`payout provider Payout Initiation Failed: ${err.message}`);
+    sendFailResponse(
+      `payout provider Payout Initiation Failed: ${err.message}`,
+    );
   }
 
   const responseReceivedAt = new Date();

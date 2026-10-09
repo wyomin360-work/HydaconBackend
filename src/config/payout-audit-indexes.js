@@ -6,12 +6,9 @@ const logger = require("./pino.config");
 
 async function ensurePayoutAuditIndexes() {
   await Promise.all(
-    [
-      LedgerEntry,
-      PayoutAttempt,
-      PayoutEvent,
-      PayoutRecon,
-    ].map((model) => model.createIndexes()),
+    [LedgerEntry, PayoutAttempt, PayoutEvent, PayoutRecon].map((model) =>
+      model.createIndexes(),
+    ),
   );
   logger.info("Payout audit indexes are ready");
 }

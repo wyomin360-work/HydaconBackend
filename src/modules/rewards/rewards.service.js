@@ -177,7 +177,10 @@ async function listRewardBatches(data = {}) {
   if (activityStatus === "active") query.activeCount = { $gt: 0 };
   if (activityStatus === "inactive") query.inactiveCount = { $gt: 0 };
   if (search) {
-    const safeSearch = search.trim().toUpperCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const safeSearch = search
+      .trim()
+      .toUpperCase()
+      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     query.batchUid = { $regex: `^${safeSearch}` };
   }
   if (startDate || endDate) {
@@ -199,11 +202,13 @@ async function listRewardBatches(data = {}) {
       .lean(),
     RewardBatch.countDocuments(query),
   ]);
-  const batchesWithProduct = batches.map(({ productId: product, ...batch }) => ({
-    ...batch,
-    productId: product?._id || product,
-    product: product || null,
-  }));
+  const batchesWithProduct = batches.map(
+    ({ productId: product, ...batch }) => ({
+      ...batch,
+      productId: product?._id || product,
+      product: product || null,
+    }),
+  );
   return {
     data: {
       batches: batchesWithProduct,
@@ -216,32 +221,48 @@ async function listRewardBatches(data = {}) {
 }
 
 async function getRewardBatch(batchId) {
-  if (!mongoose.isValidObjectId(batchId)) sendFailResponse("invalid reward batch id", 400);
-  const batch = await RewardBatch.findOne({ _id: batchId, isDeleted: { $ne: true } })
+  if (!mongoose.isValidObjectId(batchId))
+    sendFailResponse("invalid reward batch id", 400);
+  const batch = await RewardBatch.findOne({
+    _id: batchId,
+    isDeleted: { $ne: true },
+  })
     .populate("productId", "name")
     .lean();
   if (!batch) sendFailResponse("reward batch not found", 404);
   const product = batch.productId;
   return {
-    data: { ...batch, productId: product?._id || product, product: product || null },
+    data: {
+      ...batch,
+      productId: product?._id || product,
+      product: product || null,
+    },
   };
 }
 
 async function listRewardsByBatch(batchId, data = {}) {
-  if (!mongoose.isValidObjectId(batchId)) sendFailResponse("invalid reward batch id", 400);
-  const batch = await RewardBatch.findOne({ _id: batchId, isDeleted: { $ne: true } }).lean();
+  if (!mongoose.isValidObjectId(batchId))
+    sendFailResponse("invalid reward batch id", 400);
+  const batch = await RewardBatch.findOne({
+    _id: batchId,
+    isDeleted: { $ne: true },
+  }).lean();
   if (!batch) sendFailResponse("reward batch not found", 404);
   const result = await listRewards({ ...data, batchId });
   return { data: { batch, ...result.data } };
 }
 
 async function deactivateRewardBatch(batchId) {
-  if (!mongoose.isValidObjectId(batchId)) sendFailResponse("invalid reward batch id", 400);
+  if (!mongoose.isValidObjectId(batchId))
+    sendFailResponse("invalid reward batch id", 400);
   let deactivatedCount = 0;
   const session = await mongoose.startSession();
   try {
     await session.withTransaction(async () => {
-      const batch = await RewardBatch.findOne({ _id: batchId, isDeleted: { $ne: true } })
+      const batch = await RewardBatch.findOne({
+        _id: batchId,
+        isDeleted: { $ne: true },
+      })
         .session(session)
         .lean();
       if (!batch) sendFailResponse("reward batch not found", 404);
@@ -255,7 +276,12 @@ async function deactivateRewardBatch(batchId) {
       if (deactivatedCount) {
         await RewardBatch.updateOne(
           { _id: batchId },
-          { $inc: { activeCount: -deactivatedCount, inactiveCount: deactivatedCount } },
+          {
+            $inc: {
+              activeCount: -deactivatedCount,
+              inactiveCount: deactivatedCount,
+            },
+          },
           { session },
         );
       }
@@ -270,7 +296,8 @@ async function deactivateRewardBatch(batchId) {
 }
 
 async function updateRewardBatch(batchId, updateData = {}) {
-  if (!mongoose.isValidObjectId(batchId)) sendFailResponse("invalid reward batch id", 400);
+  if (!mongoose.isValidObjectId(batchId))
+    sendFailResponse("invalid reward batch id", 400);
   const { rewardPoints } = updateData;
   const expiresAt = updateData.expiresAt || updateData.endDate;
   if (expiresAt) {
@@ -283,7 +310,10 @@ async function updateRewardBatch(batchId, updateData = {}) {
   if (expiresAt) update.expiresAt = new Date(expiresAt);
   if (rewardPoints !== undefined) update.point = rewardPoints;
 
-  const batch = await RewardBatch.findOne({ _id: batchId, isDeleted: { $ne: true } }).lean();
+  const batch = await RewardBatch.findOne({
+    _id: batchId,
+    isDeleted: { $ne: true },
+  }).lean();
   if (!batch) sendFailResponse("reward batch not found", 404);
   const result = await Reward.updateMany(
     { batchId, isRedeemed: { $ne: true }, isDeleted: { $ne: true } },
@@ -294,19 +324,24 @@ async function updateRewardBatch(batchId, updateData = {}) {
     data: {
       matchedCount: result.matchedCount ?? result.n ?? 0,
       modifiedCount: result.modifiedCount ?? result.nModified ?? 0,
-      scannedRewardsSkipped: batch.totalCount - (result.matchedCount ?? result.n ?? 0),
+      scannedRewardsSkipped:
+        batch.totalCount - (result.matchedCount ?? result.n ?? 0),
     },
   };
 }
 
 async function deleteRewardBatch(batchId) {
-  if (!mongoose.isValidObjectId(batchId)) sendFailResponse("invalid reward batch id", 400);
+  if (!mongoose.isValidObjectId(batchId))
+    sendFailResponse("invalid reward batch id", 400);
   let physicallyDeletedCount = 0;
   let softDeletedCount = 0;
   const session = await mongoose.startSession();
   try {
     await session.withTransaction(async () => {
-      const batch = await RewardBatch.findOne({ _id: batchId, isDeleted: { $ne: true } })
+      const batch = await RewardBatch.findOne({
+        _id: batchId,
+        isDeleted: { $ne: true },
+      })
         .session(session)
         .lean();
       if (!batch) sendFailResponse("reward batch not found", 404);
@@ -317,13 +352,15 @@ async function deleteRewardBatch(batchId) {
         { $set: { isDeleted: true, deletedAt } },
         { session },
       );
-      softDeletedCount = softDeleteResult.modifiedCount ?? softDeleteResult.nModified ?? 0;
+      softDeletedCount =
+        softDeleteResult.modifiedCount ?? softDeleteResult.nModified ?? 0;
 
       const hardDeleteResult = await Reward.deleteMany(
         { batchId, active: { $ne: false }, isDeleted: { $ne: true } },
         { session },
       );
-      physicallyDeletedCount = hardDeleteResult.deletedCount ?? hardDeleteResult.n ?? 0;
+      physicallyDeletedCount =
+        hardDeleteResult.deletedCount ?? hardDeleteResult.n ?? 0;
 
       await RewardBatch.updateOne(
         { _id: batchId },
@@ -348,7 +385,14 @@ async function markRewardRedeemed(rewardId, userId) {
       if (!reward || reward.isRedeemed || reward.isDeleted) return;
       await Reward.findByIdAndUpdate(
         rewardId,
-        { $set: { isRedeemed: true, redeemedAt: new Date(), redeemedBy: userId, active: false } },
+        {
+          $set: {
+            isRedeemed: true,
+            redeemedAt: new Date(),
+            redeemedBy: userId,
+            active: false,
+          },
+        },
         { session },
       );
       if (reward.batchId && reward.active !== false) {
@@ -360,7 +404,12 @@ async function markRewardRedeemed(rewardId, userId) {
   }
 }
 
-async function updateBatchStatusCounts(batchId, activeDelta, inactiveDelta, session) {
+async function updateBatchStatusCounts(
+  batchId,
+  activeDelta,
+  inactiveDelta,
+  session,
+) {
   if (!batchId || (!activeDelta && !inactiveDelta)) return;
   await RewardBatch.updateOne(
     { _id: batchId },
@@ -511,7 +560,10 @@ async function listRewardsGroupedByDate(data) {
 }
 
 async function rewardDetails(rewardId) {
-  const reward = await Reward.findOne({ _id: rewardId, isDeleted: { $ne: true } })
+  const reward = await Reward.findOne({
+    _id: rewardId,
+    isDeleted: { $ne: true },
+  })
     .populate("product")
     .populate("batchId", "batchUid batchNumber createdAt")
     .lean();
@@ -531,11 +583,7 @@ async function rewardDetails(rewardId) {
 async function createRewards(rewardData) {
   const { expiresAt, productId, count } = rewardData;
 
-  if (
-    !Number.isInteger(count) ||
-    count < 1 ||
-    count > MAX_REWARD_BATCH_SIZE
-  ) {
+  if (!Number.isInteger(count) || count < 1 || count > MAX_REWARD_BATCH_SIZE) {
     sendFailResponse(
       `For a single batch, a maximum of ${MAX_REWARD_BATCH_SIZE} rewards is allowed to create.`,
       400,
@@ -594,7 +642,10 @@ async function createRewards(rewardData) {
   if (!structuredRewards.length) sendFailResponse("failed to generate rewards");
   try {
     await Reward.insertMany(structuredRewards);
-    await RewardBatch.updateOne({ _id: batch._id }, { $set: { status: "complete" } });
+    await RewardBatch.updateOne(
+      { _id: batch._id },
+      { $set: { status: "complete" } },
+    );
   } catch (error) {
     const insertedCounts = await Reward.aggregate([
       { $match: { batchId: batch._id } },
@@ -622,7 +673,12 @@ async function createRewards(rewardData) {
   }
   return {
     message: `Created ${count} rewards`,
-    data: { rewardsAdded: true, batchId: batch._id, batchUid, totalCount: count },
+    data: {
+      rewardsAdded: true,
+      batchId: batch._id,
+      batchUid,
+      totalCount: count,
+    },
   };
 }
 
@@ -710,15 +766,28 @@ async function bulkUpdateRewards(rewardData) {
 }
 
 async function batchUpdateRewards(batchData) {
-  const { productId, createdDate, rewardPoints, expiresAt, batchId } = batchData;
+  const { productId, createdDate, rewardPoints, expiresAt, batchId } =
+    batchData;
 
   if (batchId) {
     const result = await Reward.updateMany(
       { batchId: new mongoose.Types.ObjectId(batchId), active: { $ne: false } },
-      { $set: { ...(rewardPoints !== undefined ? { point: rewardPoints } : {}), ...(expiresAt ? { expiresAt: new Date(expiresAt) } : {}) } },
+      {
+        $set: {
+          ...(rewardPoints !== undefined ? { point: rewardPoints } : {}),
+          ...(expiresAt ? { expiresAt: new Date(expiresAt) } : {}),
+        },
+      },
     );
     const matchedCount = result.matchedCount ?? result.n ?? 0;
-    return { message: "rewards updated", data: { matchedCount, modifiedCount: result.modifiedCount ?? result.nModified ?? 0, rewardsUpdated: matchedCount > 0 } };
+    return {
+      message: "rewards updated",
+      data: {
+        matchedCount,
+        modifiedCount: result.modifiedCount ?? result.nModified ?? 0,
+        rewardsUpdated: matchedCount > 0,
+      },
+    };
   }
 
   const startOfDay = new Date(createdDate);
@@ -759,7 +828,11 @@ async function batchUpdateRewards(batchData) {
     };
   }
 
-  return  await _executeBulkUpdateRewards({ rewardIds, rewardPoints, expiresAt });
+  return await _executeBulkUpdateRewards({
+    rewardIds,
+    rewardPoints,
+    expiresAt,
+  });
 }
 
 async function deleteReward(rewardId) {

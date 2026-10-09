@@ -53,7 +53,4 @@ payoutAttemptSchema.index(
 );
 payoutAttemptSchema.index({ payoutId: 1 }, { sparse: true });
 
-module.exports = mongoose.model(
-  "PayoutAttempt",
-  payoutAttemptSchema,
-);
+module.exports = mongoose.model("PayoutAttempt", payoutAttemptSchema);
