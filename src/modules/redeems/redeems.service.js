@@ -142,8 +142,8 @@ async function trackFraudAttempt(user) {
 async function resolveRewardByCode(rewardId, rewardUidCode) {
   if (!rewardUidCode) return null;
   const query = rewardId
-    ? { _id: rewardId, uidCode: rewardUidCode }
-    : { uidCode: rewardUidCode };
+    ? { _id: rewardId, uidCode: rewardUidCode, isDeleted: { $ne: true } }
+    : { uidCode: rewardUidCode, isDeleted: { $ne: true } };
   return Reward.findOne(query);
 }
 

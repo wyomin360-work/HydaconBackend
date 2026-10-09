@@ -23,7 +23,9 @@ const withdrawalSchema = new mongoose.Schema(
       default: WITHDRAWAL_STATUS.PENDING,
       index: true,
     },
-    razorpayPayoutId: { type: String, default: null, index: true },
+    providerPayoutId: { type: String, default: null, index: true },
+    payoutAttemptCount: { type: Number, default: 0, min: 0 },
+    lastPayoutReconciledAt: { type: Date, default: null },
     utr: { type: String, default: null },
     approvedBy: {
       type: mongoose.Schema.Types.ObjectId,

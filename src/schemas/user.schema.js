@@ -66,7 +66,7 @@ const userSchema = new mongoose.Schema(
       required: true,
       default: AuthTypes.EMAIL,
     },
-    razorpayContactId: { type: String, default: null },
+    payoutContactId: { type: String, default: null },
     roleId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Role",

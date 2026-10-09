@@ -1,9 +1,17 @@
+const { MAX_REWARD_BATCH_SIZE } = require("../constants/rewards");
+
 const createRewardRequestType = {
   type: "object",
   properties: {
     expiresAt: { type: "string", format: "date-time" },
     productId: { type: "string", pattern: "^[0-9a-fA-F]{24}$" },
-    count: { type: "integer", minimum: 1 },
+    count: {
+      type: "integer",
+      minimum: 1,
+      maximum: MAX_REWARD_BATCH_SIZE,
+      errorMessage:
+        "For a single batch, a maximum of 10,000 rewards is allowed to create.",
+    },
   },
   required: ["expiresAt", "productId", "count"],
   additionalProperties: false,
@@ -38,6 +46,7 @@ const listRewardRequestType = {
     page: { type: "integer", minimum: 1 },
     limit: { type: "integer", minimum: 1 },
     productId: { type: "string", pattern: "^[0-9a-fA-F]{24}$" },
+    batchId: { type: "string", pattern: "^[0-9a-fA-F]{24}$" },
     search: { type: "string" },
     sortBy: {
       type: "string",
@@ -84,6 +93,37 @@ const listGroupedRewardsRequestType = {
   additionalProperties: false,
 };
 
+const listRewardBatchesRequestType = {
+  type: "object",
+  properties: {
+    page: { type: "integer", minimum: 1 },
+    limit: { type: "integer", minimum: 1, maximum: 200 },
+    productId: { type: "string", pattern: "^[0-9a-fA-F]{24}$" },
+    search: { type: "string", maxLength: 64 },
+    startDate: { type: "string" },
+    endDate: { type: "string" },
+    activityStatus: { type: "string", enum: ["active", "inactive"] },
+    status: { type: "string", enum: ["creating", "complete", "failed"] },
+  },
+  required: ["page", "limit"],
+  additionalProperties: false,
+};
+
+const updateRewardBatchRequestType = {
+  type: "object",
+  properties: {
+    expiresAt: { type: "string", format: "date-time" },
+    endDate: { type: "string", format: "date-time" },
+    rewardPoints: { type: "integer", minimum: 0 },
+  },
+  anyOf: [
+    { required: ["expiresAt"] },
+    { required: ["endDate"] },
+    { required: ["rewardPoints"] },
+  ],
+  additionalProperties: false,
+};
+
 const bulkUpdateRewardRequestType = {
   type: "object",
   properties: {
@@ -105,11 +145,19 @@ const batchUpdateRewardRequestType = {
   properties: {
     productId: { type: "string", pattern: "^[0-9a-fA-F]{24}$" },
     createdDate: { type: "string" },
+    batchId: { type: "string", pattern: "^[0-9a-fA-F]{24}$" },
     rewardPoints: { type: "integer", minimum: 0 },
     expiresAt: { type: "string", format: "date-time" },
   },
-  required: ["productId", "createdDate"],
-  anyOf: [{ required: ["rewardPoints"] }, { required: ["expiresAt"] }],
+  allOf: [
+    {
+      anyOf: [
+        { required: ["productId", "createdDate"] },
+        { required: ["batchId"] },
+      ],
+    },
+    { anyOf: [{ required: ["rewardPoints"] }, { required: ["expiresAt"] }] },
+  ],
   additionalProperties: false,
 };
 
@@ -120,4 +168,6 @@ module.exports = {
   batchUpdateRewardRequestType,
   listRewardRequestType,
   listGroupedRewardsRequestType,
+  listRewardBatchesRequestType,
+  updateRewardBatchRequestType,
 };

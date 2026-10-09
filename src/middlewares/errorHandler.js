@@ -1,6 +1,11 @@
 const { logger } = require("../config/pino.config");
 
 const errorHandler = (err, req, res, next) => {
+  if (err.type === "entity.parse.failed") {
+    return res
+      .status(400)
+      .json({ status: "Fail", message: "Invalid JSON body" });
+  }
   err.statusCode = err.statusCode || 500;
   err.status = err.status || "error";
 

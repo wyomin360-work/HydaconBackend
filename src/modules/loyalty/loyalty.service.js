@@ -594,7 +594,10 @@ async function getUserLoyaltySummary(userId) {
   const lastCelebratedSeasonIdStr = progress.lastCelebratedSeasonId?.toString();
   const activeSeasonIdStr = activeSeason._id.toString();
 
-  if (!lastCelebratedSeasonIdStr || lastCelebratedSeasonIdStr !== activeSeasonIdStr) {
+  if (
+    !lastCelebratedSeasonIdStr ||
+    lastCelebratedSeasonIdStr !== activeSeasonIdStr
+  ) {
     seasonChangeEvent = {
       seasonChanged: true,
       season: {
@@ -1149,7 +1152,7 @@ async function claimTierReward(userId, { seasonId, tierId } = {}) {
       data: {
         claims: claimsProcessed,
         rewards: allClaimedRewards,
-        rewardsClalimed:true
+        rewardsClalimed: true,
       },
     };
   } catch (error) {

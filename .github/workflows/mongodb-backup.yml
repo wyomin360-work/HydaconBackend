@@ -1,0 +1,61 @@
+name: MongoDB backup
+
+on:
+  # 18:30 UTC is midnight in India (IST).
+  schedule:
+    - cron: "30 18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mongodb-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Install encryption and Drive tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes age rclone
+
+      - name: Create encrypted MongoDB backup
+        env:
+          MONGODB_BACKUP_URI: ${{ secrets.MONGODB_BACKUP_URI }}
+          AGE_RECIPIENT: ${{ vars.AGE_RECIPIENT }}
+        run: |
+          set -euo pipefail
+          : "${MONGODB_BACKUP_URI:?Set the MONGODB_BACKUP_URI repository secret}"
+          : "${AGE_RECIPIENT:?Set the AGE_RECIPIENT repository variable}"
+
+          backup_file="hydacon-$(date -u +%Y-%m-%dT%H-%M-%SZ).archive.gz"
+          docker run --rm \
+            --env MONGODB_BACKUP_URI \
+            --env BACKUP_FILE="$backup_file" \
+            --volume "$PWD:/backup" \
+            --entrypoint sh \
+            mongo:8.0 \
+            -c 'mongodump --uri="$MONGODB_BACKUP_URI" --archive="/backup/$BACKUP_FILE" --gzip'
+
+          age --recipient "$AGE_RECIPIENT" --output "$backup_file.age" "$backup_file"
+          rm "$backup_file"
+          echo "BACKUP_FILE=$backup_file.age" >> "$GITHUB_ENV"
+
+      - name: Upload backup to Google Drive and prune expired files
+        env:
+          RCLONE_CONFIG_B64: ${{ secrets.RCLONE_CONFIG_B64 }}
+        run: |
+          set -euo pipefail
+          : "${RCLONE_CONFIG_B64:?Set the RCLONE_CONFIG_B64 repository secret}"
+
+          mkdir -p "$HOME/.config/rclone"
+          printf '%s' "$RCLONE_CONFIG_B64" | base64 --decode > "$HOME/.config/rclone/rclone.conf"
+          chmod 600 "$HOME/.config/rclone/rclone.conf"
+
+          rclone copy "$BACKUP_FILE" "gdrive:HydaconBackups"
+          rclone delete "gdrive:HydaconBackups" --min-age 30d

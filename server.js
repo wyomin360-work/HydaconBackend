@@ -6,9 +6,39 @@ const { initCronJobs } = require("./src/cron");
 const app = require("./src/app");
 const Database = require("./src/config/mongodb.config");
 const { logger } = require("./src/config/pino.config");
+const {
+  ensurePayoutAuditIndexes,
+} = require("./src/config/payout-audit-indexes");
+const {
+  initializeRewardBatchDownloadQueue,
+  ensureInlineRewardBatchDownloadIndexes,
+} = require("./src/modules/rewards/reward-batch-download.queue");
 
 const PORT = process.env.PORT || 5000;
 const db = new Database();
+let server;
+let shutdownPromise;
+const {
+  closeRewardBatchDownloadQueue,
+} = require("./src/modules/rewards/reward-batch-download.queue");
+
+async function shutdown(signal, exitCode = 0) {
+  if (shutdownPromise) return shutdownPromise;
+  shutdownPromise = (async () => {
+    console.log(
+      `Received ${signal}; shutting down reward ZIP worker and HTTP server.`,
+    );
+    if (server) {
+      await new Promise((resolve) => server.close(resolve));
+    }
+    await closeRewardBatchDownloadQueue();
+    process.exit(exitCode);
+  })();
+  return shutdownPromise;
+}
+
+process.once("SIGTERM", () => shutdown("SIGTERM"));
+process.once("SIGINT", () => shutdown("SIGINT"));
 
 // Handle uncaught Errors
 process.on("uncaughtException", (err) => {
@@ -24,9 +54,7 @@ process.on("unhandledRejection", (err) => {
     { message: err.message, stack: err.stack },
     "Unhandled Rejection",
   );
-  server.close(() => {
-    process.exit(1); // Exit after cleanup
-  });
+  shutdown("unhandledRejection", 1);
 });
 
 // Add this in src/app.js, right after your 'app' constant is defined
@@ -38,9 +66,26 @@ app.use((req, res, next) => {
 const startServer = async () => {
   try {
     await db.connectDb();
+    await ensurePayoutAuditIndexes();
+    await ensureInlineRewardBatchDownloadIndexes();
+    if (process.env.NODE_ENV === "production" && !process.env.REDIS_URL) {
+      console.warn(
+        "Reward ZIP downloads are using Mongo-backed inline generation; configure REDIS_URL to enable BullMQ workers.",
+      );
+    }
+    try {
+      initializeRewardBatchDownloadQueue();
+    } catch (error) {
+      // Queue outages should not prevent the API from starting. When Redis is
+      // configured, download requests return a retryable 503 until it recovers.
+      console.error(
+        "Unable to initialize reward batch download worker:",
+        error,
+      );
+    }
     // await seedDefaultLoyaltyData();
     initCronJobs();
-    app.listen(PORT, () => {
+    server = app.listen(PORT, () => {
       console.log(`🚀 Server is running on port ${PORT}`);
       if (!isSmsConfigured()) {
         console.warn(

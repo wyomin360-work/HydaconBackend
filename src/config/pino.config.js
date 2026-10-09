@@ -2,18 +2,19 @@ const pino = require("pino");
 
 class Logger {
   constructor() {
+    const isProduction = ["prod", "production"].includes(
+      process.env.NODE_ENV?.toLowerCase(),
+    );
     this.logger = pino({
-      level: process.env.NODE_ENV === "prod" ? "info" : "debug",
-      transport:
-        process.env.NODE_ENV === "prod"
-          ? {
-              target: "pino-pretty",
-              options: { colorize: true },
-            }
-          : {
+      level: isProduction ? "info" : "debug",
+      ...(isProduction
+        ? {}
+        : {
+            transport: {
               target: "pino-pretty",
               options: { colorize: true },
             },
+          }),
     });
   }
 

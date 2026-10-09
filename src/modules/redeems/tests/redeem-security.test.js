@@ -88,6 +88,11 @@ describe("Redeem Security & Ban Logic", () => {
     User.findById = jest.fn().mockReturnValue({
       populate: jest.fn().mockResolvedValue(mockUser),
     });
+    Reward.findById = jest.fn().mockReturnValue({
+      session: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue(null),
+    });
+    Reward.findByIdAndUpdate = jest.fn().mockResolvedValue(null);
     User.findByIdAndUpdate = jest.fn().mockResolvedValue(true);
     AppConfig.findOne = jest.fn().mockReturnValue({
       lean: jest.fn().mockResolvedValue(mockConfig),
@@ -121,7 +126,7 @@ describe("Redeem Security & Ban Logic", () => {
 
     it("should reset the ban count if there is a successful redemption", async () => {
       // Simulate valid reward and product
-      Reward.findOne = jest.fn().mockResolvedValue({
+      const reward = {
         _id: "reward123",
         productId: "prod123",
         active: true,
@@ -129,6 +134,11 @@ describe("Redeem Security & Ban Logic", () => {
         expiresAt: new Date(Date.now() + 100000),
         point: 10,
         save: jest.fn().mockResolvedValue(true),
+      };
+      Reward.findOne = jest.fn().mockResolvedValue(reward);
+      Reward.findById = jest.fn().mockReturnValue({
+        session: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockResolvedValue(reward),
       });
 
       Product.findById = jest.fn().mockResolvedValue({

@@ -139,10 +139,12 @@ describe("Rewards Service - Bulk Update Unit Tests", () => {
       };
 
       Reward.find.mockReturnValue({
-        lean: jest.fn().mockResolvedValue([
-          { _id: "64a1b2c3d4e5f67890123456" },
-          { _id: "64a1b2c3d4e5f67890123457" },
-        ]),
+        lean: jest
+          .fn()
+          .mockResolvedValue([
+            { _id: "64a1b2c3d4e5f67890123456" },
+            { _id: "64a1b2c3d4e5f67890123457" },
+          ]),
       });
 
       Reward.updateMany.mockResolvedValue({

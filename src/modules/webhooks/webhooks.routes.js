@@ -4,6 +4,7 @@ const { handleError } = require("../../utils/heplers");
 
 const router = express.Router();
 
-router.post("/razorpayx", handleError(controller.handleRazorpayXWebhook));
+router.post("/payout", handleError(controller.handlePayoutWebhook));
+router.post("/razorpayx", handleError(controller.handlePayoutWebhook));
 
 module.exports = router;

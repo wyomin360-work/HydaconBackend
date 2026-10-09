@@ -14,9 +14,36 @@ const globalRoutes = require("./routes/global.routes");
 const webhookRoutes = require("./modules/webhooks/webhooks.routes");
 const AppError = require("./utils/appError");
 const translate = require("./utils/translator");
+const {
+  getRewardBatchArchive,
+  cleanupExpiredArchives: cleanupRewardBatchArchives,
+  cleanupExpiredS3Archives: cleanupRewardBatchS3Archives,
+} = require("./modules/rewards/reward-batch-download.service");
 
 const app = express();
 app.disable("etag"); // Always return 200 with body instead of 304 Not Modified
+
+cleanupRewardBatchArchives().catch((error) =>
+  console.warn("Unable to clean expired reward batch archives:", error),
+);
+cleanupRewardBatchS3Archives().catch((error) =>
+  console.warn("Unable to clean expired reward batch archives from S3:", error),
+);
+const archiveCleanupTimer = setInterval(
+  () => {
+    cleanupRewardBatchArchives().catch((error) =>
+      console.warn("Unable to clean expired reward batch archives:", error),
+    );
+    cleanupRewardBatchS3Archives().catch((error) =>
+      console.warn(
+        "Unable to clean expired reward batch archives from S3:",
+        error,
+      ),
+    );
+  },
+  60 * 60 * 1000,
+);
+archiveCleanupTimer.unref();
 
 // Log every incoming request in the console
 app.use((req, res, next) => {
@@ -52,7 +79,9 @@ app.use(
 app.use(
   express.json({
     verify: (req, res, buf) => {
-      req.rawBody = buf;
+      if (req.originalUrl.startsWith("/webhooks/")) {
+        req.rawBody = Buffer.from(buf);
+      }
     },
   }),
 );
@@ -99,6 +128,27 @@ app.get("/health", (req, res) => {
     database: isDbConnected ? "connected" : "disconnected",
     timestamp: new Date().toISOString(),
   });
+});
+
+// The high-entropy, short-lived token acts as a download capability so the browser
+// can stream the ZIP directly to disk without buffering it through the admin UI.
+app.get("/reward-batch-downloads/:token", async (req, res, next) => {
+  try {
+    const archivePath = await getRewardBatchArchive(req.params?.token);
+    if (!archivePath) {
+      return res
+        .status(404)
+        .json({ status: "fail", message: "reward batch download has expired" });
+    }
+    const fileName = String(req.query?.filename || "reward-batch-vouchers.zip")
+      .replace(/[\\/\r\n"]/g, "_")
+      .slice(0, 160);
+    return res.download(archivePath, fileName, (error) => {
+      if (error && !res.headersSent) next(error);
+    });
+  } catch (error) {
+    return next(error);
+  }
 });
 
 app.use((req, res, next) => {

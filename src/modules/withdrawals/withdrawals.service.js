@@ -3,11 +3,16 @@ const Withdrawal = require("../../schemas/withdrawal.schema");
 const UserBankAccount = require("../../schemas/user-bank-account.schema");
 const User = require("../../schemas/user.schema");
 const AppConfig = require("../../schemas/app-config.schema");
+const LedgerEntry = require("../../schemas/ledger-entry.schema");
+const PayoutAttempt = require("../../schemas/payout-attempt.schema");
+const PayoutEvent = require("../../schemas/payout-event.schema");
+const PayoutRecon = require("../../schemas/payout-recon.schema");
 const { decrypt } = require("../../utils/encryption");
 const {
-  createRazorpayContact,
-  createRazorpayFundAccount,
-  createRazorpayPayout,
+  createPayoutContact,
+  createPayoutFundAccount,
+  createPayout: createProviderPayout,
+  createIdempotencyKey: payoutIdempotencyKey,
 } = require("../../functions/razorpayx");
 const { sendFcmNotifications } = require("../../functions/fcm");
 const {
@@ -17,6 +22,36 @@ const {
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const { attachId, formatNotification } = require("../../utils/heplers");
 const { WITHDRAWAL_STATUS } = require("../../constants/withdrawals");
+const logger = require("../../config/pino.config");
+
+function safePayoutResponse(payout = {}) {
+  const allowedFields = [
+    "id",
+    "status",
+    "amount",
+    "currency",
+    "mode",
+    "purpose",
+    "reference_id",
+    "fees",
+    "tax",
+    "utr",
+    "failure_reason",
+  ];
+  return Object.fromEntries(
+    allowedFields
+      .filter((field) => payout[field] !== undefined && payout[field] !== null)
+      .map((field) => [
+        field,
+        typeof payout[field] === "string"
+          ? (field === "failure_reason"
+              ? payout[field].replace(/\d{6,}/g, "[redacted]")
+              : payout[field]
+            ).slice(0, 500)
+          : payout[field],
+      ]),
+  );
+}
 
 /**
  * User initiates a withdrawal request.
@@ -24,7 +59,13 @@ const { WITHDRAWAL_STATUS } = require("../../constants/withdrawals");
 async function createWithdrawal(userId, data) {
   const { cashAmount } = data;
 
-  if (!cashAmount || cashAmount <= 0) {
+  const amount = Number(cashAmount);
+  if (
+    !Number.isFinite(amount) ||
+    amount <= 0 ||
+    !Number.isSafeInteger(Math.round(amount * 100)) ||
+    Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-7
+  ) {
     sendFailResponse("Invalid withdrawal amount requested");
   }
 
@@ -35,7 +76,7 @@ async function createWithdrawal(userId, data) {
     sendFailResponse("Failed to load coin configuration settings");
   }
 
-  const coinAmount = Math.ceil(cashAmount / (coinConfig.coinValue || 1));
+  const coinAmount = Math.ceil(amount / (coinConfig.coinValue || 1));
 
   const user = await User.findById(userId);
   if (!user) {
@@ -56,12 +97,12 @@ async function createWithdrawal(userId, data) {
   }
 
   // Validate min and max limits
-  if (cashAmount < coinConfig.minWithdrawAmount) {
+  if (amount < coinConfig.minWithdrawAmount) {
     sendFailResponse(
       `Amount is below the minimum withdrawal limit of ₹${coinConfig.minWithdrawAmount}`,
     );
   }
-  if (cashAmount > coinConfig.maxWithdrawAmount) {
+  if (amount > coinConfig.maxWithdrawAmount) {
     sendFailResponse(
       `Amount exceeds the maximum withdrawal limit of ₹${coinConfig.maxWithdrawAmount}`,
     );
@@ -71,17 +112,13 @@ async function createWithdrawal(userId, data) {
   try {
     let withdrawal;
     await session.withTransaction(async () => {
-      // Deduct coins
-      user.hydaconCoins = user.hydaconCoins - coinAmount;
-      await user.save({ session });
-
       // Create withdrawal request in PENDING state
       const [newWithdrawal] = await Withdrawal.create(
         [
           {
             userId,
             coinAmount,
-            cashAmount,
+            cashAmount: amount,
             bankAccountId: bankAccount._id,
             status: WITHDRAWAL_STATUS.PENDING,
           },
@@ -89,6 +126,37 @@ async function createWithdrawal(userId, data) {
         { session },
       );
       withdrawal = newWithdrawal;
+
+      const userBeforeDebit = await User.findOneAndUpdate(
+        { _id: userId, hydaconCoins: { $gte: coinAmount } },
+        { $inc: { hydaconCoins: -coinAmount } },
+        { new: false, session },
+      );
+      if (!userBeforeDebit) sendFailResponse("Insufficient Hydacoins balance");
+
+      await LedgerEntry.create(
+        [
+          {
+            entryKey: `withdrawal:${withdrawal._id}:coin-debit`,
+            userId,
+            withdrawalId: withdrawal._id,
+            movement: "WITHDRAWAL_COIN_DEBIT",
+            asset: "HYDACON_COIN",
+            amount: coinAmount,
+            balanceBefore: userBeforeDebit.hydaconCoins,
+            balanceAfter: userBeforeDebit.hydaconCoins - coinAmount,
+            source: "USER_REQUEST",
+          },
+        ],
+        { session },
+      );
+    });
+    logger.info("Withdrawal requested and coin debit ledgered", {
+      withdrawalId: String(withdrawal._id),
+      userId: String(userId),
+      coinAmount,
+      cashAmount: amount,
+      currency: "INR",
     });
 
     // Send FCM notification
@@ -100,9 +168,12 @@ async function createWithdrawal(userId, data) {
       sendFcmNotifications(
         user.fcmTokens,
         localizedNotif.title,
-        formatNotification(localizedNotif.body, { amount: cashAmount }),
+        formatNotification(localizedNotif.body, { amount }),
       ).catch((err) =>
-        console.error("[FCM] Withdrawal initiated notification failed:", err),
+        logger.error("FCM withdrawal initiated notification failed", {
+          withdrawalId: String(withdrawal._id),
+          error: err.message,
+        }),
       );
     }
 
@@ -186,7 +257,7 @@ async function listWithdrawals(data) {
 
     query.$or = [
       { userId: { $in: userIds.map((u) => u._id) } },
-      { razorpayPayoutId: { $regex: search, $options: "i" } },
+      { providerPayoutId: { $regex: search, $options: "i" } },
       { utr: { $regex: search, $options: "i" } },
     ];
   }
@@ -224,7 +295,7 @@ async function listWithdrawals(data) {
  */
 async function getWithdrawalDetailsUser(id, userId) {
   const withdrawal = await Withdrawal.findOne({ _id: id, userId })
-    .populate("userId", "name email phone language razorpayContactId")
+    .populate("userId", "name email phone language payoutContactId")
     .populate("bankAccountId")
     .lean();
 
@@ -265,12 +336,47 @@ async function getWithdrawalDetailsUser(id, userId) {
  */
 async function getWithdrawalDetails(id) {
   const withdrawal = await Withdrawal.findById(id)
-    .populate("userId", "name email phone language razorpayContactId")
+    .populate("userId", "name email phone language payoutContactId")
     .populate("bankAccountId")
     .lean();
 
   if (!withdrawal) {
     sendFailResponse("Withdrawal request not found");
+  }
+
+  const [financialLedger, payoutAttempts, webhookEvents, reconciliations] =
+    await Promise.all([
+      LedgerEntry.find({ withdrawalId: withdrawal._id })
+        .sort({ createdAt: 1 })
+        .lean(),
+      PayoutAttempt.find({ withdrawalId: withdrawal._id })
+        .sort({ attemptNumber: 1 })
+        .lean(),
+      PayoutEvent.find({
+        $or: [
+          { referenceId: String(withdrawal._id) },
+          ...(withdrawal.providerPayoutId
+            ? [{ payoutId: withdrawal.providerPayoutId }]
+            : []),
+        ],
+      })
+        .sort({ createdAt: 1 })
+        .limit(100)
+        .lean(),
+      PayoutRecon.find({ withdrawalId: withdrawal._id })
+        .sort({ createdAt: -1 })
+        .limit(50)
+        .lean(),
+    ]);
+  const ledgerKeys = new Set(financialLedger.map((entry) => entry.entryKey));
+  const requiredLedgerKeys = [`withdrawal:${withdrawal._id}:coin-debit`];
+  if (["FAILED", "REVERSED", "CANCELLED"].includes(withdrawal.status)) {
+    requiredLedgerKeys.push(
+      `withdrawal:${withdrawal._id}:coin-refund:${withdrawal.status.toLowerCase()}`,
+    );
+  }
+  if (withdrawal.status === "COMPLETED") {
+    requiredLedgerKeys.push(`withdrawal:${withdrawal._id}:payout-completed`);
   }
 
   // Decrypt bank details for display
@@ -289,7 +395,7 @@ async function getWithdrawalDetails(id) {
       ifscCode,
       bankName: bankAccount.bankName,
       branchName: bankAccount.branchName,
-      razorpayFundAccountId: bankAccount.razorpayFundAccountId,
+      payoutFundAccountId: bankAccount.payoutFundAccountId,
     };
   }
 
@@ -298,6 +404,15 @@ async function getWithdrawalDetails(id) {
     id: withdrawal._id,
     user: withdrawal.userId,
     bankAccount: decryptedBank,
+    audit: {
+      coverage: requiredLedgerKeys.every((key) => ledgerKeys.has(key))
+        ? "COMPLETE"
+        : "INCOMPLETE_LEGACY_OR_MISSING_ENTRIES",
+      financialLedger,
+      payoutAttempts,
+      webhookEvents,
+      reconciliations,
+    },
   };
 }
 
@@ -340,111 +455,319 @@ async function getWithdrawalsSummary() {
  * Admin: Approves withdrawal, registers Contact/Fund Account, initiates Payout.
  */
 async function approveWithdrawal(adminId, withdrawalId) {
-  const withdrawal = await Withdrawal.findById(withdrawalId)
+  const now = new Date();
+  // Claim the request atomically. A stale PROCESSING record without a provider
+  // payout id can be retried safely because the payout idempotency key is stable.
+  const withdrawal = await Withdrawal.findOneAndUpdate(
+    {
+      _id: withdrawalId,
+      $or: [
+        { status: WITHDRAWAL_STATUS.PENDING },
+        {
+          status: WITHDRAWAL_STATUS.PROCESSING,
+          providerPayoutId: null,
+          approvedAt: { $lt: new Date(now.getTime() - 5 * 60 * 1000) },
+        },
+      ],
+    },
+    {
+      $set: {
+        status: WITHDRAWAL_STATUS.PROCESSING,
+        approvedBy: adminId,
+        approvedAt: now,
+      },
+    },
+    { new: true },
+  )
     .populate("userId")
     .populate("bankAccountId");
 
   if (!withdrawal) {
-    sendFailResponse("Withdrawal request not found");
-  }
-
-  if (withdrawal.status !== WITHDRAWAL_STATUS.PENDING) {
+    const current = await Withdrawal.findById(withdrawalId).select("status");
+    if (!current) sendFailResponse("Withdrawal request not found");
     sendFailResponse(
-      `Cannot approve a withdrawal with ${withdrawal.status} status`,
+      `Cannot approve a withdrawal with ${current.status} status`,
     );
   }
+
+  const releaseClaim = () =>
+    Withdrawal.updateOne(
+      {
+        _id: withdrawal._id,
+        status: WITHDRAWAL_STATUS.PROCESSING,
+        providerPayoutId: null,
+      },
+      {
+        $set: {
+          status: WITHDRAWAL_STATUS.PENDING,
+          approvedBy: null,
+          approvedAt: null,
+        },
+      },
+    );
 
   const user = withdrawal.userId;
   const bankAccount = withdrawal.bankAccountId;
 
   if (!user || !bankAccount) {
+    await releaseClaim();
     sendFailResponse("Associated user or bank details are missing");
   }
 
-  // 1. Create Razorpay Contact if missing
-  let contactId = user.razorpayContactId;
+  // 1. Create payout provider Contact if missing
+  let contactId = user.payoutContactId;
   if (!contactId) {
     try {
-      const contact = await createRazorpayContact(user);
+      const contact = await createPayoutContact(user);
+      if (!contact?.id)
+        throw new Error("payout provider did not return a contact ID");
       contactId = contact.id;
-      user.razorpayContactId = contactId;
+      user.payoutContactId = contactId;
       await user.save();
     } catch (err) {
-      sendFailResponse(`Razorpay Contact Creation Failed: ${err.message}`);
+      logger.error("payout provider contact setup failed for withdrawal", {
+        withdrawalId: String(withdrawal._id),
+        error: err.message,
+      });
+      await releaseClaim();
+      sendFailResponse(
+        `payout provider Contact Creation Failed: ${err.message}`,
+      );
     }
   }
 
-  // 2. Create Razorpay Fund Account if missing
-  let fundAccountId = bankAccount.razorpayFundAccountId;
+  // 2. Create payout provider Fund Account if missing
+  let fundAccountId = bankAccount.payoutFundAccountId;
   if (!fundAccountId) {
-    const accountNumber = decrypt(
-      bankAccount.accountNumber,
-      bankAccount.accountIv,
-    );
-    const ifscCode = decrypt(bankAccount.ifscCode, bankAccount.ifscIv);
-
     try {
-      const fundAccount = await createRazorpayFundAccount(contactId, {
+      const accountNumber = decrypt(
+        bankAccount.accountNumber,
+        bankAccount.accountIv,
+      );
+      const ifscCode = decrypt(bankAccount.ifscCode, bankAccount.ifscIv);
+      const fundAccount = await createPayoutFundAccount(contactId, {
         accountHolderName: bankAccount.accountHolderName,
         accountNumber,
         ifscCode,
       });
+      if (!fundAccount?.id)
+        throw new Error("payout provider did not return a fund account ID");
       fundAccountId = fundAccount.id;
-      bankAccount.razorpayFundAccountId = fundAccountId;
+      bankAccount.payoutFundAccountId = fundAccountId;
       await bankAccount.save();
     } catch (err) {
-      sendFailResponse(`Razorpay Fund Account Creation Failed: ${err.message}`);
+      logger.error("payout provider fund account setup failed for withdrawal", {
+        withdrawalId: String(withdrawal._id),
+        error: err.message,
+      });
+      await releaseClaim();
+      sendFailResponse(
+        `payout provider Fund Account Creation Failed: ${err.message}`,
+      );
     }
   }
 
-  // 3. Initiate Razorpay Payout (amount in paise, so cashAmount * 100)
+  // 3. Initiate payout provider Payout (amount in paise, so cashAmount * 100)
   const amountInPaise = Math.round(withdrawal.cashAmount * 100);
   const referenceId = withdrawal._id.toString(); // Idempotency key
   const narration = `Payout of ${withdrawal.cashAmount}`
     .replace(/[^a-zA-Z0-9 ]/g, "")
     .slice(0, 30);
 
+  const requestStartedAt = new Date();
+  const attemptSession = await mongoose.startSession();
+  let payoutAttempt;
   try {
-    const payout = await createRazorpayPayout(
+    await attemptSession.withTransaction(async () => {
+      const updatedWithdrawal = await Withdrawal.findOneAndUpdate(
+        {
+          _id: withdrawal._id,
+          status: WITHDRAWAL_STATUS.PROCESSING,
+          providerPayoutId: null,
+        },
+        { $inc: { payoutAttemptCount: 1 } },
+        { new: true, session: attemptSession },
+      );
+      if (!updatedWithdrawal) {
+        throw new Error("Withdrawal is no longer eligible for payout");
+      }
+      payoutAttempt = new PayoutAttempt({
+        withdrawalId: withdrawal._id,
+        attemptNumber: updatedWithdrawal.payoutAttemptCount,
+        adminId,
+        idempotencyKey: payoutIdempotencyKey(referenceId),
+        referenceId,
+        fundAccountId,
+        amount: amountInPaise,
+        currency: "INR",
+        mode: "IMPS",
+        purpose: "payout",
+        narration,
+        queueIfLowBalance: true,
+        requestStartedAt,
+        outcome: "REQUESTED",
+      });
+      await payoutAttempt.save({ session: attemptSession });
+    });
+    logger.info("payout provider attempt recorded", {
+      withdrawalId: String(withdrawal._id),
+      payoutAttemptId: String(payoutAttempt._id),
+      attemptNumber: payoutAttempt.attemptNumber,
+      idempotencyKey: payoutAttempt.idempotencyKey,
+      amount: amountInPaise,
+      currency: "INR",
+      mode: "IMPS",
+    });
+  } catch (error) {
+    await releaseClaim();
+    throw error;
+  } finally {
+    await attemptSession.endSession();
+  }
+
+  let payout;
+  try {
+    payout = await createProviderPayout(
       fundAccountId,
       amountInPaise,
       referenceId,
       narration,
     );
-
-    // Update Withdrawal status to PROCESSING
-    withdrawal.status = WITHDRAWAL_STATUS.PROCESSING;
-    withdrawal.razorpayPayoutId = payout.id;
-    withdrawal.approvedBy = adminId;
-    withdrawal.approvedAt = new Date();
-    await withdrawal.save();
-
-    // Send FCM notification
-    if (user.fcmTokens?.length && user.enableNotification) {
-      const localizedNotif = getNotification(
-        APP_NOTIFICATIONS.withdraw.approved,
-        user.language,
-      );
-      sendFcmNotifications(
-        user.fcmTokens,
-        localizedNotif.title,
-        localizedNotif.body,
-      ).catch((err) =>
-        console.error("[FCM] Withdrawal approval notification failed:", err),
-      );
-    }
-
-    return {
-      message: "Withdrawal approved. Payout is being processed.",
-      data: {
-        id: withdrawal._id,
-        status: withdrawal.status,
-        razorpayPayoutId: payout.id,
-      },
-    };
   } catch (err) {
-    sendFailResponse(`Razorpay Payout Initiation Failed: ${err.message}`);
+    const failedAt = new Date();
+    const definitive = Boolean(
+      err?.definitive ||
+      (err?.providerStatusCode >= 400 && err.providerStatusCode < 500),
+    );
+    await PayoutAttempt.updateOne(
+      { _id: payoutAttempt._id },
+      {
+        $set: {
+          outcome: definitive ? "DEFINITIVE_FAILURE" : "AMBIGUOUS_FAILURE",
+          httpStatus: err?.providerStatusCode || null,
+          providerErrorCode: err?.providerErrorCode || null,
+          providerErrorDescription: err.message,
+          responseReceivedAt: failedAt,
+          durationMs: failedAt.getTime() - requestStartedAt.getTime(),
+        },
+      },
+    );
+    logger.error("payout provider request failed", {
+      withdrawalId: String(withdrawal._id),
+      payoutAttemptId: String(payoutAttempt._id),
+      providerStatusCode: err?.providerStatusCode || null,
+      providerErrorCode: err?.providerErrorCode || null,
+      outcome: definitive ? "DEFINITIVE_FAILURE" : "AMBIGUOUS_FAILURE",
+    });
+
+    if (definitive) await releaseClaim();
+    sendFailResponse(
+      `payout provider Payout Initiation Failed: ${err.message}`,
+    );
   }
+
+  const responseReceivedAt = new Date();
+  const safeResponse = safePayoutResponse(payout);
+  if (!payout?.id) {
+    await PayoutAttempt.updateOne(
+      { _id: payoutAttempt._id },
+      {
+        $set: {
+          outcome: "AMBIGUOUS_FAILURE",
+          providerResponse: safeResponse,
+          responseReceivedAt,
+          durationMs: responseReceivedAt.getTime() - requestStartedAt.getTime(),
+          providerErrorDescription:
+            "payout provider response did not contain a payout ID",
+        },
+      },
+    );
+    logger.error("payout provider returned a payout response without an ID", {
+      withdrawalId: String(withdrawal._id),
+      payoutAttemptId: String(payoutAttempt._id),
+      providerResponse: safeResponse,
+    });
+    sendFailResponse("payout provider response did not contain a payout ID");
+  }
+
+  const responseSession = await mongoose.startSession();
+  try {
+    await responseSession.withTransaction(async () => {
+      await Withdrawal.updateOne(
+        {
+          _id: withdrawal._id,
+          status: {
+            $nin: [
+              WITHDRAWAL_STATUS.COMPLETED,
+              WITHDRAWAL_STATUS.FAILED,
+              WITHDRAWAL_STATUS.REVERSED,
+              WITHDRAWAL_STATUS.CANCELLED,
+            ],
+          },
+        },
+        { $set: { providerPayoutId: payout.id } },
+        { session: responseSession },
+      );
+      const attemptUpdate = await PayoutAttempt.updateOne(
+        { _id: payoutAttempt._id },
+        {
+          $set: {
+            outcome: "SUCCEEDED",
+            httpStatus: payout._httpStatus || null,
+            payoutId: payout.id,
+            providerStatus: payout.status || null,
+            providerResponse: safeResponse,
+            responseReceivedAt,
+            durationMs:
+              responseReceivedAt.getTime() - requestStartedAt.getTime(),
+          },
+        },
+        { session: responseSession },
+      );
+      if (!attemptUpdate.matchedCount)
+        throw new Error("Payout attempt audit record was not found");
+    });
+  } finally {
+    await responseSession.endSession();
+  }
+  const latestWithdrawal = await Withdrawal.findById(withdrawal._id).select(
+    "status",
+  );
+  logger.info("payout provider request accepted", {
+    withdrawalId: String(withdrawal._id),
+    payoutAttemptId: String(payoutAttempt._id),
+    payoutId: payout.id,
+    providerStatus: payout.status || null,
+    amount: amountInPaise,
+    currency: "INR",
+  });
+
+  // Send FCM notification
+  if (user.fcmTokens?.length && user.enableNotification) {
+    const localizedNotif = getNotification(
+      APP_NOTIFICATIONS.withdraw.approved,
+      user.language,
+    );
+    sendFcmNotifications(
+      user.fcmTokens,
+      localizedNotif.title,
+      localizedNotif.body,
+    ).catch((err) =>
+      logger.error("FCM withdrawal approval notification failed", {
+        withdrawalId: String(withdrawal._id),
+        error: err.message,
+      }),
+    );
+  }
+
+  return {
+    message: "Withdrawal approved. Payout is being processed.",
+    data: {
+      id: withdrawal._id,
+      status: latestWithdrawal?.status || WITHDRAWAL_STATUS.PROCESSING,
+      providerPayoutId: payout.id,
+    },
+  };
 }
 
 /**
@@ -475,16 +798,51 @@ async function cancelWithdrawal(adminId, withdrawalId, data) {
   const session = await mongoose.startSession();
   try {
     await session.withTransaction(async () => {
-      // Refund coins
-      user.hydaconCoins = user.hydaconCoins + withdrawal.coinAmount;
-      await user.save({ session });
-
-      // Update withdrawal to CANCELLED
-      withdrawal.status = WITHDRAWAL_STATUS.CANCELLED;
-      withdrawal.remarks = data.remarks || "Cancelled by admin";
-      withdrawal.approvedBy = adminId; // tracks who cancelled it
-      withdrawal.approvedAt = new Date();
-      await withdrawal.save({ session });
+      const cancelled = await Withdrawal.updateOne(
+        { _id: withdrawal._id, status: WITHDRAWAL_STATUS.PENDING },
+        {
+          $set: {
+            status: WITHDRAWAL_STATUS.CANCELLED,
+            remarks: data.remarks || "Cancelled by admin",
+            approvedBy: adminId,
+            approvedAt: new Date(),
+          },
+        },
+        { session },
+      );
+      if (!cancelled.modifiedCount) {
+        sendFailResponse("Withdrawal is no longer pending");
+      }
+      const userBeforeRefund = await User.findOneAndUpdate(
+        { _id: user._id },
+        { $inc: { hydaconCoins: withdrawal.coinAmount } },
+        { new: false, session },
+      );
+      if (!userBeforeRefund) sendFailResponse("User not found");
+      await LedgerEntry.create(
+        [
+          {
+            entryKey: `withdrawal:${withdrawal._id}:coin-refund:cancelled`,
+            userId: user._id,
+            withdrawalId: withdrawal._id,
+            movement: "WITHDRAWAL_COIN_REFUND",
+            asset: "HYDACON_COIN",
+            amount: withdrawal.coinAmount,
+            balanceBefore: userBeforeRefund.hydaconCoins || 0,
+            balanceAfter:
+              (userBeforeRefund.hydaconCoins || 0) + withdrawal.coinAmount,
+            source: "ADMIN_CANCELLATION",
+            sourceId: String(adminId),
+          },
+        ],
+        { session },
+      );
+    });
+    logger.info("Withdrawal cancelled and coin refund ledgered", {
+      withdrawalId: String(withdrawal._id),
+      userId: String(user._id),
+      adminId: String(adminId),
+      coinAmount: withdrawal.coinAmount,
     });
 
     // Send FCM notification
@@ -498,7 +856,10 @@ async function cancelWithdrawal(adminId, withdrawalId, data) {
         localizedNotif.title,
         localizedNotif.body,
       ).catch((err) =>
-        console.error("[FCM] Withdrawal cancelled notification failed:", err),
+        logger.error("FCM withdrawal cancelled notification failed", {
+          withdrawalId: String(withdrawal._id),
+          error: err.message,
+        }),
       );
     }
 
@@ -506,7 +867,7 @@ async function cancelWithdrawal(adminId, withdrawalId, data) {
       message: "Withdrawal request cancelled and coins refunded successfully",
       data: {
         id: withdrawal._id,
-        status: withdrawal.status,
+        status: WITHDRAWAL_STATUS.CANCELLED,
         refundedCoins: withdrawal.coinAmount,
       },
     };
