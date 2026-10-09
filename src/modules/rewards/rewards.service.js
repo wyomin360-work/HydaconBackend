@@ -1,11 +1,13 @@
 const mongoose = require("mongoose");
 const Product = require("../../schemas/product.schema");
 const Reward = require("../../schemas/reward.schema");
+const RewardBatch = require("../../schemas/reward-batch.schema");
 const Gift = require("../../schemas/gift.schema");
 const User = require("../../schemas/user.schema");
 const giftService = require("../gift/gift.service");
 const loyaltyService = require("../loyalty/loyalty.service");
 const { LOYALTY_TRANSACTION_SOURCES } = require("../../constants/loyalty");
+const { MAX_REWARD_BATCH_SIZE } = require("../../constants/rewards");
 const { randomHex, attachId } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 
@@ -21,10 +23,14 @@ async function listRewards(data) {
 
   const skip = (page - 1) * limit;
 
-  let query = {};
+  let query = { isDeleted: { $ne: true } };
 
   if (data?.productId) {
     query.productId = data.productId;
+  }
+
+  if (data?.batchId) {
+    query.batchId = new mongoose.Types.ObjectId(data.batchId);
   }
 
   if (filters.active !== undefined) {
@@ -140,6 +146,225 @@ async function listRewards(data) {
   };
 }
 
+async function listRewardBatches(data = {}) {
+  const {
+    page = 1,
+    limit = 20,
+    productId,
+    search,
+    startDate,
+    endDate,
+    activityStatus,
+    status = "complete",
+  } = data;
+  const query = { isDeleted: { $ne: true } };
+  if (productId) query.productId = new mongoose.Types.ObjectId(productId);
+  if (status) query.status = status;
+  if (activityStatus === "active") query.activeCount = { $gt: 0 };
+  if (activityStatus === "inactive") query.inactiveCount = { $gt: 0 };
+  if (search) {
+    const safeSearch = search.trim().toUpperCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    query.batchUid = { $regex: `^${safeSearch}` };
+  }
+  if (startDate || endDate) {
+    query.createdAt = {};
+    if (startDate) query.createdAt.$gte = new Date(startDate);
+    if (endDate) {
+      const end = new Date(endDate);
+      if (endDate.length === 10) end.setUTCHours(23, 59, 59, 999);
+      query.createdAt.$lte = end;
+    }
+  }
+
+  const [batches, total] = await Promise.all([
+    RewardBatch.find(query)
+      .populate("productId", "name")
+      .sort({ createdAt: -1, _id: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean(),
+    RewardBatch.countDocuments(query),
+  ]);
+  const batchesWithProduct = batches.map(({ productId: product, ...batch }) => ({
+    ...batch,
+    productId: product?._id || product,
+    product: product || null,
+  }));
+  return {
+    data: {
+      batches: batchesWithProduct,
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
+}
+
+async function getRewardBatch(batchId) {
+  if (!mongoose.isValidObjectId(batchId)) sendFailResponse("invalid reward batch id", 400);
+  const batch = await RewardBatch.findOne({ _id: batchId, isDeleted: { $ne: true } })
+    .populate("productId", "name")
+    .lean();
+  if (!batch) sendFailResponse("reward batch not found", 404);
+  const product = batch.productId;
+  return {
+    data: { ...batch, productId: product?._id || product, product: product || null },
+  };
+}
+
+async function listRewardsByBatch(batchId, data = {}) {
+  if (!mongoose.isValidObjectId(batchId)) sendFailResponse("invalid reward batch id", 400);
+  const batch = await RewardBatch.findOne({ _id: batchId, isDeleted: { $ne: true } }).lean();
+  if (!batch) sendFailResponse("reward batch not found", 404);
+  const result = await listRewards({ ...data, batchId });
+  return { data: { batch, ...result.data } };
+}
+
+function makeBatchUidPrefix(productName) {
+  const prefix = (productName || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z]/gi, "")
+    .slice(0, 3)
+    .toUpperCase();
+  return prefix || "PRD";
+}
+
+async function deactivateRewardBatch(batchId) {
+  if (!mongoose.isValidObjectId(batchId)) sendFailResponse("invalid reward batch id", 400);
+  let deactivatedCount = 0;
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const batch = await RewardBatch.findOne({ _id: batchId, isDeleted: { $ne: true } })
+        .session(session)
+        .lean();
+      if (!batch) sendFailResponse("reward batch not found", 404);
+
+      const result = await Reward.updateMany(
+        { batchId, active: { $ne: false }, isDeleted: { $ne: true } },
+        { $set: { active: false } },
+        { session },
+      );
+      deactivatedCount = result.matchedCount ?? result.n ?? 0;
+      if (deactivatedCount) {
+        await RewardBatch.updateOne(
+          { _id: batchId },
+          { $inc: { activeCount: -deactivatedCount, inactiveCount: deactivatedCount } },
+          { session },
+        );
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+  return {
+    message: "reward batch deactivated",
+    data: { deactivatedCount },
+  };
+}
+
+async function updateRewardBatch(batchId, updateData = {}) {
+  if (!mongoose.isValidObjectId(batchId)) sendFailResponse("invalid reward batch id", 400);
+  const { rewardPoints } = updateData;
+  const expiresAt = updateData.expiresAt || updateData.endDate;
+  if (expiresAt) {
+    const expiryTime = new Date(expiresAt).getTime();
+    if (!Number.isFinite(expiryTime) || expiryTime <= Date.now()) {
+      sendFailResponse("new expiry date must be in the future", 400);
+    }
+  }
+  const update = {};
+  if (expiresAt) update.expiresAt = new Date(expiresAt);
+  if (rewardPoints !== undefined) update.point = rewardPoints;
+
+  const batch = await RewardBatch.findOne({ _id: batchId, isDeleted: { $ne: true } }).lean();
+  if (!batch) sendFailResponse("reward batch not found", 404);
+  const result = await Reward.updateMany(
+    { batchId, isRedeemed: { $ne: true }, isDeleted: { $ne: true } },
+    { $set: update },
+  );
+  return {
+    message: "reward batch updated",
+    data: {
+      matchedCount: result.matchedCount ?? result.n ?? 0,
+      modifiedCount: result.modifiedCount ?? result.nModified ?? 0,
+      scannedRewardsSkipped: batch.totalCount - (result.matchedCount ?? result.n ?? 0),
+    },
+  };
+}
+
+async function deleteRewardBatch(batchId) {
+  if (!mongoose.isValidObjectId(batchId)) sendFailResponse("invalid reward batch id", 400);
+  let physicallyDeletedCount = 0;
+  let softDeletedCount = 0;
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const batch = await RewardBatch.findOne({ _id: batchId, isDeleted: { $ne: true } })
+        .session(session)
+        .lean();
+      if (!batch) sendFailResponse("reward batch not found", 404);
+
+      const deletedAt = new Date();
+      const softDeleteResult = await Reward.updateMany(
+        { batchId, active: false, isDeleted: { $ne: true } },
+        { $set: { isDeleted: true, deletedAt } },
+        { session },
+      );
+      softDeletedCount = softDeleteResult.modifiedCount ?? softDeleteResult.nModified ?? 0;
+
+      const hardDeleteResult = await Reward.deleteMany(
+        { batchId, active: { $ne: false }, isDeleted: { $ne: true } },
+        { session },
+      );
+      physicallyDeletedCount = hardDeleteResult.deletedCount ?? hardDeleteResult.n ?? 0;
+
+      await RewardBatch.updateOne(
+        { _id: batchId },
+        { $set: { isDeleted: true, deletedAt } },
+        { session },
+      );
+    });
+  } finally {
+    await session.endSession();
+  }
+  return {
+    message: "reward batch deleted",
+    data: { physicallyDeletedCount, softDeletedCount },
+  };
+}
+
+async function markRewardRedeemed(rewardId, userId) {
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const reward = await Reward.findById(rewardId).session(session).lean();
+      if (!reward || reward.isRedeemed || reward.isDeleted) return;
+      await Reward.findByIdAndUpdate(
+        rewardId,
+        { $set: { isRedeemed: true, redeemedAt: new Date(), redeemedBy: userId, active: false } },
+        { session },
+      );
+      if (reward.batchId && reward.active !== false) {
+        await updateBatchStatusCounts(reward.batchId, -1, 1, session);
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+}
+
+async function updateBatchStatusCounts(batchId, activeDelta, inactiveDelta, session) {
+  if (!batchId || (!activeDelta && !inactiveDelta)) return;
+  await RewardBatch.updateOne(
+    { _id: batchId },
+    { $inc: { activeCount: activeDelta, inactiveCount: inactiveDelta } },
+    session ? { session } : {},
+  );
+}
+
 async function listRewardsGroupedByDate(data) {
   const {
     page = 1,
@@ -151,7 +376,7 @@ async function listRewardsGroupedByDate(data) {
   } = data;
   const skip = (page - 1) * limit;
 
-  const matchQuery = {};
+  const matchQuery = { isDeleted: { $ne: true } };
 
   if (productId) {
     matchQuery.productId = new mongoose.Types.ObjectId(productId);
@@ -282,7 +507,9 @@ async function listRewardsGroupedByDate(data) {
 }
 
 async function rewardDetails(rewardId) {
-  const reward = await Reward.findById(rewardId).populate("product").lean();
+  const reward = await Reward.findOne({ _id: rewardId, isDeleted: { $ne: true } })
+    .populate("product")
+    .lean();
   if (!reward) sendFailResponse("reward not found");
   return { data: reward };
 }
@@ -290,8 +517,28 @@ async function rewardDetails(rewardId) {
 async function createRewards(rewardData) {
   const { expiresAt, productId, count } = rewardData;
 
+  if (
+    !Number.isInteger(count) ||
+    count < 1 ||
+    count > MAX_REWARD_BATCH_SIZE
+  ) {
+    sendFailResponse(
+      `count must be an integer between 1 and ${MAX_REWARD_BATCH_SIZE}`,
+      400,
+    );
+  }
+
   const product = await Product.findById(productId).lean();
   if (!product) sendFailResponse("product not found");
+
+  const sequencedProduct = await Product.findByIdAndUpdate(
+    productId,
+    { $inc: { rewardBatchSequence: 1 } },
+    { new: true, select: "name rewardBatchSequence" },
+  ).lean();
+  if (!sequencedProduct) sendFailResponse("product not found");
+  const batchNumber = sequencedProduct.rewardBatchSequence;
+  const batchUid = `${makeBatchUidPrefix(product.name)}_${String(batchNumber).padStart(2, "0")}`;
 
   // Calculate the expiry with the 90-day buffer
   const expiresAtWithBuffer = new Date(expiresAt);
@@ -307,12 +554,22 @@ async function createRewards(rewardData) {
     // E.g., A7X9M2B4
     return code;
   };
+  const batch = await RewardBatch.create({
+    batchUid,
+    batchNumber,
+    productId,
+    totalCount: count,
+    activeCount: count,
+    inactiveCount: 0,
+    status: "creating",
+  });
   const structuredRewards = [];
 
   for (let i = 0; i < count; i++) {
     const rewardUID = generateComplexRewardUID();
     const reward = {
       productId,
+      batchId: batch._id,
       expiresAt: expiresAtWithBuffer,
       uidCode: rewardUID,
       point: product.rewardPoints,
@@ -321,17 +578,67 @@ async function createRewards(rewardData) {
   }
 
   if (!structuredRewards.length) sendFailResponse("failed to generate rewards");
-  await Reward.insertMany(structuredRewards);
-  return { message: `Created ${count} rewards`, data: { rewardsAdded: true } };
+  try {
+    await Reward.insertMany(structuredRewards);
+    await RewardBatch.updateOne({ _id: batch._id }, { $set: { status: "complete" } });
+  } catch (error) {
+    const insertedCounts = await Reward.aggregate([
+      { $match: { batchId: batch._id } },
+      {
+        $group: {
+          _id: null,
+          totalCount: { $sum: 1 },
+          activeCount: { $sum: { $cond: [{ $ne: ["$active", false] }, 1, 0] } },
+        },
+      },
+    ]);
+    const actual = insertedCounts[0] || { totalCount: 0, activeCount: 0 };
+    await RewardBatch.updateOne(
+      { _id: batch._id },
+      {
+        $set: {
+          status: "failed",
+          totalCount: actual.totalCount,
+          activeCount: actual.activeCount,
+          inactiveCount: actual.totalCount - actual.activeCount,
+        },
+      },
+    );
+    throw error;
+  }
+  return {
+    message: `Created ${count} rewards`,
+    data: { rewardsAdded: true, batchId: batch._id, batchUid, totalCount: count },
+  };
 }
 
 async function updateReward(rewardData, rewardId) {
   const { expiresAt, rewardPoints, active } = rewardData;
-  await Reward.findByIdAndUpdate(rewardId, {
-    expiresAt,
-    point: rewardPoints,
-    active: active,
-  });
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const previous = await Reward.findById(rewardId).session(session).lean();
+      if (!previous || previous.isDeleted) return;
+
+      await Reward.findByIdAndUpdate(
+        rewardId,
+        { expiresAt, point: rewardPoints, active },
+        { session },
+      );
+
+      const previousActive = previous.active !== false;
+      if (previous.batchId && previousActive !== active) {
+        await updateBatchStatusCounts(
+          previous.batchId,
+          active ? 1 : -1,
+          active ? -1 : 1,
+          session,
+        );
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
   return { message: "reward updated", data: { rewardsUpdated: true } };
 }
 
@@ -389,7 +696,16 @@ async function bulkUpdateRewards(rewardData) {
 }
 
 async function batchUpdateRewards(batchData) {
-  const { productId, createdDate, rewardPoints, expiresAt } = batchData;
+  const { productId, createdDate, rewardPoints, expiresAt, batchId } = batchData;
+
+  if (batchId) {
+    const result = await Reward.updateMany(
+      { batchId: new mongoose.Types.ObjectId(batchId), active: { $ne: false } },
+      { $set: { ...(rewardPoints !== undefined ? { point: rewardPoints } : {}), ...(expiresAt ? { expiresAt: new Date(expiresAt) } : {}) } },
+    );
+    const matchedCount = result.matchedCount ?? result.n ?? 0;
+    return { message: "rewards updated", data: { matchedCount, modifiedCount: result.modifiedCount ?? result.nModified ?? 0, rewardsUpdated: matchedCount > 0 } };
+  }
 
   const startOfDay = new Date(createdDate);
   startOfDay.setUTCHours(0, 0, 0, 0);
@@ -433,12 +749,34 @@ async function batchUpdateRewards(batchData) {
 }
 
 async function deleteReward(rewardId) {
-  await Reward.findByIdAndDelete(rewardId);
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const reward = await Reward.findByIdAndDelete(rewardId, { session });
+      if (reward?.batchId) {
+        await RewardBatch.updateOne(
+          { _id: reward.batchId },
+          {
+            $inc: {
+              totalCount: -1,
+              ...(reward.active !== false
+                ? { activeCount: -1 }
+                : { inactiveCount: -1 }),
+            },
+          },
+          { session },
+        );
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
   return { message: "reward deleted", data: { rewardDeleted: true } };
 }
 
 async function deleteAllReward() {
   await Reward.deleteMany({});
+  await RewardBatch.deleteMany({});
   return { message: "all rewards deleted", data: { rewardsDeleted: true } };
 }
 
@@ -542,6 +880,13 @@ async function awardRewardToUser(
 
 module.exports = {
   listRewards,
+  listRewardBatches,
+  getRewardBatch,
+  listRewardsByBatch,
+  deactivateRewardBatch,
+  updateRewardBatch,
+  deleteRewardBatch,
+  markRewardRedeemed,
   listRewardsGroupedByDate,
   rewardDetails,
   createRewards,

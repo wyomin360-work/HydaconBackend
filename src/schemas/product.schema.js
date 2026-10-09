@@ -85,6 +85,7 @@ const productSchema = new mongoose.Schema(
     images: { type: [String], required: false, default: [] },
     featuredImage: { type: String, required: false },
     rewardPoints: { type: Number, required: true, default: 0 },
+    rewardBatchSequence: { type: Number, default: 0 },
     active: { type: Boolean, default: true },
     roomTypes: { type: [String], default: [] },
     areaTypes: { type: [String], default: [] },

@@ -13,6 +13,36 @@ exports.listRewardsGroupedByDate = async (req, res) => {
   return sendResponse(res, response);
 };
 
+exports.listRewardBatches = async (req, res) => {
+  const response = await rewardService.listRewardBatches(req?.body);
+  return sendResponse(res, response);
+};
+
+exports.rewardBatchDetails = async (req, res) => {
+  const response = await rewardService.getRewardBatch(req.params?.batchId);
+  return sendResponse(res, response);
+};
+
+exports.listRewardsByBatch = async (req, res) => {
+  const response = await rewardService.listRewardsByBatch(req.params?.batchId, req?.body);
+  return sendResponse(res, response);
+};
+
+exports.deactivateRewardBatch = async (req, res) => {
+  const response = await rewardService.deactivateRewardBatch(req.params?.batchId);
+  return sendResponse(res, response);
+};
+
+exports.updateRewardBatch = async (req, res) => {
+  const response = await rewardService.updateRewardBatch(req.params?.batchId, req?.body);
+  return sendResponse(res, response);
+};
+
+exports.deleteRewardBatch = async (req, res) => {
+  const response = await rewardService.deleteRewardBatch(req.params?.batchId);
+  return sendResponse(res, response);
+};
+
 exports.rewardDetails = async (req, res) => {
   const rewardId = req.params?.rewardId;
   const response = await rewardService.rewardDetails(rewardId);

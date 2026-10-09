@@ -145,6 +145,11 @@ describe("Weighted Rewards Calculation", () => {
     User.findByIdAndUpdate = jest.fn().mockResolvedValue(mockUser);
     Product.findById.mockResolvedValue(mockProduct);
     Reward.findOne.mockResolvedValue(mockReward);
+    Reward.findById.mockReturnValue({
+      session: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue(mockReward),
+    });
+    Reward.findByIdAndUpdate.mockResolvedValue(mockReward);
     Redeem.create.mockImplementation((data) => Promise.resolve(data));
   });
 

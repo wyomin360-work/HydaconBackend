@@ -10,6 +10,8 @@ const {
   bulkUpdateRewardRequestType,
   batchUpdateRewardRequestType,
   listGroupedRewardsRequestType,
+  listRewardBatchesRequestType,
+  updateRewardBatchRequestType,
 } = require("../../validations/rewards.validations");
 
 const router = express.Router();
@@ -23,6 +25,30 @@ router.post(
   rewardsPath.listGrouped,
   validateRequest(listGroupedRewardsRequestType),
   handleError(rewardsController.listRewardsGroupedByDate),
+);
+router.post(
+  rewardsPath.batches,
+  validateRequest(listRewardBatchesRequestType),
+  handleError(rewardsController.listRewardBatches),
+);
+router.get(rewardsPath.batchDetails, handleError(rewardsController.rewardBatchDetails));
+router.post(
+  rewardsPath.batchRewards,
+  validateRequest(listRewardRequestType),
+  handleError(rewardsController.listRewardsByBatch),
+);
+router.patch(
+  rewardsPath.batchDeactivate,
+  handleError(rewardsController.deactivateRewardBatch),
+);
+router.patch(
+  rewardsPath.batchUpdateById,
+  validateRequest(updateRewardBatchRequestType),
+  handleError(rewardsController.updateRewardBatch),
+);
+router.delete(
+  rewardsPath.batchDelete,
+  handleError(rewardsController.deleteRewardBatch),
 );
 router.get(rewardsPath.details, handleError(rewardsController.rewardDetails));
 router.post(

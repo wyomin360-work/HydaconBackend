@@ -1,5 +1,4 @@
 const User = require("../schemas/user.schema");
-const Reward = require("../schemas/reward.schema");
 const userService = require("../modules/user/user.service");
 const referralService = require("../modules/referral/referral.service");
 const loyaltyService = require("../modules/loyalty/loyalty.service");
@@ -33,14 +32,7 @@ async function processScanSideEffects(data) {
   } = data;
 
   // 1. Mark reward claimed in DB
-  const reward = await Reward.findById(rewardId);
-  if (reward) {
-    reward.isRedeemed = true;
-    reward.redeemedAt = new Date();
-    reward.redeemedBy = userId;
-    reward.active = false;
-    await reward.save();
-  }
+  await rewardsService.markRewardRedeemed(rewardId, userId);
 
   // 2. Credit base scan points in DB
   await userService.creditUserScanPoints(userId, weightedPoints);
