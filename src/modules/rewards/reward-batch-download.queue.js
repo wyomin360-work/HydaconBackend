@@ -30,6 +30,8 @@ const QUEUE_NAME = "reward-batch-downloads";
 const INLINE_JOB_TTL_MS = 24 * 60 * 60 * 1000;
 const INLINE_JOB_DEDUPE_MS = 50 * 60 * 1000;
 const INLINE_JOB_LEASE_MS = 5 * 60 * 1000;
+const QUEUE_CANCEL_KEY_PREFIX = `${QUEUE_NAME}:cancel:`;
+const QUEUE_CANCEL_TTL_SECONDS = 60 * 60;
 let queue;
 let worker;
 let redisReadyListenerRegistered = false;
@@ -69,13 +71,23 @@ function getInlineJobRequestKey(batchId, rewardIds) {
 async function executeInlineRewardBatchDownload(job) {
   const jobId = job._id;
   const leaseOwner = job.leaseOwner;
+  const abortController = new AbortController();
+  const cancellationPoll = setInterval(async () => {
+    const activeJob = await RewardBatchDownloadJob.exists({
+      _id: jobId,
+      leaseOwner,
+      state: "active",
+    }).catch(() => true);
+    if (!activeJob) abortController.abort();
+  }, 1000);
+  cancellationPoll.unref?.();
   let lastProgressWriteAt = 0;
   const updateProgress = async (progress) => {
     const now = Date.now();
     if (now - lastProgressWriteAt < 2000 && progress.phase !== "ready") return;
     lastProgressWriteAt = now;
-    await RewardBatchDownloadJob.updateOne(
-      { _id: jobId, leaseOwner },
+    const update = await RewardBatchDownloadJob.updateOne(
+      { _id: jobId, leaseOwner, state: "active" },
       {
         $set: {
           progress,
@@ -84,6 +96,11 @@ async function executeInlineRewardBatchDownload(job) {
         },
       },
     );
+    if (update.matchedCount === 0) {
+      const error = new Error("Reward batch download cancelled");
+      error.name = "RewardBatchDownloadCancelled";
+      throw error;
+    }
   };
 
   try {
@@ -91,9 +108,10 @@ async function executeInlineRewardBatchDownload(job) {
       job.batchId,
       updateProgress,
       job.rewardIds?.length ? job.rewardIds.map(String) : null,
+      { signal: abortController.signal },
     );
     await RewardBatchDownloadJob.updateOne(
-      { _id: jobId, leaseOwner },
+      { _id: jobId, leaseOwner, state: "active" },
       {
         $set: {
           state: "completed",
@@ -105,8 +123,9 @@ async function executeInlineRewardBatchDownload(job) {
       },
     );
   } catch (error) {
+    if (error?.name === "RewardBatchDownloadCancelled") return;
     await RewardBatchDownloadJob.updateOne(
-      { _id: jobId, leaseOwner },
+      { _id: jobId, leaseOwner, state: "active" },
       {
         $set: {
           state: "failed",
@@ -119,6 +138,8 @@ async function executeInlineRewardBatchDownload(job) {
     ).catch((updateError) =>
       console.error("Unable to persist reward ZIP failure:", updateError),
     );
+  } finally {
+    clearInterval(cancellationPoll);
   }
 }
 
@@ -217,22 +238,47 @@ function getRewardBatchDownloadQueue() {
         async (job) => {
           const snapshot = { state: "active", progress: job.progress ?? null };
           queueJobSnapshots.set(String(job.id), snapshot);
+          const abortController = new AbortController();
+          const cancellationPoll = setInterval(async () => {
+            try {
+              const redisClient = await redis;
+              if (await redisClient.get(`${QUEUE_CANCEL_KEY_PREFIX}${job.id}`)) {
+                abortController.abort();
+              }
+            } catch (error) {
+              console.warn("Unable to check reward ZIP cancellation:", error);
+            }
+          }, 500);
+          cancellationPoll.unref?.();
           try {
             const result = await createRewardBatchArchive(
               job.data.batchId,
-              (progress) => {
+              async (progress) => {
+                const redisClient = await redis;
+                if (await redisClient.get(`${QUEUE_CANCEL_KEY_PREFIX}${job.id}`)) {
+                  const error = new Error("Reward batch download cancelled");
+                  error.name = "RewardBatchDownloadCancelled";
+                  throw error;
+                }
                 snapshot.progress = progress;
                 return job.updateProgress(progress).catch((error) => {
                   console.warn("Unable to persist reward ZIP progress:", error);
                 });
               },
               job.data.rewardIds || null,
+              { signal: abortController.signal },
             );
             snapshot.state = "completed";
             snapshot.result = result;
             retainFinishedJobSnapshot(String(job.id), snapshot);
             return result;
           } catch (error) {
+            if (error?.name === "RewardBatchDownloadCancelled") {
+              snapshot.state = "cancelled";
+              snapshot.error = error.message;
+              retainFinishedJobSnapshot(String(job.id), snapshot);
+              return { cancelled: true };
+            }
             snapshot.state = "failed";
             snapshot.error = error?.message || "reward batch download failed";
             retainFinishedJobSnapshot(String(job.id), snapshot);
@@ -250,6 +296,8 @@ function getRewardBatchDownloadQueue() {
               throw new UnrecoverableError(error.message);
             }
             throw error;
+          } finally {
+            clearInterval(cancellationPoll);
           }
         },
         {
@@ -331,8 +379,9 @@ async function getRewardBatchDownloadJob(jobId) {
       const job = await activeQueue.getJob(jobId);
       if (job) {
         const state = await job.getState();
+        const cancelled = state === "completed" && job.returnvalue?.cancelled;
         return {
-          state,
+          state: cancelled ? "cancelled" : state,
           progress: job.progress,
           result: state === "completed" ? job.returnvalue : undefined,
           error: state === "failed" ? job.failedReason : undefined,
@@ -369,6 +418,51 @@ async function getRewardBatchDownloadJob(jobId) {
   };
 }
 
+async function cancelRewardBatchDownload(jobId) {
+  const activeQueue = queue || getRewardBatchDownloadQueue();
+  if (activeQueue) {
+    const job = await activeQueue.getJob(jobId);
+    if (!job) return null;
+    const state = await job.getState();
+    if (state === "waiting" || state === "delayed" || state === "waiting-children") {
+      await job.remove();
+      return { state: "cancelled" };
+    }
+    if (state === "active") {
+      const redisClient = await activeQueue.client;
+      await redisClient.set(
+        `${QUEUE_CANCEL_KEY_PREFIX}${jobId}`,
+        "1",
+        "EX",
+        QUEUE_CANCEL_TTL_SECONDS,
+      );
+      return { state: "cancelled" };
+    }
+    if (state === "completed" && job.returnvalue?.cancelled) {
+      return { state: "cancelled" };
+    }
+    return { state };
+  }
+
+  if (!mongoose.isValidObjectId(jobId)) return null;
+  const cancelled = await RewardBatchDownloadJob.findOneAndUpdate(
+    { _id: jobId, state: "active" },
+    {
+      $set: {
+        state: "cancelled",
+        error: "Reward batch download cancelled",
+        finishedAt: new Date(),
+        leaseUntil: null,
+        expiresAt: new Date(Date.now() + INLINE_JOB_TTL_MS),
+      },
+    },
+    { new: true },
+  ).lean();
+  if (cancelled) return { state: "cancelled" };
+  const existing = await RewardBatchDownloadJob.findById(jobId).lean();
+  return existing ? { state: existing.state } : null;
+}
+
 module.exports = {
   getRewardBatchDownloadQueue,
   initializeRewardBatchDownloadQueue,
@@ -376,5 +470,6 @@ module.exports = {
   hasConfiguredSharedQueue,
   ensureInlineRewardBatchDownloadIndexes,
   getRewardBatchDownloadJob,
+  cancelRewardBatchDownload,
   startInlineRewardBatchDownload,
 };

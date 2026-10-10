@@ -39,6 +39,10 @@ router.get(
   rewardsPath.batchDownloadStatus,
   handleError(rewardsController.rewardBatchDownloadStatus),
 );
+router.patch(
+  rewardsPath.batchDownloadCancel,
+  handleError(rewardsController.cancelRewardBatchDownload),
+);
 router.get(
   rewardsPath.batchDetails,
   handleError(rewardsController.rewardBatchDetails),

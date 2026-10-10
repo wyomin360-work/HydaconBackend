@@ -11,7 +11,7 @@ const rewardBatchDownloadJobSchema = new mongoose.Schema(
     rewardIds: [{ type: mongoose.Types.ObjectId, ref: "Reward" }],
     state: {
       type: String,
-      enum: ["active", "completed", "failed"],
+      enum: ["active", "completed", "failed", "cancelled"],
       required: true,
     },
     progress: { type: mongoose.Schema.Types.Mixed },

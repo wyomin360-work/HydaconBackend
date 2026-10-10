@@ -10,6 +10,7 @@ module.exports = {
   batchDelete: "/batches/:batchId",
   batchDownload: "/batches/:batchId/download",
   batchDownloadStatus: "/batches/download-jobs/:jobId",
+  batchDownloadCancel: "/batches/download-jobs/:jobId/cancel",
   create: "/create",
   delete: "/delete/:rewardId",
   update: "/update/:rewardId",

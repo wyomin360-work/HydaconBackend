@@ -40,6 +40,12 @@ async function enqueueRewardBatchZip(queue, batchId, rewardIds) {
             )),
         );
         if (archiveAvailable) return existing;
+        if (existing.returnvalue?.cancelled) {
+          const redisClient = await queue.client;
+          await redisClient.del(
+            `reward-batch-downloads:cancel:${jobId}`,
+          );
+        }
         console.warn("Cached reward ZIP is missing from S3; regenerating it", {
           jobId,
           s3Key: existing.returnvalue?.s3Key,
@@ -194,6 +200,11 @@ exports.rewardBatchDownloadStatus = async (req, res) => {
   if (job.state === "failed") {
     sendFailResponse(job.error || "reward batch download failed", 500);
   }
+  if (job.state === "cancelled") {
+    return sendResponse(res, {
+      data: { status: "cancelled", jobId: req.params?.jobId },
+    });
+  }
   const result = job.result || {};
   const { s3Key, ...publicResult } = result;
   const downloadUrl = s3Key
@@ -211,6 +222,28 @@ exports.rewardBatchDownloadStatus = async (req, res) => {
       ...publicResult,
       ...(downloadUrl ? { downloadUrl } : {}),
     },
+  });
+};
+
+exports.cancelRewardBatchDownload = async (req, res) => {
+  if (
+    !rewardBatchDownloadQueue.getRewardBatchDownloadQueue() &&
+    rewardBatchDownloadQueue.hasConfiguredSharedQueue()
+  ) {
+    sendFailResponse(
+      "Reward ZIP queue is temporarily unavailable. Please retry shortly.",
+      503,
+    );
+  }
+  const job = await rewardBatchDownloadQueue.cancelRewardBatchDownload(
+    req.params?.jobId,
+  );
+  if (!job) sendFailResponse("reward batch download job not found", 404);
+  if (job.state !== "cancelled") {
+    sendFailResponse("reward batch download has already finished", 409);
+  }
+  return sendResponse(res, {
+    data: { status: "cancelled", jobId: req.params?.jobId },
   });
 };
 
