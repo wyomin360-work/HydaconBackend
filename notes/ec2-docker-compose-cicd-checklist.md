@@ -174,7 +174,8 @@ The production workflow is `.github/workflows/deploy-prod.yml`.
 3. Docker Buildx builds the image and pushes it to ECR with the commit SHA as its tag.
 4. The workflow sends an `AWS-RunShellScript` command to EC2 through Systems Manager.
 5. The EC2 role authenticates to ECR, and the SSM script writes the checked-in Compose file to `/opt/hydacon/compose.prod.yaml`.
-6. Compose validates its settings, pulls the API image for that commit, then runs or updates the API and Redis services.
+6. The EC2 host pulls the commit image from ECR and tags a local alias as `hydacon-server:<commit>`.
+7. Compose validates its settings, then runs or updates the API and Redis services using that local alias.
 
 - [ ] Ensure production deploys wait for passing tests. The separate CI workflow runs tests on pushes, but separate workflows do not automatically depend on each other. In the current local workflow edit, the deploy workflow's `test` job is commented out. Either restore a same-workflow `needs: test` job or protect `production` with a required CI status check before treating this as a release gate.
 - [ ] Review the current local diff before committing or pushing; do not accidentally include unrelated changes.

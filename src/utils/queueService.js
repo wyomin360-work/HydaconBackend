@@ -19,7 +19,12 @@ if (redis) {
         async (job) => {
           await processScanSideEffects(job.data);
         },
-        { connection: redis },
+        {
+          // Workers must keep retrying while Redis is unavailable. Keep the
+          // shared client configured for fast API failures, and give BullMQ
+          // its own worker connection.
+          connection: redis.duplicate({ maxRetriesPerRequest: null }),
+        },
       );
 
       bullWorker.on("completed", (job) => {
@@ -35,11 +40,6 @@ if (redis) {
     }
   });
 
-  redis.on("close", () => {
-    // If connection closes, tear down locally to force fallback path
-    bullQueue = null;
-    bullWorker = null;
-  });
 }
 
 /**
