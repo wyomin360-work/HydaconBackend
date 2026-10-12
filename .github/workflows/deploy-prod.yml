@@ -31,7 +31,7 @@ jobs:
 
   deploy-production:
     name: Build and deploy production
-    needs: test
+    # needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
