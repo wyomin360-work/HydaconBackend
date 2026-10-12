@@ -88,7 +88,7 @@ async function updateRewardBatchUids({ apply = false } = {}) {
 
 if (require.main === module) {
   const apply = process.argv.includes("--apply");
-  console.log(process.env.MONGODB_URL)
+  console.log(process.env.MONGODB_URL);
   if (!process.env.MONGODB_URL) {
     console.error("MONGODB_URL is required to run this migration");
     process.exitCode = 1;
