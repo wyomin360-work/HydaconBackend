@@ -89,9 +89,9 @@ sudo docker compose version
 
 ## 5. Create the ECR repository
 
-- [x] Create an ECR repository in the same Region as the instance. Hydacon repository name: **`production`**.
+- [ ] Create an ECR repository in the same Region as the instance. Hydacon target repository name: **`hydacon-server`**. The earlier repository was named `production`.
 - [x] Registry URI: `743422351562.dkr.ecr.ap-south-1.amazonaws.com`.
-- [ ] Keep the repository private. The EC2 role needs pull access; the GitHub deploy role needs push access.
+- [ ] Keep the repository private. The EC2 role needs pull access; the GitHub deploy role needs push access to `hydacon-server`.
 - [ ] Prefer immutable commit-SHA image tags for deployments. Hydacon tags the image with `${{ github.sha }}` rather than relying on a mutable `latest` tag.
 
 ## 6. Configure the backend for Redis
@@ -154,7 +154,7 @@ OIDC lets GitHub Actions assume a short-lived AWS role. Do not store static AWS 
   | `EC2_INSTANCE_ID` | `i-03c47e62940dbdaa0` |
   | `AWS_ROLE_TO_ASSUME` | Copy the full role ARN for `HydaconGitHubActionsProductionRole` from IAM → Roles. |
 
-  `ECR_REPOSITORY` is set to `production` in the workflow, so it is not a secret.
+  `ECR_REPOSITORY` is set to `hydacon-server` in the workflow, so it is not a secret.
 
 ## 9. Review the Docker and Compose files
 

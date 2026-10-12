@@ -2,7 +2,7 @@ name: hydacon-production
 
 services:
   api:
-    image: ${ECR_REGISTRY:?ECR_REGISTRY is required}/production:${IMAGE_TAG:?IMAGE_TAG is required}
+    image: ${ECR_REGISTRY:?ECR_REGISTRY is required}/hydacon-server:${IMAGE_TAG:?IMAGE_TAG is required}
     container_name: hydacon-api
     restart: unless-stopped
     env_file:

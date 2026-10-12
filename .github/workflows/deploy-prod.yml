@@ -42,7 +42,7 @@ jobs:
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
       AWS_ALLOWED_ACCOUNT_IDS: ${{ secrets.AWS_ALLOWED_ACCOUNT_IDS }}
       ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
-      ECR_REPOSITORY: production
+      ECR_REPOSITORY: hydacon-server
       EC2_INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
 
     steps:
