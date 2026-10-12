@@ -89,9 +89,9 @@ sudo docker compose version
 
 ## 5. Create the ECR repository
 
-- [ ] Create an ECR repository in the same Region as the instance. Hydacon target repository name: **`hydacon-server`**. The earlier repository was named `production`.
+- [x] Create an ECR repository in the same Region as the instance. Hydacon ECR repository name: **`production`**.
 - [x] Registry URI: `743422351562.dkr.ecr.ap-south-1.amazonaws.com`.
-- [ ] Keep the repository private. The EC2 role needs pull access; the GitHub deploy role needs push access to `hydacon-server`.
+- [ ] Keep the repository private. The EC2 role needs pull access; the GitHub deploy role needs push access to `production`.
 - [ ] Prefer immutable commit-SHA image tags for deployments. Hydacon tags the image with `${{ github.sha }}` rather than relying on a mutable `latest` tag.
 
 ## 6. Configure the backend for Redis
@@ -154,7 +154,7 @@ OIDC lets GitHub Actions assume a short-lived AWS role. Do not store static AWS 
   | `EC2_INSTANCE_ID` | `i-03c47e62940dbdaa0` |
   | `AWS_ROLE_TO_ASSUME` | Copy the full role ARN for `HydaconGitHubActionsProductionRole` from IAM → Roles. |
 
-  `ECR_REPOSITORY` is set to `hydacon-server` in the workflow, so it is not a secret.
+  `ECR_REPOSITORY` is set to `production` in the workflow, so it is not a secret.
 
 ## 9. Review the Docker and Compose files
 
@@ -174,7 +174,7 @@ The production workflow is `.github/workflows/deploy-prod.yml`.
 3. Docker Buildx builds the image and pushes it to ECR with the commit SHA as its tag.
 4. The workflow sends an `AWS-RunShellScript` command to EC2 through Systems Manager.
 5. The EC2 role authenticates to ECR, and the SSM script writes the checked-in Compose file to `/opt/hydacon/compose.prod.yaml`.
-6. The EC2 host pulls the commit image from ECR and tags a local alias as `hydacon-server:<commit>`.
+6. The EC2 host pulls the commit image from ECR's `production` repository and tags a local alias as `hydacon-server:<commit>`.
 7. Compose validates its settings, then runs or updates the API and Redis services using that local alias.
 
 - [ ] Ensure production deploys wait for passing tests. The separate CI workflow runs tests on pushes, but separate workflows do not automatically depend on each other. In the current local workflow edit, the deploy workflow's `test` job is commented out. Either restore a same-workflow `needs: test` job or protect `production` with a required CI status check before treating this as a release gate.
