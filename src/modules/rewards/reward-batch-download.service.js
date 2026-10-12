@@ -8,7 +8,6 @@ const os = require("os");
 const path = require("path");
 const { createHash, randomUUID } = require("crypto");
 const { finished } = require("stream/promises");
-const { once } = require("events");
 const { Transform } = require("stream");
 const {
   S3Client,
@@ -29,6 +28,35 @@ const TEMPLATE_PATH = path.join(__dirname, "../../assets/rewards/Qr-cover.pdf");
 const ARCHIVE_TTL_MS = 24 * 60 * 60 * 1000;
 let s3Client;
 const inlineArchivePromises = new Map();
+
+function waitForArchiveEntry(archive, signal) {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      archive.off("entry", onEntry);
+      archive.off("error", onError);
+      signal?.removeEventListener("abort", onAbort);
+    };
+    const onEntry = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = (error) => {
+      cleanup();
+      reject(error);
+    };
+    const onAbort = () => {
+      cleanup();
+      const error = new Error("Reward batch download cancelled");
+      error.name = "RewardBatchDownloadCancelled";
+      reject(error);
+    };
+
+    if (signal?.aborted) return onAbort();
+    archive.once("entry", onEntry);
+    archive.once("error", onError);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
 
 function getArchiveStorage() {
   const { AWS_BUCKET_NAME, AWS_REGION } = process.env;
@@ -145,7 +173,16 @@ async function generateRewardBatchArchive(
   batchId,
   onProgress = () => {},
   rewardIds = null,
+  { signal } = {},
 ) {
+  const throwIfCancelled = () => {
+    if (signal?.aborted) {
+      const error = new Error("Reward batch download cancelled");
+      error.name = "RewardBatchDownloadCancelled";
+      throw error;
+    }
+  };
+  throwIfCancelled();
   if (!mongoose.isValidObjectId(batchId)) {
     sendFailResponse("invalid reward batch id", 400);
   }
@@ -207,6 +244,7 @@ async function generateRewardBatchArchive(
   const generationStartedAt = Date.now();
   const rewardConcurrency = 4;
   const reportProgress = async (phase, values = {}) => {
+    throwIfCancelled();
     const elapsedSeconds = (Date.now() - generationStartedAt) / 1000;
     const remainingItems = Math.max(0, totalItems - rewardCount);
     const etaSeconds =
@@ -227,21 +265,29 @@ async function generateRewardBatchArchive(
   };
 
   try {
+    signal?.addEventListener("abort", () => {
+      const error = new Error("Reward batch download cancelled");
+      error.name = "RewardBatchDownloadCancelled";
+      archive.abort();
+      output.destroy(error);
+    }, { once: true });
     const templateBytes = await fsp.readFile(TEMPLATE_PATH);
     const templateDoc = await PDFDocument.load(templateBytes);
     await reportProgress("generating", { percent: 0, etaSeconds: null });
     const appendRewardBatch = async (batchRewards) => {
+      throwIfCancelled();
       const pdfs = await Promise.all(
         batchRewards.map((reward) =>
           createVoucherPdf(reward, productName, templateDoc),
         ),
       );
       for (let index = 0; index < batchRewards.length; index += 1) {
+        throwIfCancelled();
         const reward = batchRewards[index];
         const voucherName = safeFilePart(
           `${reward.uidCode || "Voucher"}_${reward._id}`,
         );
-        const entryFinished = once(archive, "entry");
+        const entryFinished = waitForArchiveEntry(archive, signal);
         archive.append(pdfs[index], { name: `Voucher_${voucherName}.pdf` });
         await entryFinished;
         rewardCount += 1;
@@ -253,6 +299,7 @@ async function generateRewardBatchArchive(
 
     let batchRewards = [];
     for await (const reward of rewards) {
+      throwIfCancelled();
       batchRewards.push(reward);
       if (batchRewards.length >= rewardConcurrency) {
         await appendRewardBatch(batchRewards);
@@ -360,6 +407,7 @@ async function generateRewardBatchArchive(
           ContentLength: stats.size,
           ContentType: "application/zip",
         }),
+        { abortSignal: signal },
       );
       uploadSucceeded = true;
       await uploadProgressChain;
@@ -436,6 +484,7 @@ function createRewardBatchArchive(
   batchId,
   onProgress = () => {},
   rewardIds = null,
+  options = {},
 ) {
   const normalizedRewardIds = Array.isArray(rewardIds)
     ? [...rewardIds].sort()
@@ -446,7 +495,12 @@ function createRewardBatchArchive(
   const existing = inlineArchivePromises.get(key);
   if (existing) return existing;
 
-  const generation = generateRewardBatchArchive(batchId, onProgress, rewardIds);
+  const generation = generateRewardBatchArchive(
+    batchId,
+    onProgress,
+    rewardIds,
+    options,
+  );
   inlineArchivePromises.set(key, generation);
   generation
     .finally(() => {
