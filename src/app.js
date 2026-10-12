@@ -23,27 +23,32 @@ const {
 const app = express();
 app.disable("etag"); // Always return 200 with body instead of 304 Not Modified
 
-cleanupRewardBatchArchives().catch((error) =>
-  console.warn("Unable to clean expired reward batch archives:", error),
-);
-cleanupRewardBatchS3Archives().catch((error) =>
-  console.warn("Unable to clean expired reward batch archives from S3:", error),
-);
-const archiveCleanupTimer = setInterval(
-  () => {
-    cleanupRewardBatchArchives().catch((error) =>
-      console.warn("Unable to clean expired reward batch archives:", error),
-    );
-    cleanupRewardBatchS3Archives().catch((error) =>
-      console.warn(
-        "Unable to clean expired reward batch archives from S3:",
-        error,
-      ),
-    );
-  },
-  60 * 60 * 1000,
-);
-archiveCleanupTimer.unref();
+if (process.env.NODE_ENV !== "test") {
+  cleanupRewardBatchArchives().catch((error) =>
+    console.warn("Unable to clean expired reward batch archives:", error),
+  );
+  cleanupRewardBatchS3Archives().catch((error) =>
+    console.warn(
+      "Unable to clean expired reward batch archives from S3:",
+      error,
+    ),
+  );
+  const archiveCleanupTimer = setInterval(
+    () => {
+      cleanupRewardBatchArchives().catch((error) =>
+        console.warn("Unable to clean expired reward batch archives:", error),
+      );
+      cleanupRewardBatchS3Archives().catch((error) =>
+        console.warn(
+          "Unable to clean expired reward batch archives from S3:",
+          error,
+        ),
+      );
+    },
+    60 * 60 * 1000,
+  );
+  archiveCleanupTimer.unref();
+}
 
 // Log every incoming request in the console
 app.use((req, res, next) => {

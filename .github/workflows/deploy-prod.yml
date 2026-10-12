@@ -74,14 +74,24 @@ jobs:
         run: |
           set -euo pipefail
 
-          IMAGE="${ECR_REGISTRY}/${ECR_REPOSITORY}:${GITHUB_SHA}"
+          COMPOSE_B64=$(base64 -w0 docker-compose/compose.prod.yaml)
 
           SSM_SCRIPT=$(cat <<EOF
           set -e
           aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
-          docker pull "$IMAGE"
-          docker rm -f hydacon-api >/dev/null 2>&1 || true
-          docker run -d --name hydacon-api --restart unless-stopped --env-file /opt/hydacon/.env -p 127.0.0.1:5000:5000 "$IMAGE"
+          install -d -m 755 /opt/hydacon
+          printf '%s' "$COMPOSE_B64" | base64 --decode > /opt/hydacon/compose.prod.yaml
+          chmod 644 /opt/hydacon/compose.prod.yaml
+          docker compose version
+          export ECR_REGISTRY="$ECR_REGISTRY"
+          export IMAGE_TAG="$GITHUB_SHA"
+          COMPOSE_LABEL=\$(docker inspect --format '{{if index .Config.Labels "com.docker.compose.project"}}yes{{end}}' hydacon-api 2>/dev/null || true)
+          if [ -z "\$COMPOSE_LABEL" ]; then
+            docker rm -f hydacon-api >/dev/null 2>&1 || true
+          fi
+          docker compose --env-file /opt/hydacon/.env -f /opt/hydacon/compose.prod.yaml config --quiet
+          docker compose --env-file /opt/hydacon/.env -f /opt/hydacon/compose.prod.yaml pull api
+          docker compose --env-file /opt/hydacon/.env -f /opt/hydacon/compose.prod.yaml up -d --remove-orphans
           EOF
           )
 
