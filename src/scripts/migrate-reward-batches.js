@@ -6,7 +6,10 @@ const mongoose = require("mongoose");
 const Reward = require("../schemas/reward.schema");
 const RewardBatch = require("../schemas/reward-batch.schema");
 const Product = require("../schemas/product.schema");
-const { makeRewardBatchUidPrefix } = require("../utils/heplers");
+const {
+  makeRewardBatchUidPrefix,
+  generateRewardBatchUidToken,
+} = require("../utils/heplers");
 const REWARD_MIGRATION_INDEX = "reward_batch_backfill_lookup";
 
 function getBatchDateRange(dateString) {
@@ -50,7 +53,7 @@ async function getOrCreateMigrationBatch(productId, batchDate) {
   const batchNumber = sequencedProduct
     ? sequencedProduct.rewardBatchSequence
     : (await RewardBatch.countDocuments({ productId })) + 1;
-  const batchUid = `${makeRewardBatchUidPrefix(sequencedProduct?.name)}_${String(batchNumber).padStart(2, "0")}`;
+  const batchUid = `${makeRewardBatchUidPrefix(sequencedProduct?.name)}_${generateRewardBatchUidToken()}_${String(batchNumber).padStart(2, "0")}`;
   const { start } = getBatchDateRange(batchDate);
 
   try {
@@ -141,7 +144,7 @@ async function backfillExistingBatchUids() {
 
     const batchUid =
       batch.batchUid ||
-      `${makeRewardBatchUidPrefix(productName)}_${String(batchNumber).padStart(2, "0")}`;
+      `${makeRewardBatchUidPrefix(productName)}_${generateRewardBatchUidToken()}_${String(batchNumber).padStart(2, "0")}`;
     await RewardBatch.updateOne(
       { _id: batch._id },
       { $set: { batchUid, batchNumber, status: "complete" } },

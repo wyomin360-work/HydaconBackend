@@ -106,12 +106,10 @@ describe("Reward batches", () => {
         .mockResolvedValue({ name: "Regular 501 Grey", rewardPoints: 25 }),
     });
     Product.findByIdAndUpdate.mockReturnValue({
-      lean: jest
-        .fn()
-        .mockResolvedValue({
-          name: "Regular 501 Grey",
-          rewardBatchSequence: 1,
-        }),
+      lean: jest.fn().mockResolvedValue({
+        name: "Regular 501 Grey",
+        rewardBatchSequence: 1,
+      }),
     });
     RewardBatch.create.mockResolvedValue({ _id: batchId });
     Reward.insertMany.mockResolvedValue([]);
@@ -370,14 +368,12 @@ describe("Reward batches", () => {
     jest.spyOn(mongoose, "startSession").mockResolvedValue(session);
     Reward.findById.mockReturnValue({
       session: jest.fn().mockReturnThis(),
-      lean: jest
-        .fn()
-        .mockResolvedValue({
-          _id: rewardId,
-          batchId,
-          active: true,
-          isRedeemed: false,
-        }),
+      lean: jest.fn().mockResolvedValue({
+        _id: rewardId,
+        batchId,
+        active: true,
+        isRedeemed: false,
+      }),
     });
     Reward.findByIdAndUpdate.mockResolvedValue({ _id: rewardId });
     RewardBatch.updateOne.mockResolvedValue({ modifiedCount: 1 });

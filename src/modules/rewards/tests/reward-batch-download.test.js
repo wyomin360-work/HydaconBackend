@@ -49,11 +49,9 @@ describe("reward batch archive generation", () => {
     });
     Reward.find.mockReturnValue({
       select: jest.fn().mockReturnValue({
-        lean: jest
-          .fn()
-          .mockReturnValue({
-            cursor: jest.fn().mockReturnValue(cursorFor([reward])),
-          }),
+        lean: jest.fn().mockReturnValue({
+          cursor: jest.fn().mockReturnValue(cursorFor([reward])),
+        }),
       }),
     });
   });
@@ -73,11 +71,9 @@ describe("reward batch archive generation", () => {
   it("rejects batches with no rewards", async () => {
     Reward.find.mockReturnValue({
       select: jest.fn().mockReturnValue({
-        lean: jest
-          .fn()
-          .mockReturnValue({
-            cursor: jest.fn().mockReturnValue(cursorFor([])),
-          }),
+        lean: jest.fn().mockReturnValue({
+          cursor: jest.fn().mockReturnValue(cursorFor([])),
+        }),
       }),
     });
 

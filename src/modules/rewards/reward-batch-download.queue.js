@@ -157,13 +157,16 @@ async function startInlineRewardBatchDownload(batchId, rewardIds = null) {
     if (reusable) {
       reusable = Boolean(
         existing.result &&
-          (await isRewardBatchArchiveAvailable(existing.result)),
+        (await isRewardBatchArchiveAvailable(existing.result)),
       );
       if (!reusable) {
-        console.warn("Cached inline reward ZIP is missing from S3; regenerating it", {
-          jobId: String(existing._id),
-          s3Key: existing.result?.s3Key,
-        });
+        console.warn(
+          "Cached inline reward ZIP is missing from S3; regenerating it",
+          {
+            jobId: String(existing._id),
+            s3Key: existing.result?.s3Key,
+          },
+        );
       }
     }
     if (active || reusable) return String(existing._id);
@@ -242,7 +245,9 @@ function getRewardBatchDownloadQueue() {
           const cancellationPoll = setInterval(async () => {
             try {
               const redisClient = await redis;
-              if (await redisClient.get(`${QUEUE_CANCEL_KEY_PREFIX}${job.id}`)) {
+              if (
+                await redisClient.get(`${QUEUE_CANCEL_KEY_PREFIX}${job.id}`)
+              ) {
                 abortController.abort();
               }
             } catch (error) {
@@ -255,7 +260,9 @@ function getRewardBatchDownloadQueue() {
               job.data.batchId,
               async (progress) => {
                 const redisClient = await redis;
-                if (await redisClient.get(`${QUEUE_CANCEL_KEY_PREFIX}${job.id}`)) {
+                if (
+                  await redisClient.get(`${QUEUE_CANCEL_KEY_PREFIX}${job.id}`)
+                ) {
                   const error = new Error("Reward batch download cancelled");
                   error.name = "RewardBatchDownloadCancelled";
                   throw error;
@@ -424,7 +431,11 @@ async function cancelRewardBatchDownload(jobId) {
     const job = await activeQueue.getJob(jobId);
     if (!job) return null;
     const state = await job.getState();
-    if (state === "waiting" || state === "delayed" || state === "waiting-children") {
+    if (
+      state === "waiting" ||
+      state === "delayed" ||
+      state === "waiting-children"
+    ) {
       await job.remove();
       return { state: "cancelled" };
     }

@@ -265,12 +265,16 @@ async function generateRewardBatchArchive(
   };
 
   try {
-    signal?.addEventListener("abort", () => {
-      const error = new Error("Reward batch download cancelled");
-      error.name = "RewardBatchDownloadCancelled";
-      archive.abort();
-      output.destroy(error);
-    }, { once: true });
+    signal?.addEventListener(
+      "abort",
+      () => {
+        const error = new Error("Reward batch download cancelled");
+        error.name = "RewardBatchDownloadCancelled";
+        archive.abort();
+        output.destroy(error);
+      },
+      { once: true },
+    );
     const templateBytes = await fsp.readFile(TEMPLATE_PATH);
     const templateDoc = await PDFDocument.load(templateBytes);
     await reportProgress("generating", { percent: 0, etaSeconds: null });
@@ -428,7 +432,10 @@ async function generateRewardBatchArchive(
           etaSeconds: 0,
         });
       } catch (progressError) {
-        console.error("Unable to report completed ZIP progress:", progressError);
+        console.error(
+          "Unable to report completed ZIP progress:",
+          progressError,
+        );
       }
       await fsp.rm(archivePath, { force: true });
       return { fileName, rewardCount, downloadUrl, s3Key: key };

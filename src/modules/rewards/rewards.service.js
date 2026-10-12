@@ -12,6 +12,7 @@ const {
   randomHex,
   attachId,
   makeRewardBatchUidPrefix,
+  generateRewardBatchUidToken,
 } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 
@@ -600,7 +601,7 @@ async function createRewards(rewardData) {
   ).lean();
   if (!sequencedProduct) sendFailResponse("product not found");
   const batchNumber = sequencedProduct.rewardBatchSequence;
-  const batchUid = `${makeRewardBatchUidPrefix(product.name)}_${String(batchNumber).padStart(2, "0")}`;
+  const batchUid = `${makeRewardBatchUidPrefix(product.name)}_${generateRewardBatchUidToken()}_${String(batchNumber).padStart(2, "0")}`;
 
   // Calculate the expiry with the 90-day buffer
   const expiresAtWithBuffer = new Date(expiresAt);
