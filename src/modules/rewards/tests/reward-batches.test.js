@@ -121,8 +121,9 @@ describe("Reward batches", () => {
       count: 3,
     });
 
-    expect(RewardBatch.create).toHaveBeenCalledWith({
-      batchUid: "REG_01",
+    const createdBatch = RewardBatch.create.mock.calls[0][0];
+    expect(createdBatch).toEqual({
+      batchUid: expect.stringMatching(/^REG_[A-Z2-9]{4}_01$/),
       batchNumber: 1,
       productId,
       totalCount: 3,
@@ -142,7 +143,7 @@ describe("Reward batches", () => {
     expect(response.data).toEqual({
       rewardsAdded: true,
       batchId,
-      batchUid: "REG_01",
+      batchUid: createdBatch.batchUid,
       totalCount: 3,
     });
   });

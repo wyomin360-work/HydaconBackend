@@ -61,6 +61,7 @@ describe("Mongo-backed inline reward ZIP jobs", () => {
       job.batchId,
       expect.any(Function),
       null,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });
 

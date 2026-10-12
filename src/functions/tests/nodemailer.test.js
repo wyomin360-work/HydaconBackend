@@ -2,6 +2,11 @@ const mockSendMail = jest
   .fn()
   .mockResolvedValue({ messageId: "123", response: "200 OK" });
 
+// Configure a fake transport so the unit tests exercise the mocked
+// nodemailer transport even when developers have no mail credentials set.
+process.env.GOOGLE_APP_PASSWORD = "test-app-password";
+process.env.GOOGLE_USER_MAIL = "test@example.com";
+
 jest.mock("nodemailer", () => ({
   createTransport: jest.fn().mockReturnValue({
     sendMail: mockSendMail,
