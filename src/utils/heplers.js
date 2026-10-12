@@ -1,5 +1,5 @@
 const bcrypt = require("bcrypt");
-const { randomBytes } = require("crypto");
+const { randomBytes, randomInt } = require("crypto");
 const jwt = require("jsonwebtoken");
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -254,6 +254,15 @@ function makeRewardBatchUidPrefix(productName) {
   return prefix || "PRD";
 }
 
+const REWARD_BATCH_UID_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+function generateRewardBatchUidToken() {
+  let token = "";
+  for (let index = 0; index < 4; index += 1) {
+    token += REWARD_BATCH_UID_CHARS[randomInt(REWARD_BATCH_UID_CHARS.length)];
+  }
+  return token;
+}
+
 module.exports = {
   handleError,
   hashData,
@@ -272,4 +281,5 @@ module.exports = {
   getPaginationParams,
   normalizeString,
   makeRewardBatchUidPrefix,
+  generateRewardBatchUidToken,
 };

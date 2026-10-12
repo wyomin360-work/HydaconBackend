@@ -11,6 +11,7 @@
     "seed:scratch-cards": "node scripts/seed-demo-scratch-cards.js",
     "migrate:payout-contract": "node scripts/migrate-payout-contract.js",
     "migrate:reward-batches": "node src/scripts/migrate-reward-batches.js",
+    "migrate:reward-batch-uids": "node src/scripts/update-reward-batch-uids.js",
     "format": "prettier --write .",
     "notify:test": "node src/scripts/sendTestNotification.js"
   },

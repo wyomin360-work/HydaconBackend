@@ -35,16 +35,14 @@ async function enqueueRewardBatchZip(queue, batchId, rewardIds) {
       if (completedAt && Date.now() - completedAt < 50 * 60 * 1000) {
         const archiveAvailable = Boolean(
           existing.returnvalue &&
-            (await rewardBatchDownloadService.isRewardBatchArchiveAvailable(
-              existing.returnvalue,
-            )),
+          (await rewardBatchDownloadService.isRewardBatchArchiveAvailable(
+            existing.returnvalue,
+          )),
         );
         if (archiveAvailable) return existing;
         if (existing.returnvalue?.cancelled) {
           const redisClient = await queue.client;
-          await redisClient.del(
-            `reward-batch-downloads:cancel:${jobId}`,
-          );
+          await redisClient.del(`reward-batch-downloads:cancel:${jobId}`);
         }
         console.warn("Cached reward ZIP is missing from S3; regenerating it", {
           jobId,
