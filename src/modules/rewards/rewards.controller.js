@@ -18,12 +18,14 @@ const archiveDownloadUrl = (req, archive) => {
   return `${protocol}://${host}/reward-batch-downloads/${archive.token}?filename=${fileName}`;
 };
 
-async function enqueueRewardBatchZip(queue, batchId, rewardIds) {
+async function enqueueRewardBatchZip(queue, batchId, rewardIds, exportAs) {
   const normalizedRewardIds = Array.isArray(rewardIds)
     ? [...rewardIds].sort()
     : null;
   const jobId = `batchzip-${createHash("sha256")
-    .update(JSON.stringify([String(batchId), normalizedRewardIds]))
+    .update(
+      JSON.stringify([`${exportAs}-v1`, String(batchId), normalizedRewardIds]),
+    )
     .digest("hex")}`;
   const existing = await queue.getJob(jobId);
   if (existing) {
@@ -58,7 +60,7 @@ async function enqueueRewardBatchZip(queue, batchId, rewardIds) {
   try {
     return await queue.add(
       "generate-reward-batch-zip",
-      { batchId, rewardIds },
+      { batchId, rewardIds, exportAs },
       {
         jobId,
         attempts: 2,
@@ -129,6 +131,10 @@ exports.deleteRewardBatch = async (req, res) => {
 exports.createRewardBatchDownload = async (req, res) => {
   const batchId = req.params?.batchId;
   const rewardIds = req.body?.rewardIds || null;
+  const exportAs = req.body?.exportAs || "jpeg";
+  if (!["jpeg", "pdf"].includes(exportAs)) {
+    sendFailResponse("exportAs must be either 'jpeg' or 'pdf'", 400);
+  }
   if (!mongoose.isValidObjectId(batchId))
     sendFailResponse("invalid reward batch id", 400);
   if (
@@ -155,7 +161,12 @@ exports.createRewardBatchDownload = async (req, res) => {
     try {
       // The stable job ID deduplicates clicks across app instances. Failed or
       // expired completed jobs are removed so a retry gets a fresh archive.
-      const job = await enqueueRewardBatchZip(queue, batchId, rewardIds);
+      const job = await enqueueRewardBatchZip(
+        queue,
+        batchId,
+        rewardIds,
+        exportAs,
+      );
       return sendResponse(res, {
         data: { status: "processing", jobId: job.id },
       });
@@ -173,6 +184,7 @@ exports.createRewardBatchDownload = async (req, res) => {
   const jobId = await rewardBatchDownloadQueue.startInlineRewardBatchDownload(
     batchId,
     rewardIds,
+    exportAs,
   );
   return sendResponse(res, {
     data: { status: "processing", jobId },
