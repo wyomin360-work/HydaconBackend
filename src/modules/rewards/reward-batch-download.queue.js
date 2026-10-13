@@ -1,7 +1,10 @@
-const {
-  createRewardBatchArchive,
-  isRewardBatchArchiveAvailable,
-} = require("./reward-batch-download.service");
+const rewardBatchDownloadService = require("./reward-batch-download.service");
+const createRewardBatchArchive = (exportAs) =>
+  exportAs === "pdf"
+    ? rewardBatchDownloadService.createRewardBatchArchive
+    : rewardBatchDownloadService.createRewardBatchJpegArchive ||
+      rewardBatchDownloadService.createRewardBatchArchive;
+const { isRewardBatchArchiveAvailable } = rewardBatchDownloadService;
 const { createHash, randomUUID } = require("crypto");
 const mongoose = require("mongoose");
 const RewardBatchDownloadJob = require("../../schemas/reward-batch-download-job.schema");
@@ -59,12 +62,14 @@ function retainFinishedJobSnapshot(jobId, snapshot) {
   snapshot.cleanupTimeout = timeout;
 }
 
-function getInlineJobRequestKey(batchId, rewardIds) {
+function getInlineJobRequestKey(batchId, rewardIds, exportAs = "jpeg") {
   const normalizedRewardIds = Array.isArray(rewardIds)
     ? [...rewardIds].sort()
     : null;
   return createHash("sha256")
-    .update(JSON.stringify([String(batchId), normalizedRewardIds]))
+    .update(
+      JSON.stringify([`${exportAs}-v1`, String(batchId), normalizedRewardIds]),
+    )
     .digest("hex");
 }
 
@@ -82,10 +87,19 @@ async function executeInlineRewardBatchDownload(job) {
   }, 1000);
   cancellationPoll.unref?.();
   let lastProgressWriteAt = 0;
+  let lastProgressPhase = null;
   const updateProgress = async (progress) => {
     const now = Date.now();
-    if (now - lastProgressWriteAt < 2000 && progress.phase !== "ready") return;
+    const phaseChanged = progress.phase !== lastProgressPhase;
+    if (
+      !phaseChanged &&
+      now - lastProgressWriteAt < 2000 &&
+      progress.phase !== "ready"
+    ) {
+      return;
+    }
     lastProgressWriteAt = now;
+    lastProgressPhase = progress.phase;
     const update = await RewardBatchDownloadJob.updateOne(
       { _id: jobId, leaseOwner, state: "active" },
       {
@@ -104,7 +118,7 @@ async function executeInlineRewardBatchDownload(job) {
   };
 
   try {
-    const result = await createRewardBatchArchive(
+    const result = await createRewardBatchArchive(job.exportAs || "jpeg")(
       job.batchId,
       updateProgress,
       job.rewardIds?.length ? job.rewardIds.map(String) : null,
@@ -143,8 +157,12 @@ async function executeInlineRewardBatchDownload(job) {
   }
 }
 
-async function startInlineRewardBatchDownload(batchId, rewardIds = null) {
-  const requestKey = getInlineJobRequestKey(batchId, rewardIds);
+async function startInlineRewardBatchDownload(
+  batchId,
+  rewardIds = null,
+  exportAs = "jpeg",
+) {
+  const requestKey = getInlineJobRequestKey(batchId, rewardIds, exportAs);
   const now = new Date();
   const leaseOwner = randomUUID();
   let existing = await RewardBatchDownloadJob.findOne({ requestKey });
@@ -194,7 +212,7 @@ async function startInlineRewardBatchDownload(batchId, rewardIds = null) {
       existing = await RewardBatchDownloadJob.findOne({ requestKey });
       return existing
         ? String(existing._id)
-        : startInlineRewardBatchDownload(batchId, rewardIds);
+        : startInlineRewardBatchDownload(batchId, rewardIds, exportAs);
     }
     void executeInlineRewardBatchDownload(claimed.toObject());
     return String(claimed._id);
@@ -205,6 +223,7 @@ async function startInlineRewardBatchDownload(batchId, rewardIds = null) {
       requestKey,
       batchId,
       rewardIds: rewardIds || [],
+      exportAs,
       state: "active",
       progress: { phase: "generating", percent: 0, completed: 0, total: null },
       leaseOwner,
@@ -257,6 +276,8 @@ function getRewardBatchDownloadQueue() {
           cancellationPoll.unref?.();
           try {
             const result = await createRewardBatchArchive(
+              job.data.exportAs || "jpeg",
+            )(
               job.data.batchId,
               async (progress) => {
                 const redisClient = await redis;
@@ -413,6 +434,7 @@ async function getRewardBatchDownloadJob(jobId) {
     void startInlineRewardBatchDownload(
       inlineJob.batchId,
       inlineJob.rewardIds?.length ? inlineJob.rewardIds.map(String) : null,
+      inlineJob.exportAs || "jpeg",
     ).catch((error) =>
       console.error("Unable to resume abandoned reward ZIP job:", error),
     );

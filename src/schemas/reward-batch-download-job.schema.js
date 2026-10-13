@@ -9,6 +9,7 @@ const rewardBatchDownloadJobSchema = new mongoose.Schema(
       ref: "RewardBatch",
     },
     rewardIds: [{ type: mongoose.Types.ObjectId, ref: "Reward" }],
+    exportAs: { type: String, enum: ["jpeg", "pdf"], default: "jpeg" },
     state: {
       type: String,
       enum: ["active", "completed", "failed", "cancelled"],

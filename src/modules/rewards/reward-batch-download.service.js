@@ -1,6 +1,4 @@
-const QRCode = require("qrcode");
 const archiver = require("archiver");
-const { PDFDocument, StandardFonts, rgb } = require("pdf-lib");
 const fs = require("fs");
 const fsp = require("fs/promises");
 const mongoose = require("mongoose");
@@ -22,9 +20,10 @@ const Reward = require("../../schemas/reward.schema");
 const RewardBatch = require("../../schemas/reward-batch.schema");
 const Product = require("../../schemas/product.schema");
 const { sendFailResponse } = require("../../utils/responseHandlers");
+const PdfVoucherGenerator = require("./export/pdf-voucher-generator");
+const JpegVoucherGenerator = require("./export/jpeg-voucher-generator");
 
 const ARCHIVE_DIR = path.join(os.tmpdir(), "hydacon-reward-batch-downloads");
-const TEMPLATE_PATH = path.join(__dirname, "../../assets/rewards/Qr-cover.pdf");
 const ARCHIVE_TTL_MS = 24 * 60 * 60 * 1000;
 let s3Client;
 const inlineArchivePromises = new Map();
@@ -114,66 +113,11 @@ const safeFilePart = (value) =>
     .replace(/[^a-zA-Z0-9_-]/g, "_")
     .slice(0, 80);
 
-async function createVoucherPdf(reward, productName, templateDoc) {
-  const qrPayload = {
-    productId: String(reward.productId),
-    rewardId: String(reward._id),
-    rewardUidCode: reward.uidCode,
-  };
-  const qrBytes = await QRCode.toBuffer(JSON.stringify(qrPayload), {
-    type: "png",
-    // The voucher prints this QR at 84pt (~1.17in); 400px is enough for sharp
-    // print output and avoids generating unnecessarily large PNGs per reward.
-    width: 400,
-    margin: 1,
-    errorCorrectionLevel: "H",
-  });
-
-  const pdfDoc = await PDFDocument.create();
-  const [page] = await pdfDoc.copyPages(templateDoc, [0]);
-  pdfDoc.addPage(page);
-  const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-  const qrImage = await pdfDoc.embedPng(qrBytes);
-  const qrCenterX = 194.703 + 95 / 2;
-  const qrSize = 84;
-
-  page.drawImage(qrImage, {
-    x: qrCenterX - qrSize / 2,
-    y: 188 - 38 - 94 + (94 - qrSize) / 2,
-    width: qrSize,
-    height: qrSize,
-  });
-
-  const productLabel = (productName || "HYDACON REWARD").toUpperCase();
-  const productFontSize = 10;
-  const productWidth = font.widthOfTextAtSize(productLabel, productFontSize);
-  page.drawText(productLabel, {
-    x: qrCenterX - productWidth / 2,
-    y: 162,
-    size: productFontSize,
-    font,
-    color: rgb(1, 1, 1),
-  });
-
-  const uidCode = String(reward.uidCode || "NO-UID").toUpperCase();
-  const uidFontSize = 11;
-  const uidWidth = font.widthOfTextAtSize(uidCode, uidFontSize);
-  page.drawText(uidCode, {
-    x: qrCenterX - uidWidth / 2,
-    y: 28,
-    size: uidFontSize,
-    font,
-    color: rgb(1, 1, 1),
-  });
-
-  return Buffer.from(await pdfDoc.save());
-}
-
 async function generateRewardBatchArchive(
   batchId,
   onProgress = () => {},
   rewardIds = null,
-  { signal } = {},
+  { signal, voucherGenerator },
 ) {
   const throwIfCancelled = () => {
     if (signal?.aborted) {
@@ -275,14 +219,19 @@ async function generateRewardBatchArchive(
       },
       { once: true },
     );
-    const templateBytes = await fsp.readFile(TEMPLATE_PATH);
-    const templateDoc = await PDFDocument.load(templateBytes);
+    const templateBytes = await fsp.readFile(voucherGenerator.templatePath);
+    const templateContext = await voucherGenerator.prepare(templateBytes);
     await reportProgress("generating", { percent: 0, etaSeconds: null });
     const appendRewardBatch = async (batchRewards) => {
       throwIfCancelled();
-      const pdfs = await Promise.all(
+      const vouchers = await Promise.all(
         batchRewards.map((reward) =>
-          createVoucherPdf(reward, productName, templateDoc),
+          voucherGenerator.createVoucher(
+            reward,
+            productName,
+            templateContext,
+            templateBytes,
+          ),
         ),
       );
       for (let index = 0; index < batchRewards.length; index += 1) {
@@ -292,7 +241,9 @@ async function generateRewardBatchArchive(
           `${reward.uidCode || "Voucher"}_${reward._id}`,
         );
         const entryFinished = waitForArchiveEntry(archive, signal);
-        archive.append(pdfs[index], { name: `Voucher_${voucherName}.pdf` });
+        archive.append(vouchers[index], {
+          name: `Voucher_${voucherName}.${voucherGenerator.extension}`,
+        });
         await entryFinished;
         rewardCount += 1;
         if (rewardCount % 10 === 0 || rewardCount === totalItems) {
@@ -487,17 +438,24 @@ async function generateRewardBatchArchive(
   };
 }
 
-function createRewardBatchArchive(
+function createRewardBatchArchiveWithGenerator(
   batchId,
   onProgress = () => {},
   rewardIds = null,
   options = {},
+  voucherGenerator,
 ) {
   const normalizedRewardIds = Array.isArray(rewardIds)
     ? [...rewardIds].sort()
     : null;
   const key = createHash("sha256")
-    .update(JSON.stringify([String(batchId), normalizedRewardIds]))
+    .update(
+      JSON.stringify([
+        voucherGenerator.extension,
+        String(batchId),
+        normalizedRewardIds,
+      ]),
+    )
     .digest("hex");
   const existing = inlineArchivePromises.get(key);
   if (existing) return existing;
@@ -506,7 +464,7 @@ function createRewardBatchArchive(
     batchId,
     onProgress,
     rewardIds,
-    options,
+    { ...options, voucherGenerator },
   );
   inlineArchivePromises.set(key, generation);
   generation
@@ -516,6 +474,36 @@ function createRewardBatchArchive(
     })
     .catch(() => {});
   return generation;
+}
+
+function createRewardBatchArchive(
+  batchId,
+  onProgress = () => {},
+  rewardIds = null,
+  options = {},
+) {
+  return createRewardBatchArchiveWithGenerator(
+    batchId,
+    onProgress,
+    rewardIds,
+    options,
+    new PdfVoucherGenerator(),
+  );
+}
+
+function createRewardBatchJpegArchive(
+  batchId,
+  onProgress = () => {},
+  rewardIds = null,
+  options = {},
+) {
+  return createRewardBatchArchiveWithGenerator(
+    batchId,
+    onProgress,
+    rewardIds,
+    options,
+    new JpegVoucherGenerator(),
+  );
 }
 
 async function getRewardBatchArchive(token) {
@@ -600,6 +588,7 @@ async function cleanupExpiredS3Archives() {
 
 module.exports = {
   createRewardBatchArchive,
+  createRewardBatchJpegArchive,
   getRewardBatchArchive,
   cleanupExpiredArchives,
   cleanupExpiredS3Archives,
