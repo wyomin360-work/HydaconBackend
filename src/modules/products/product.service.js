@@ -3,6 +3,7 @@ const Document = require("../../schemas/document.schema");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const AppError = require("../../utils/appError");
 const { calculateCoverage } = require("./product.calculation");
+const { normalizeProductName } = require("../../utils/voucher-identity");
 
 const DOCUMENT_POPULATE = [
   { path: "tdsDocument" },
@@ -139,32 +140,41 @@ async function createProduct(productData) {
     categoryId,
   } = productData;
 
-  const product = await Product.create({
-    name,
-    description,
-    images,
-    price,
-    rewardPoints,
-    weightValue,
-    weightUnit,
-    netWeight,
-    features: features || [],
-    specifications: specifications || {},
-    tdsDocument: extractDocId(tdsDocument),
-    msdsDocument: extractDocId(msdsDocument),
-    brochureDocument: extractDocId(brochureDocument),
-    catalogueDocument: extractDocId(catalogueDocument),
-    featuredImage,
-    coverage,
-    roomTypes: normalizeArray(roomTypes),
-    areaTypes: normalizeArray(areaTypes),
-    applicationAreas: normalizeArray(applicationAreas),
-    substrateTypes: normalizeArray(substrateTypes),
-    applicationTypes: normalizeArray(applicationTypes),
-    tileTypes: normalizeArray(tileTypes),
-    additionalTags: normalizeArray(additionalTags),
-    categoryId: categoryId || null,
-  });
+  let product;
+  try {
+    product = await Product.create({
+      name,
+      nameKey: normalizeProductName(name),
+      description,
+      images,
+      price,
+      rewardPoints,
+      weightValue,
+      weightUnit,
+      netWeight,
+      features: features || [],
+      specifications: specifications || {},
+      tdsDocument: extractDocId(tdsDocument),
+      msdsDocument: extractDocId(msdsDocument),
+      brochureDocument: extractDocId(brochureDocument),
+      catalogueDocument: extractDocId(catalogueDocument),
+      featuredImage,
+      coverage,
+      roomTypes: normalizeArray(roomTypes),
+      areaTypes: normalizeArray(areaTypes),
+      applicationAreas: normalizeArray(applicationAreas),
+      substrateTypes: normalizeArray(substrateTypes),
+      applicationTypes: normalizeArray(applicationTypes),
+      tileTypes: normalizeArray(tileTypes),
+      additionalTags: normalizeArray(additionalTags),
+      categoryId: categoryId || null,
+    });
+  } catch (error) {
+    if (error?.code === 11000 && error?.keyPattern?.nameKey) {
+      throw new AppError("A product with this name already exists.", 409);
+    }
+    throw error;
+  }
 
   const populatedProduct = await Product.findById(product._id).populate(
     DOCUMENT_POPULATE,
@@ -221,6 +231,8 @@ async function updateProduct(productData, productId) {
     catalogueDocument: extractDocId(catalogueDocument),
   };
 
+  if (name !== undefined) updateFields.nameKey = normalizeProductName(name);
+
   if (netWeight !== undefined) updateFields.netWeight = netWeight;
   if (features !== undefined) updateFields.features = features;
   if (specifications !== undefined)
@@ -242,7 +254,14 @@ async function updateProduct(productData, productId) {
   if (additionalTags !== undefined)
     updateFields.additionalTags = normalizeArray(additionalTags);
 
-  await Product.findByIdAndUpdate(productId, { $set: updateFields });
+  try {
+    await Product.findByIdAndUpdate(productId, { $set: updateFields });
+  } catch (error) {
+    if (error?.code === 11000 && error?.keyPattern?.nameKey) {
+      throw new AppError("A product with this name already exists.", 409);
+    }
+    throw error;
+  }
 
   const updatedProduct =
     await Product.findById(productId).populate(DOCUMENT_POPULATE);

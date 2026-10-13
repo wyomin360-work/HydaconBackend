@@ -15,6 +15,7 @@ const {
   generateRewardBatchUidToken,
 } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
+const { makeVoucherUid } = require("../../utils/voucher-identity");
 
 async function listRewards(data) {
   const {
@@ -123,7 +124,10 @@ async function listRewards(data) {
 
   //  Search by uidCode or Product name
   if (search) {
-    query.$or = [{ uidCode: { $regex: search, $options: "i" } }];
+    query.$or = [
+      { uidCode: { $regex: search, $options: "i" } },
+      { voucherUid: { $regex: search, $options: "i" } },
+    ];
   }
 
   const sort = {};
@@ -630,9 +634,12 @@ async function createRewards(rewardData) {
 
   for (let i = 0; i < count; i++) {
     const rewardUID = generateComplexRewardUID();
+    const voucherNumber = i + 1;
     const reward = {
       productId,
       batchId: batch._id,
+      voucherNumber,
+      voucherUid: makeVoucherUid(product.name, batchNumber, voucherNumber),
       expiresAt: expiresAtWithBuffer,
       uidCode: rewardUID,
       point: product.rewardPoints,
