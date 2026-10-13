@@ -11,6 +11,7 @@ const RewardBatch = require("../../../schemas/reward-batch.schema");
 const Product = require("../../../schemas/product.schema");
 const {
   createRewardBatchArchive,
+  createRewardBatchJpegArchive,
   getRewardBatchArchive,
 } = require("../reward-batch-download.service");
 
@@ -19,6 +20,8 @@ const reward = {
   _id: "64c76dce4b8e9ca5ce208c62",
   productId: "64c76dce4b8e9ca5ce208c63",
   uidCode: "TEST1234",
+  voucherNumber: 12,
+  voucherUid: "VCH-REGULAR_501-B03-V012",
   point: 10,
   active: true,
   expiresAt: new Date("2027-01-01T00:00:00.000Z"),
@@ -39,6 +42,7 @@ describe("reward batch archive generation", () => {
         _id: batchId,
         productId: reward.productId,
         createdAt: new Date("2026-10-08T00:00:00.000Z"),
+        batchNumber: 1,
         totalCount: 1,
       }),
     });
@@ -60,11 +64,56 @@ describe("reward batch archive generation", () => {
     const archive = await createRewardBatchArchive(batchId);
     const archivePath = await getRewardBatchArchive(archive.token);
 
-    expect(archive.fileName).toBe("Vouchers_Regular_501_20261008.zip");
+    expect(archive.fileName).toBe("Vouchers_Regular_501_B01.zip");
     expect(archive.rewardCount).toBe(1);
     expect(archivePath).toBeTruthy();
-    expect((await fs.stat(archivePath)).size).toBeGreaterThan(0);
+    const archiveBytes = await fs.readFile(archivePath);
+    expect(archiveBytes.length).toBeGreaterThan(0);
+    expect(
+      archiveBytes.includes(Buffer.from("VCH-REGULAR_501-B03-V012.pdf")),
+    ).toBe(true);
 
+    await fs.rm(archivePath, { force: true });
+  });
+
+  it("uses each voucher UID as the JPEG archive entry filename", async () => {
+    const archive = await createRewardBatchJpegArchive(batchId);
+    const archivePath = await getRewardBatchArchive(archive.token);
+    const archiveBytes = await fs.readFile(archivePath);
+
+    expect(
+      archiveBytes.includes(Buffer.from("VCH-REGULAR_501-B03-V012.jpg")),
+    ).toBe(true);
+
+    await fs.rm(archivePath, { force: true });
+  });
+
+  it("names a selected-voucher ZIP with the selected voucher number range", async () => {
+    const selectedRewards = [
+      reward,
+      {
+        ...reward,
+        _id: "64c76dce4b8e9ca5ce208c64",
+        voucherNumber: 20,
+        voucherUid: "VCH-REGULAR_501-B03-V020",
+      },
+    ];
+    Reward.find.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({
+          cursor: jest.fn().mockReturnValue(cursorFor(selectedRewards)),
+        }),
+      }),
+    });
+
+    const archive = await createRewardBatchArchive(
+      batchId,
+      () => {},
+      selectedRewards.map((item) => item._id),
+    );
+    const archivePath = await getRewardBatchArchive(archive.token);
+
+    expect(archive.fileName).toBe("Vouchers_Regular_501_V12-20.zip");
     await fs.rm(archivePath, { force: true });
   });
 

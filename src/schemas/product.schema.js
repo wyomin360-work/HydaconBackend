@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { normalizeProductName } = require("../utils/voucher-identity");
 
 const calculatorConfigSchema = new mongoose.Schema(
   {
@@ -38,6 +39,7 @@ const productSchema = new mongoose.Schema(
       default: () => new mongoose.Types.ObjectId(),
     },
     name: { type: String, required: true },
+    nameKey: { type: String, trim: true },
     description: { type: String, required: true },
     weightValue: { type: Number, required: true },
     weightUnit: { type: String, required: true, enum: ["kg", "g", "l", "ml"] },
@@ -102,7 +104,16 @@ const productSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+productSchema.pre("validate", function setProductNameKey(next) {
+  if (this.name !== undefined) this.nameKey = normalizeProductName(this.name);
+  next();
+});
+
 productSchema.index({ active: 1 });
+productSchema.index(
+  { nameKey: 1 },
+  { unique: true, sparse: true, name: "unique_product_filename_name" },
+);
 productSchema.index({ roomTypes: 1 });
 productSchema.index({ areaTypes: 1 });
 productSchema.index({ substrateTypes: 1 });

@@ -109,9 +109,7 @@ async function isRewardBatchArchiveAvailable(archive) {
 }
 
 const safeFilePart = (value) =>
-  String(value || "Batch")
-    .replace(/[^a-zA-Z0-9_-]/g, "_")
-    .slice(0, 80);
+  String(value || "Batch").replace(/[^a-zA-Z0-9_-]/g, "_");
 
 async function generateRewardBatchArchive(
   batchId,
@@ -165,7 +163,9 @@ async function generateRewardBatchArchive(
   if (rewardIds) rewardQuery._id = { $in: rewardIds };
   const totalItems = rewardIds?.length || batch.totalCount || 0;
   const rewards = Reward.find(rewardQuery)
-    .select("_id productId uidCode point active expiresAt")
+    .select(
+      "_id productId uidCode voucherUid voucherNumber point active expiresAt",
+    )
     .lean()
     .cursor();
 
@@ -185,6 +185,8 @@ async function generateRewardBatchArchive(
   archive.pipe(output);
 
   let rewardCount = 0;
+  let firstVoucherNumber = null;
+  let lastVoucherNumber = null;
   const generationStartedAt = Date.now();
   const rewardConcurrency = 4;
   const reportProgress = async (phase, values = {}) => {
@@ -237,12 +239,25 @@ async function generateRewardBatchArchive(
       for (let index = 0; index < batchRewards.length; index += 1) {
         throwIfCancelled();
         const reward = batchRewards[index];
+        if (
+          Number.isInteger(reward.voucherNumber) &&
+          reward.voucherNumber > 0
+        ) {
+          firstVoucherNumber =
+            firstVoucherNumber === null
+              ? reward.voucherNumber
+              : Math.min(firstVoucherNumber, reward.voucherNumber);
+          lastVoucherNumber =
+            lastVoucherNumber === null
+              ? reward.voucherNumber
+              : Math.max(lastVoucherNumber, reward.voucherNumber);
+        }
         const voucherName = safeFilePart(
-          `${reward.uidCode || "Voucher"}_${reward._id}`,
+          reward.voucherUid || `VCH-${reward._id}`,
         );
         const entryFinished = waitForArchiveEntry(archive, signal);
         archive.append(vouchers[index], {
-          name: `Voucher_${voucherName}.${voucherGenerator.extension}`,
+          name: `${voucherName}.${voucherGenerator.extension}`,
         });
         await entryFinished;
         rewardCount += 1;
@@ -293,7 +308,15 @@ async function generateRewardBatchArchive(
     ? new Date(batch.createdAt).toISOString().slice(0, 10).replace(/-/g, "")
     : new Date().toISOString().slice(0, 10).replace(/-/g, "");
 
-  const fileName = `Vouchers_${safeFilePart(productName)}_${createdDate}.zip`;
+  const batchNumber =
+    Number.isInteger(batch.batchNumber) && batch.batchNumber > 0
+      ? `B${String(batch.batchNumber).padStart(2, "0")}`
+      : "BATCH";
+  const voucherRange =
+    rewardIds?.length > 1 && firstVoucherNumber !== null
+      ? `V${firstVoucherNumber}-${lastVoucherNumber}`
+      : batchNumber;
+  const fileName = `Vouchers_${safeFilePart(productName)}_${voucherRange}.zip`;
   const archiveStorage =
     process.env.NODE_ENV === "test" ? null : getArchiveStorage();
   if (archiveStorage) {

@@ -136,6 +136,22 @@ describe("Reward batches", () => {
     expect(insertedRewards.every((reward) => reward.batchId === batchId)).toBe(
       true,
     );
+    expect(insertedRewards).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          voucherNumber: 1,
+          voucherUid: "VCH-REGULAR_501_GREY-B01-V001",
+        }),
+        expect.objectContaining({
+          voucherNumber: 2,
+          voucherUid: "VCH-REGULAR_501_GREY-B01-V002",
+        }),
+        expect.objectContaining({
+          voucherNumber: 3,
+          voucherUid: "VCH-REGULAR_501_GREY-B01-V003",
+        }),
+      ]),
+    );
     expect(RewardBatch.updateOne).toHaveBeenCalledWith(
       { _id: batchId },
       { $set: { status: "complete" } },
