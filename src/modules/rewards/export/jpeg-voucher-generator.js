@@ -43,7 +43,8 @@ class JpegVoucherGenerator {
     const qrBottom = (188 - 38 - 94 + (94 - 84) / 2) * scaleY;
     const productLabel = (productName || "HYDACON REWARD").toUpperCase();
     const uidCode = String(reward.uidCode || "NO-UID").toUpperCase();
-    const svg = Buffer.from(`<svg width="${coverMetadata.width}" height="${coverMetadata.height}" xmlns="http://www.w3.org/2000/svg">
+    const svg =
+      Buffer.from(`<svg width="${coverMetadata.width}" height="${coverMetadata.height}" xmlns="http://www.w3.org/2000/svg">
       <style>text { font-family: Arial, Helvetica, sans-serif; font-weight: 700; fill: #fff; }</style>
       <text x="${qrCenterX}" y="${(COVER_PDF_HEIGHT - 162) * scaleY}" font-size="${10 * scaleY}" text-anchor="middle">${escapeSvgText(productLabel)}</text>
       <text x="${qrCenterX}" y="${(COVER_PDF_HEIGHT - 28) * scaleY}" font-size="${11 * scaleY}" text-anchor="middle">${escapeSvgText(uidCode)}</text>
