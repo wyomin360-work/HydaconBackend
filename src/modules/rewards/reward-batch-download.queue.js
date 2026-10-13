@@ -87,10 +87,19 @@ async function executeInlineRewardBatchDownload(job) {
   }, 1000);
   cancellationPoll.unref?.();
   let lastProgressWriteAt = 0;
+  let lastProgressPhase = null;
   const updateProgress = async (progress) => {
     const now = Date.now();
-    if (now - lastProgressWriteAt < 2000 && progress.phase !== "ready") return;
+    const phaseChanged = progress.phase !== lastProgressPhase;
+    if (
+      !phaseChanged &&
+      now - lastProgressWriteAt < 2000 &&
+      progress.phase !== "ready"
+    ) {
+      return;
+    }
     lastProgressWriteAt = now;
+    lastProgressPhase = progress.phase;
     const update = await RewardBatchDownloadJob.updateOne(
       { _id: jobId, leaseOwner, state: "active" },
       {

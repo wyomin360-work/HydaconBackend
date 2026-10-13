@@ -229,8 +229,8 @@ async function generateRewardBatchArchive(
           voucherGenerator.createVoucher(
             reward,
             productName,
-            templateBytes,
             templateContext,
+            templateBytes,
           ),
         ),
       );

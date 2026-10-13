@@ -17,7 +17,7 @@ class PdfVoucherGenerator {
     return PDFDocument.load(templateBytes);
   }
 
-  async createVoucher(reward, productName, templateDoc) {
+  async createVoucher(reward, productName, templateDoc, _templateBytes) {
     const qrPayload = {
       productId: String(reward.productId),
       rewardId: String(reward._id),

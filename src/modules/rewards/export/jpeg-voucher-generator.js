@@ -23,7 +23,7 @@ class JpegVoucherGenerator {
     return metadata;
   }
 
-  async createVoucher(reward, productName, coverBytes, coverMetadata) {
+  async createVoucher(reward, productName, coverMetadata, coverBytes) {
     const qrPayload = {
       productId: String(reward.productId),
       rewardId: String(reward._id),
