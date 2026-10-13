@@ -41,6 +41,7 @@ describe("reward batch download controller", () => {
     expect(downloadQueue.startInlineRewardBatchDownload).toHaveBeenCalledWith(
       "64c76dce4b8e9ca5ce208c61",
       null,
+      "jpeg",
     );
     expect(res.json).toHaveBeenCalledWith({
       status: "success",
@@ -120,7 +121,11 @@ describe("reward batch download controller", () => {
 
     expect(add).toHaveBeenCalledWith(
       "generate-reward-batch-zip",
-      { batchId: "64c76dce4b8e9ca5ce208c61", rewardIds: null },
+      {
+        batchId: "64c76dce4b8e9ca5ce208c61",
+        rewardIds: null,
+        exportAs: "jpeg",
+      },
       expect.objectContaining({
         attempts: 2,
         jobId: expect.stringMatching(/^batchzip-[a-f0-9]{64}$/),
