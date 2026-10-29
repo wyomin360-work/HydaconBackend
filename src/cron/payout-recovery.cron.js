@@ -3,19 +3,21 @@ const { WITHDRAWAL_STATUS } = require("../constants/withdrawals");
 const {
   PAYOUT_PROVIDER_VALUES,
   PAYOUT_RECON_OUTCOME,
-  PAYOUT_CURRENCY,
   PAYOUT_SOURCE,
   PAYOUT_CONFIG,
   PAYOUT_MESSAGE,
 } = require("../constants/payouts");
 const Withdrawal = require("../schemas/withdrawal.schema");
-const PayoutRecon = require("../schemas/payout-recon.schema");
 const { getProvider } = require("../functions/payouts");
 const {
   processPayoutOutboxBatch,
 } = require("../modules/withdrawals/payout-execution.service");
 const { processWebhook } = require("../modules/webhooks/webhooks.service");
-const { safeText } = require("../modules/withdrawals/payout-state.service");
+const { safeText } = require("../modules/withdrawals/payout-utils");
+const {
+  hasTransferMismatch,
+  recordPayoutReconciliation,
+} = require("../modules/withdrawals/payout-reconciliation.service");
 const logger = require("../config/pino.config");
 
 async function processPayoutReconciliationBatch() {
@@ -25,7 +27,7 @@ async function processPayoutReconciliationBatch() {
   const retryBefore = new Date(
     Date.now() - PAYOUT_CONFIG.RECONCILIATION_RETRY_MS,
   );
-  const stuck = await Withdrawal.find({
+  const staleWithdrawals = await Withdrawal.find({
     status: {
       $in: [WITHDRAWAL_STATUS.PROCESSING, WITHDRAWAL_STATUS.COMPLETED],
     },
@@ -42,99 +44,82 @@ async function processPayoutReconciliationBatch() {
     .limit(PAYOUT_CONFIG.RECONCILIATION_BATCH_SIZE)
     .lean();
 
-  for (const withdrawal of stuck) {
+  for (const withdrawal of staleWithdrawals) {
     const requestedAt = new Date();
-    const claimed = await Withdrawal.updateOne(
-      {
-        _id: withdrawal._id,
-        status: {
-          $in: [WITHDRAWAL_STATUS.PROCESSING, WITHDRAWAL_STATUS.COMPLETED],
-        },
-        $or: [
-          { lastPayoutReconciledAt: null },
-          { lastPayoutReconciledAt: { $lt: retryBefore } },
-        ],
-      },
-      { $set: { lastPayoutReconciledAt: requestedAt } },
-    );
-    if (!claimed.modifiedCount) continue;
-    try {
-      const provider = getProvider(withdrawal.payoutProvider);
-      const transfer = await provider.getTransferStatus({
-        referenceId: withdrawal.providerReferenceId,
-      });
-      if (!transfer) {
-        await PayoutRecon.create({
-          withdrawalId: withdrawal._id,
-          provider: withdrawal.payoutProvider,
-          providerTransferId: withdrawal.providerTransferId || null,
-          payoutId: withdrawal.providerTransferId || null,
-          providerReferenceId: withdrawal.providerReferenceId,
-          referenceId: withdrawal.providerReferenceId,
-          requestedAt,
-          outcome: PAYOUT_RECON_OUTCOME.NOT_FOUND,
-        });
-        continue;
-      }
-      const mismatch =
-        (transfer.providerReferenceId &&
-          transfer.providerReferenceId !== withdrawal.providerReferenceId) ||
-        (transfer.providerTransferId &&
-          withdrawal.providerTransferId &&
-          transfer.providerTransferId !== withdrawal.providerTransferId) ||
-        (transfer.amountMinor != null &&
-          Number(transfer.amountMinor) !==
-            Math.round(
-              withdrawal.cashAmount * PAYOUT_CONFIG.MINOR_UNITS_PER_INR,
-            )) ||
-        (transfer.currency && transfer.currency !== PAYOUT_CURRENCY.INR);
-      await PayoutRecon.create({
-        withdrawalId: withdrawal._id,
-        provider: withdrawal.payoutProvider,
-        providerTransferId: transfer.providerTransferId || null,
-        payoutId: transfer.providerTransferId || null,
-        providerReferenceId: withdrawal.providerReferenceId,
-        referenceId: withdrawal.providerReferenceId,
-        requestedAt,
-        outcome: mismatch
-          ? PAYOUT_RECON_OUTCOME.MISMATCH
-          : PAYOUT_RECON_OUTCOME.MATCHED,
-        providerStatus: transfer.rawStatus || transfer.status || null,
-        providerResponse: transfer.safeResponse || {},
-        ...(mismatch
-          ? { errorMessage: PAYOUT_MESSAGE.PROVIDER_TRANSFER_DETAILS_MISMATCH }
-          : {}),
-      });
-      if (mismatch) continue;
-      await processWebhook(
-        {},
-        Buffer.from(JSON.stringify(transfer)),
-        transfer,
-        {
-          source: PAYOUT_SOURCE.RECONCILIATION,
-          provider: withdrawal.payoutProvider,
-          normalized: transfer,
-        },
-      );
-    } catch (error) {
-      await PayoutRecon.create({
-        withdrawalId: withdrawal._id,
-        provider: withdrawal.payoutProvider,
-        providerTransferId: withdrawal.providerTransferId || null,
-        payoutId: withdrawal.providerTransferId || null,
-        providerReferenceId: withdrawal.providerReferenceId,
-        referenceId: withdrawal.providerReferenceId,
-        requestedAt,
-        outcome: PAYOUT_RECON_OUTCOME.ERROR,
-        errorMessage: safeText(error.message),
-      });
-      logger.error(PAYOUT_MESSAGE.RECONCILIATION_FAILED, {
-        withdrawalId: String(withdrawal._id),
-        provider: withdrawal.payoutProvider,
-        error: safeText(error.message),
-      });
-    }
+    if (!(await claimWithdrawal(withdrawal, retryBefore, requestedAt)))
+      continue;
+    await reconcileWithdrawal(withdrawal, requestedAt);
   }
+}
+
+async function claimWithdrawal(withdrawal, retryBefore, requestedAt) {
+  const result = await Withdrawal.updateOne(
+    {
+      _id: withdrawal._id,
+      status: {
+        $in: [WITHDRAWAL_STATUS.PROCESSING, WITHDRAWAL_STATUS.COMPLETED],
+      },
+      $or: [
+        { lastPayoutReconciledAt: null },
+        { lastPayoutReconciledAt: { $lt: retryBefore } },
+      ],
+    },
+    { $set: { lastPayoutReconciledAt: requestedAt } },
+  );
+  return result.modifiedCount > 0;
+}
+
+async function reconcileWithdrawal(withdrawal, requestedAt) {
+  try {
+    const provider = getProvider(withdrawal.payoutProvider);
+    const transfer = await provider.getTransferStatus({
+      referenceId: withdrawal.providerReferenceId,
+    });
+    if (!transfer) {
+      await recordPayoutReconciliation({
+        withdrawal,
+        requestedAt,
+        outcome: PAYOUT_RECON_OUTCOME.NOT_FOUND,
+      });
+      return;
+    }
+
+    const mismatch = hasTransferMismatch(withdrawal, transfer);
+    await recordPayoutReconciliation({
+      withdrawal,
+      requestedAt,
+      outcome: mismatch
+        ? PAYOUT_RECON_OUTCOME.MISMATCH
+        : PAYOUT_RECON_OUTCOME.MATCHED,
+      transfer,
+      errorMessage: mismatch
+        ? PAYOUT_MESSAGE.PROVIDER_TRANSFER_DETAILS_MISMATCH
+        : null,
+    });
+    if (mismatch) return;
+
+    await processReconciliationTransfer(withdrawal, transfer);
+  } catch (error) {
+    await recordPayoutReconciliation({
+      withdrawal,
+      requestedAt,
+      outcome: PAYOUT_RECON_OUTCOME.ERROR,
+      errorMessage: error.message,
+    });
+    logger.error(PAYOUT_MESSAGE.RECONCILIATION_FAILED, {
+      withdrawalId: String(withdrawal._id),
+      provider: withdrawal.payoutProvider,
+      error: safeText(error.message),
+    });
+  }
+}
+
+async function processReconciliationTransfer(withdrawal, transfer) {
+  await processWebhook({}, Buffer.from(JSON.stringify(transfer)), transfer, {
+    source: PAYOUT_SOURCE.RECONCILIATION,
+    provider: withdrawal.payoutProvider,
+    normalized: transfer,
+  });
 }
 
 function registerPayoutRecoveryCron() {

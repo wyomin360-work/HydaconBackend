@@ -20,10 +20,8 @@ const { sendFcmNotifications } = require("../../functions/fcm");
 const { formatNotification } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const { getProvider, currentProviderName } = require("../../functions/payouts");
-const {
-  applyTransferUpdate,
-  safeText,
-} = require("../withdrawals/payout-state.service");
+const { applyTransferUpdate } = require("../withdrawals/payout-state.service");
+const { safeText } = require("../withdrawals/payout-utils");
 const logger = require("../../config/pino.config");
 
 function verifySignature(rawBody, signature, secret) {
@@ -61,7 +59,46 @@ async function processWebhookInternal(
   const payloadHash = crypto.createHash("sha256").update(rawBody).digest("hex");
   const providerEventId = normalized.providerEventId || null;
   const dedupeKey = `${providerName}:${source.toLowerCase()}:${providerEventId || payloadHash}`;
-  const eventDoc = await PayoutEvent.findOneAndUpdate(
+  const eventDoc = await getOrCreateEvent({
+    dedupeKey,
+    providerName,
+    providerEventId,
+    source,
+    normalized,
+    payloadHash,
+  });
+  if (isEventAlreadyHandled(eventDoc)) {
+    return { status: PAYOUT_RESULT.SUCCESS, processed: false, duplicate: true };
+  }
+
+  const claimed = await claimEvent(eventDoc);
+  try {
+    return await processClaimedEvent({
+      claimed,
+      providerName,
+      source,
+      normalized,
+    });
+  } catch (error) {
+    await markEventFailed(claimed, error);
+    logger.error(PAYOUT_MESSAGE.WEBHOOK_PROCESSING_FAILED, {
+      provider: providerName,
+      eventId: providerEventId || dedupeKey,
+      error: safeText(error.message),
+    });
+    throw error;
+  }
+}
+
+async function getOrCreateEvent({
+  dedupeKey,
+  providerName,
+  providerEventId,
+  source,
+  normalized,
+  payloadHash,
+}) {
+  return PayoutEvent.findOneAndUpdate(
     { dedupeKey },
     {
       $setOnInsert: {
@@ -82,12 +119,15 @@ async function processWebhookInternal(
     },
     { upsert: true, new: true, setDefaultsOnInsert: true },
   );
-  if (
-    [PAYOUT_EVENT_STATUS.PROCESSED, PAYOUT_EVENT_STATUS.IGNORED].includes(
-      eventDoc.processingStatus,
-    )
-  )
-    return { status: PAYOUT_RESULT.SUCCESS, processed: false, duplicate: true };
+}
+
+function isEventAlreadyHandled(eventDoc) {
+  return [PAYOUT_EVENT_STATUS.PROCESSED, PAYOUT_EVENT_STATUS.IGNORED].includes(
+    eventDoc.processingStatus,
+  );
+}
+
+async function claimEvent(eventDoc) {
   const now = new Date();
   const claimed = await PayoutEvent.findOneAndUpdate(
     {
@@ -121,121 +161,131 @@ async function processWebhookInternal(
     error.statusCode = PAYOUT_HTTP_STATUS.SERVICE_UNAVAILABLE;
     throw error;
   }
+  return claimed;
+}
 
-  try {
-    if (!normalized.providerReferenceId && !normalized.providerTransferId) {
-      await PayoutEvent.updateOne(
-        { _id: claimed._id },
-        {
-          $set: {
-            processingStatus: PAYOUT_EVENT_STATUS.IGNORED,
-            result: PAYOUT_MESSAGE.TRANSFER_IDENTITY_MISSING,
-            processedAt: new Date(),
-          },
-        },
-      );
-      return {
-        status: PAYOUT_RESULT.IGNORED,
-        reason: PAYOUT_MESSAGE.TRANSFER_IDENTITY_MISSING,
-      };
-    }
-    const withdrawal = await Withdrawal.findOne({
-      payoutProvider: providerName,
-      $or: [
-        ...(normalized.providerReferenceId
-          ? [{ providerReferenceId: normalized.providerReferenceId }]
-          : []),
-        ...(normalized.providerTransferId
-          ? [{ providerTransferId: normalized.providerTransferId }]
-          : []),
-      ],
-    }).lean();
-    if (!withdrawal) {
-      await PayoutEvent.updateOne(
-        { _id: claimed._id },
-        {
-          $set: {
-            processingStatus: PAYOUT_EVENT_STATUS.IGNORED,
-            result: PAYOUT_MESSAGE.WITHDRAWAL_NOT_FOUND_FOR_REFERENCE,
-            processedAt: new Date(),
-          },
-        },
-      );
-      return {
-        status: PAYOUT_RESULT.IGNORED,
-        reason: PAYOUT_MESSAGE.WITHDRAWAL_NOT_FOUND_FOR_REFERENCE,
-      };
-    }
-    if (
-      normalized.providerReferenceId &&
-      normalized.providerReferenceId !== withdrawal.providerReferenceId
-    ) {
-      throw new Error(PAYOUT_MESSAGE.PROVIDER_REFERENCE_MISMATCH);
-    }
-    if (
-      normalized.providerTransferId &&
-      withdrawal.providerTransferId &&
-      normalized.providerTransferId !== withdrawal.providerTransferId
-    ) {
-      throw new Error(PAYOUT_MESSAGE.PROVIDER_TRANSFER_ID_MISMATCH);
-    }
-    const result = await applyTransferUpdate({
-      withdrawal,
-      provider: providerName,
-      normalized,
-      eventDoc: claimed,
-      source:
-        source === PAYOUT_SOURCE.WEBHOOK
-          ? PAYOUT_SOURCE.PAYOUT_WEBHOOK
-          : PAYOUT_SOURCE.PAYOUT_RECONCILIATION,
-    });
-    if (
-      result.processed &&
-      [
-        WITHDRAWAL_STATUS.COMPLETED,
-        WITHDRAWAL_STATUS.FAILED,
-        WITHDRAWAL_STATUS.REVERSED,
-      ].includes(normalized.targetStatus)
-    ) {
-      const user = await User.findById(withdrawal.userId).lean();
-      if (user?.fcmTokens?.length && user.enableNotification) {
-        const success = normalized.targetStatus === WITHDRAWAL_STATUS.COMPLETED;
-        const localized = getNotification(
-          APP_NOTIFICATIONS.withdraw[success ? "success" : "failed"],
-          user.language,
-        );
-        const message = success
-          ? formatNotification(localized.body, {
-              amount: withdrawal.cashAmount,
-            })
-          : localized.body;
-        sendFcmNotifications(user.fcmTokens, localized.title, message).catch(
-          (error) =>
-            logger.error(PAYOUT_MESSAGE.FCM_NOTIFICATION_LOG, {
-              withdrawalId: String(withdrawal._id),
-              error: safeText(error.message),
-            }),
-        );
-      }
-    }
-    return result;
-  } catch (error) {
-    await PayoutEvent.updateOne(
-      { _id: claimed._id, processingStatus: PAYOUT_EVENT_STATUS.PROCESSING },
-      {
-        $set: {
-          processingStatus: PAYOUT_EVENT_STATUS.FAILED,
-          errorMessage: safeText(error.message),
-        },
-      },
-    );
-    logger.error(PAYOUT_MESSAGE.WEBHOOK_PROCESSING_FAILED, {
-      provider: providerName,
-      eventId: providerEventId || dedupeKey,
-      error: safeText(error.message),
-    });
-    throw error;
+async function processClaimedEvent({
+  claimed,
+  providerName,
+  source,
+  normalized,
+}) {
+  if (!normalized.providerReferenceId && !normalized.providerTransferId) {
+    return ignoreEvent(claimed, PAYOUT_MESSAGE.TRANSFER_IDENTITY_MISSING);
   }
+
+  const withdrawal = await findWithdrawal(providerName, normalized);
+  if (!withdrawal) {
+    return ignoreEvent(
+      claimed,
+      PAYOUT_MESSAGE.WITHDRAWAL_NOT_FOUND_FOR_REFERENCE,
+    );
+  }
+
+  validateWithdrawalIdentity(withdrawal, normalized);
+  const result = await applyTransferUpdate({
+    withdrawal,
+    provider: providerName,
+    normalized,
+    eventDoc: claimed,
+    source: getLedgerSource(source),
+  });
+  if (result.processed) {
+    await notifyPayoutStatus(withdrawal, normalized);
+  }
+  return result;
+}
+
+function findWithdrawal(providerName, normalized) {
+  return Withdrawal.findOne({
+    payoutProvider: providerName,
+    $or: [
+      ...(normalized.providerReferenceId
+        ? [{ providerReferenceId: normalized.providerReferenceId }]
+        : []),
+      ...(normalized.providerTransferId
+        ? [{ providerTransferId: normalized.providerTransferId }]
+        : []),
+    ],
+  }).lean();
+}
+
+function validateWithdrawalIdentity(withdrawal, normalized) {
+  if (
+    normalized.providerReferenceId &&
+    normalized.providerReferenceId !== withdrawal.providerReferenceId
+  ) {
+    throw new Error(PAYOUT_MESSAGE.PROVIDER_REFERENCE_MISMATCH);
+  }
+  if (
+    normalized.providerTransferId &&
+    withdrawal.providerTransferId &&
+    normalized.providerTransferId !== withdrawal.providerTransferId
+  ) {
+    throw new Error(PAYOUT_MESSAGE.PROVIDER_TRANSFER_ID_MISMATCH);
+  }
+}
+
+function getLedgerSource(source) {
+  return source === PAYOUT_SOURCE.WEBHOOK
+    ? PAYOUT_SOURCE.PAYOUT_WEBHOOK
+    : PAYOUT_SOURCE.PAYOUT_RECONCILIATION;
+}
+
+async function ignoreEvent(eventDoc, reason) {
+  await PayoutEvent.updateOne(
+    { _id: eventDoc._id },
+    {
+      $set: {
+        processingStatus: PAYOUT_EVENT_STATUS.IGNORED,
+        result: reason,
+        processedAt: new Date(),
+      },
+    },
+  );
+  return { status: PAYOUT_RESULT.IGNORED, reason };
+}
+
+async function notifyPayoutStatus(withdrawal, normalized) {
+  const terminalStatuses = [
+    WITHDRAWAL_STATUS.COMPLETED,
+    WITHDRAWAL_STATUS.FAILED,
+    WITHDRAWAL_STATUS.REVERSED,
+  ];
+  if (!terminalStatuses.includes(normalized.targetStatus)) return;
+
+  const user = await User.findById(withdrawal.userId).lean();
+  if (!user?.fcmTokens?.length || !user.enableNotification) return;
+
+  const completed = normalized.targetStatus === WITHDRAWAL_STATUS.COMPLETED;
+  const notificationKey = completed ? "success" : "failed";
+  const localized = getNotification(
+    APP_NOTIFICATIONS.withdraw[notificationKey],
+    user.language,
+  );
+  const message = completed
+    ? formatNotification(localized.body, { amount: withdrawal.cashAmount })
+    : localized.body;
+
+  sendFcmNotifications(user.fcmTokens, localized.title, message).catch(
+    (error) =>
+      logger.error(PAYOUT_MESSAGE.FCM_NOTIFICATION_LOG, {
+        withdrawalId: String(withdrawal._id),
+        error: safeText(error.message),
+      }),
+  );
+}
+
+async function markEventFailed(eventDoc, error) {
+  await PayoutEvent.updateOne(
+    { _id: eventDoc._id, processingStatus: PAYOUT_EVENT_STATUS.PROCESSING },
+    {
+      $set: {
+        processingStatus: PAYOUT_EVENT_STATUS.FAILED,
+        errorMessage: safeText(error.message),
+      },
+    },
+  );
 }
 
 async function processWebhook(headers = {}, rawBody, body, options = {}) {
