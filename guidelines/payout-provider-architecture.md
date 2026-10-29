@@ -14,6 +14,13 @@ provider stored on an existing withdrawal. Adapters expose:
 - `normalizeWebhook(body, headers)`
 - `createIdempotencyKey(referenceId)`
 
+Providers that support batch execution may additionally expose
+`initiateBatchTransfer({ batchReferenceId, transfers })` and
+`getBatchTransferStatus({ batchReferenceId })`. Batch requests still have one
+stable transfer reference and one outbox/audit trail per withdrawal. A group
+record coordinates submission and batch-level reconciliation; provider batch
+acceptance does not mark its individual transfers completed.
+
 Adapter mappings convert provider-specific payloads to a canonical payout event
 with a stable reference, provider transfer ID, amount in minor currency units,
 currency, UTR, provider status, and canonical status. INR amounts are stored as
@@ -23,12 +30,23 @@ rupees on the withdrawal and converted to paise at the adapter boundary.
 
 Admin approval atomically changes a pending withdrawal to `PROCESSING`, persists
 its provider and stable reference, and creates one unique `PayoutOutbox` record.
+After commit, the application wakes the outbox worker immediately; the scheduled
+worker remains the recovery mechanism.
 A leased worker claims outbox rows, resolves or creates the provider beneficiary,
 checks provider status by the stable reference, records an immutable payout
 attempt, and submits using the same reference. This allows recovery if the worker
 crashes before or after the external request. Provider choice is immutable for an
 approved withdrawal; ambiguous provider outcomes are reconciled against that
 provider before any further request.
+
+Cashfree batch approval validates the complete selected set before changing any
+withdrawal. It atomically creates a batch record and links each withdrawal's
+outbox to it. The worker resolves every beneficiary before submitting one batch
+request. Ambiguous batch outcomes are checked with the batch-status API before
+another submission. Submitted batches are polled through the batch-status API on
+a recovery schedule, and its per-transfer results update each withdrawal. The
+individual-transfer reconciliation job excludes batch-linked withdrawals;
+per-transfer webhooks can still update them in real time.
 
 ## Webhooks, ledger, and reconciliation
 

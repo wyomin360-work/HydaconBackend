@@ -8,6 +8,7 @@ const Withdrawal = require("../../../schemas/withdrawal.schema");
 const AppConfig = require("../../../schemas/app-config.schema");
 const LedgerEntry = require("../../../schemas/ledger-entry.schema");
 const PayoutAttempt = require("../../../schemas/payout-attempt.schema");
+const PayoutOutbox = require("../../../schemas/payout-outbox.schema");
 const Role = require("../../../schemas/role.schema");
 const { decrypt } = require("../../../utils/encryption");
 const crypto = require("crypto");
@@ -47,6 +48,13 @@ jest.mock("../../../functions/razorpayx", () => ({
 jest.mock("../../../functions/fcm", () => ({
   sendFcmNotifications: jest.fn().mockResolvedValue({ success: true }),
 }));
+
+jest.mock("../../../modules/withdrawals/payout-execution.service", () => {
+  const actual = jest.requireActual(
+    "../../../modules/withdrawals/payout-execution.service",
+  );
+  return { ...actual, wakePayoutOutboxWorker: jest.fn() };
+});
 
 describe("Withdrawals Service & Webhooks Test Suite", () => {
   let userId;
@@ -167,7 +175,7 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
     });
   });
 
-  test("3. Approve Withdrawal - Create Contact, Fund Account, & Payout", async () => {
+  test("3. Approve Withdrawal - persist queue record and wake the worker", async () => {
     await userService.addUserBankDetails(
       {
         userName: "John Doe",
@@ -185,28 +193,17 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
     // Approve the withdrawal
     const approveRes = await service.approveWithdrawal(adminId, withdrawalId);
     expect(approveRes.data.status).toBe("PROCESSING");
-    expect(approveRes.data.providerPayoutId).toBe("pout_test123");
-
-    // Verify User has Contact ID
-    const user = await User.findById(userId);
-    expect(user.payoutContactId).toBe("cont_test123");
-
-    // Verify Bank Account has Fund Account ID
-    const bankAccount = await UserBankAccount.findOne({
-      userId,
-      isActive: true,
-    });
-    expect(bankAccount.payoutFundAccountId).toBe("fa_test123");
+    expect(approveRes.message).toMatch(/queued/i);
 
     // Verify Withdrawal is in PROCESSING state
     const withdrawal = await Withdrawal.findById(withdrawalId);
     expect(withdrawal.status).toBe("PROCESSING");
-    const attempt = await PayoutAttempt.findOne({ withdrawalId });
-    expect(attempt).toMatchObject({
-      attemptNumber: 1,
-      idempotencyKey: "idempotency-test-key",
-      payoutId: "pout_test123",
-      outcome: "SUCCEEDED",
+    expect(withdrawal.payoutProvider).toBeDefined();
+    const outbox = await PayoutOutbox.findOne({ withdrawalId });
+    expect(outbox).toMatchObject({
+      provider: withdrawal.payoutProvider,
+      providerReferenceId: withdrawalId.toString(),
+      status: "PENDING",
     });
   });
 

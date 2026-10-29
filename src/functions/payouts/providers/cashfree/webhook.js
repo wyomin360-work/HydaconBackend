@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { PAYOUT_MESSAGE } = require("../../../../constants/payouts");
 
 function signatureError(message) {
   const error = new Error(message);
@@ -10,10 +11,10 @@ function verifyWebhook(headers = {}, rawBody) {
   const signature = headers["x-webhook-signature"];
   const timestamp = headers["x-webhook-timestamp"];
   const secret = process.env.CASHFREE_PAYOUT_CLIENT_SECRET;
-  if (!secret || !signature || !timestamp || !Buffer.isBuffer(rawBody)) {
-    if (process.env.NODE_ENV !== "production" && !secret) return;
-    throw signatureError("Cashfree webhook signature headers are missing");
-  }
+  if (!secret)
+    throw signatureError(PAYOUT_MESSAGE.CASHFREE_WEBHOOK_SECRET_MISSING);
+  if (!signature || !timestamp || !Buffer.isBuffer(rawBody))
+    throw signatureError(PAYOUT_MESSAGE.SIGNATURE_HEADERS_MISSING);
   const expected = crypto
     .createHmac("sha256", secret)
     .update(`${timestamp}${rawBody.toString("utf8")}`)
@@ -24,7 +25,7 @@ function verifyWebhook(headers = {}, rawBody) {
     expectedBytes.length !== signatureBytes.length ||
     !crypto.timingSafeEqual(expectedBytes, signatureBytes)
   ) {
-    throw signatureError("Invalid Cashfree webhook signature");
+    throw signatureError(PAYOUT_MESSAGE.INVALID_SIGNATURE);
   }
 }
 

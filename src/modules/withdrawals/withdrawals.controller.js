@@ -46,6 +46,13 @@ exports.approveWithdrawal = async (req, res, next) => {
   return sendResponse(res, result);
 };
 
+exports.approveWithdrawalBatch = async (req, res) => {
+  const adminId = req.userId;
+  const { withdrawalIds } = req.body;
+  const result = await service.approveWithdrawalBatch(adminId, withdrawalIds);
+  return sendResponse(res, result);
+};
+
 exports.cancelWithdrawal = async (req, res, next) => {
   const { id } = req.params;
   const adminId = req.userId;

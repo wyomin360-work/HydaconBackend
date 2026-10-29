@@ -2,9 +2,52 @@ const {
   CASHFREE_PAYOUT_EVENT,
   CASHFREE_PAYOUT_STATUS,
   CASHFREE_PAYOUT_STATUS_CODE,
+  CASHFREE_PAYOUT_TRANSFER_EVENTS,
   PAYOUT_CURRENCY,
 } = require("../../../../constants/payouts");
 const { WITHDRAWAL_STATUS } = require("../../../../constants/withdrawals");
+
+const SAFE_WEBHOOK_FIELDS = Object.freeze([
+  "transfer_id",
+  "cf_transfer_id",
+  "status",
+  "status_code",
+  "status_description",
+  "transfer_amount",
+  "transfer_mode",
+  "transfer_utr",
+  "fundsource_id",
+  "added_on",
+  "updated_on",
+  "batch_transfer_id",
+  "cf_batch_transfer_id",
+  "current_balance",
+  "ledger_balance",
+  "amount",
+  "utr",
+  "bene_entity",
+  "id",
+  "mode",
+  "started_at",
+  "is_scheduled",
+  "severity",
+  "entity_name",
+  "entity_code",
+  "resolved_at",
+]);
+
+function isTransferEvent(type) {
+  return CASHFREE_PAYOUT_TRANSFER_EVENTS.includes(type);
+}
+
+function isBatchEvent(type) {
+  return type === CASHFREE_PAYOUT_EVENT.BULK_TRANSFER_REJECTED;
+}
+
+function safeWebhookValue(value) {
+  if (typeof value !== "string") return value;
+  return value.replace(/\d{6,}/g, "[redacted]").slice(0, 500);
+}
 
 function targetStatus(type, data = {}) {
   if (
@@ -17,6 +60,12 @@ function targetStatus(type, data = {}) {
     data.status_code === CASHFREE_PAYOUT_STATUS_CODE.COMPLETED
   )
     return WITHDRAWAL_STATUS.COMPLETED;
+  if (
+    data.status === CASHFREE_PAYOUT_STATUS.SUCCESS &&
+    data.status_code === CASHFREE_PAYOUT_STATUS_CODE.SENT_TO_BENEFICIARY
+  ) {
+    return WITHDRAWAL_STATUS.PROCESSING;
+  }
   if (
     [
       CASHFREE_PAYOUT_EVENT.TRANSFER_FAILED,
@@ -71,36 +120,29 @@ function normalizeTransfer(data = {}) {
   };
 }
 
-function normalizeWebhook(body = {}, headers = {}) {
+function normalizeWebhook(body = {}) {
   const data = body.data || {};
   const normalized = normalizeTransfer({ ...data, type: body.type });
   const safeData = {};
-  for (const field of [
-    "transfer_id",
-    "cf_transfer_id",
-    "status",
-    "status_code",
-    "status_description",
-    "transfer_amount",
-    "transfer_mode",
-    "transfer_utr",
-    "fundsource_id",
-    "added_on",
-    "updated_on",
-  ]) {
-    if (data[field] != null) {
-      safeData[field] =
-        typeof data[field] === "string"
-          ? String(data[field])
-              .replace(/\d{6,}/g, "[redacted]")
-              .slice(0, 500)
-          : data[field];
-    }
+  for (const field of SAFE_WEBHOOK_FIELDS) {
+    if (data[field] != null) safeData[field] = safeWebhookValue(data[field]);
+  }
+  const beneficiaryId = data.beneficiary_details?.beneficiary_id;
+  if (beneficiaryId) {
+    safeData.beneficiary_details = {
+      beneficiary_id: safeWebhookValue(beneficiaryId),
+    };
   }
   return {
     ...normalized,
+    isTransferEvent: isTransferEvent(body.type),
+    isBatchEvent: isBatchEvent(body.type),
+    batchReferenceId: data.batch_transfer_id || null,
+    providerBatchTransferId: data.cf_batch_transfer_id || null,
     eventType: body.type || "unknown",
-    providerEventId: headers["x-idempotency-key"] || null,
+    // Cashfree V2 documents signature and timestamp headers, but no event ID.
+    // The webhook service uses the raw-payload hash for retry deduplication.
+    providerEventId: null,
     eventTime: body.event_time || null,
     safePayload: {
       type: body.type || "unknown",
@@ -133,9 +175,33 @@ function normalizeTransferResponse(data = {}) {
   return { ...normalized, safeResponse };
 }
 
+function normalizeBatchTransferResponse(data = {}) {
+  return {
+    batchReferenceId: data.batch_transfer_id || null,
+    providerBatchTransferId: data.cf_batch_transfer_id || null,
+    status: data.status || null,
+    transfers: Array.isArray(data.transfers)
+      ? data.transfers.map((transfer) => normalizeTransfer(transfer))
+      : [],
+    httpStatus: data._httpStatus || null,
+    safeResponse: {
+      ...(data.batch_transfer_id
+        ? { batch_transfer_id: safeWebhookValue(data.batch_transfer_id) }
+        : {}),
+      ...(data.cf_batch_transfer_id
+        ? { cf_batch_transfer_id: safeWebhookValue(data.cf_batch_transfer_id) }
+        : {}),
+      ...(data.status ? { status: safeWebhookValue(data.status) } : {}),
+    },
+  };
+}
+
 module.exports = {
+  isTransferEvent,
+  isBatchEvent,
   targetStatus,
   normalizeTransfer,
   normalizeWebhook,
   normalizeTransferResponse,
+  normalizeBatchTransferResponse,
 };

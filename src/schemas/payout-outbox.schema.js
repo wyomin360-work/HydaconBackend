@@ -3,6 +3,7 @@ const {
   PAYOUT_PROVIDER_VALUES,
   PAYOUT_OUTBOX_STATUS,
   PAYOUT_OUTBOX_STATUS_VALUES,
+  PAYOUT_RECON_OUTCOME_VALUES,
   PAYOUT_CONFIG,
 } = require("../constants/payouts");
 
@@ -22,6 +23,12 @@ const payoutOutboxSchema = new mongoose.Schema(
       index: true,
     },
     providerReferenceId: { type: String, required: true, index: true },
+    executionBatchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "PayoutBatch",
+      default: null,
+      index: true,
+    },
     status: {
       type: String,
       enum: PAYOUT_OUTBOX_STATUS_VALUES,
@@ -37,6 +44,12 @@ const payoutOutboxSchema = new mongoose.Schema(
     leaseExpiresAt: { type: Date, default: null, index: true },
     lastError: { type: String, default: null },
     lastProviderStatus: { type: String, default: null },
+    lastProviderStatusCode: { type: String, default: null },
+    lastReconciliationOutcome: {
+      type: String,
+      enum: [...PAYOUT_RECON_OUTCOME_VALUES, null],
+      default: null,
+    },
     processedAt: { type: Date, default: null },
   },
   { timestamps: true, versionKey: false },

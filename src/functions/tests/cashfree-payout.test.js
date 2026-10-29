@@ -121,27 +121,122 @@ describe("Cashfree payout provider", () => {
     });
   });
 
+  test("submits a batch transfer to Cashfree sandbox", async () => {
+    axios.mockResolvedValueOnce({
+      status: 200,
+      data: {
+        batch_transfer_id: "hydacon_batch_123",
+        cf_batch_transfer_id: "cf_batch_123",
+        status: "RECEIVED",
+      },
+    });
+
+    const result = await provider.initiateBatchTransfer({
+      batchReferenceId: "hydacon_batch_123",
+      transfers: [
+        {
+          referenceId: "withdrawal_123",
+          beneficiaryId: "beneficiary_123",
+          amountMinor: 12550,
+          mode: PAYOUT_TRANSFER_MODE.IMPS,
+          narration: "Hydacon payout",
+        },
+      ],
+    });
+
+    expect(axios).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "POST",
+        url: "https://sandbox.cashfree.com/payout/transfers/batch",
+        data: {
+          batch_transfer_id: "hydacon_batch_123",
+          transfers: [
+            {
+              transfer_id: "withdrawal_123",
+              transfer_amount: 125.5,
+              transfer_mode: "imps",
+              transfer_remarks: "Hydacon payout",
+              beneficiary_details: { beneficiary_id: "beneficiary_123" },
+            },
+          ],
+        },
+      }),
+    );
+    expect(result).toMatchObject({
+      batchReferenceId: "hydacon_batch_123",
+      providerBatchTransferId: "cf_batch_123",
+      status: "RECEIVED",
+    });
+  });
+
+  test("checks batch status by the stable batch reference on sandbox", async () => {
+    axios.mockResolvedValueOnce({
+      status: 200,
+      data: {
+        batch_transfer_id: "hydacon_batch_123",
+        cf_batch_transfer_id: "cf_batch_123",
+        status: "RECEIVED",
+        transfers: [
+          {
+            transfer_id: "withdrawal_123",
+            cf_transfer_id: "cf_transfer_123",
+            transfer_amount: 125.5,
+            status: CASHFREE_PAYOUT_STATUS.SUCCESS,
+            status_code: CASHFREE_PAYOUT_STATUS_CODE.COMPLETED,
+          },
+        ],
+      },
+    });
+
+    const result = await provider.getBatchTransferStatus({
+      batchReferenceId: "hydacon_batch_123",
+    });
+
+    expect(axios).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "GET",
+        url: "https://sandbox.cashfree.com/payout/transfers/batch",
+        params: { batch_transfer_id: "hydacon_batch_123" },
+      }),
+    );
+    expect(result).toMatchObject({
+      batchReferenceId: "hydacon_batch_123",
+      providerBatchTransferId: "cf_batch_123",
+      status: "RECEIVED",
+      transfers: [
+        {
+          providerReferenceId: "withdrawal_123",
+          providerTransferId: "cf_transfer_123",
+          targetStatus: WITHDRAWAL_STATUS.COMPLETED,
+        },
+      ],
+    });
+  });
+
   test("treats only a completed success as final success", () => {
     expect(
       mapping.normalizeTransfer({
         status: CASHFREE_PAYOUT_STATUS.SUCCESS,
         status_code: CASHFREE_PAYOUT_STATUS_CODE.COMPLETED,
-      })
-        .targetStatus,
+      }).targetStatus,
     ).toBe(WITHDRAWAL_STATUS.COMPLETED);
     expect(
       mapping.normalizeTransfer({
         status: CASHFREE_PAYOUT_STATUS.SUCCESS,
         status_code: CASHFREE_PAYOUT_STATUS.PENDING,
-      })
-        .targetStatus,
+      }).targetStatus,
     ).toBeNull();
+    expect(
+      mapping.normalizeTransfer({
+        status: CASHFREE_PAYOUT_STATUS.SUCCESS,
+        status_code: CASHFREE_PAYOUT_STATUS_CODE.SENT_TO_BENEFICIARY,
+      }).targetStatus,
+    ).toBe(WITHDRAWAL_STATUS.PROCESSING);
     expect(
       mapping.normalizeWebhook({
         type: CASHFREE_PAYOUT_EVENT.TRANSFER_SUCCESS,
         data: { status: CASHFREE_PAYOUT_STATUS.PENDING },
-      })
-        .targetStatus,
+      }).targetStatus,
     ).toBe(WITHDRAWAL_STATUS.PROCESSING);
   });
 
@@ -172,11 +267,27 @@ describe("Cashfree payout provider", () => {
         },
         rawBody,
       ),
-    ).toThrow("Invalid Cashfree webhook signature");
+    ).toThrow("Invalid webhook signature");
   });
 
   test("rejects missing provider credentials", () => {
     delete process.env.CASHFREE_PAYOUT_CLIENT_ID;
     expect(() => provider.validateConfig()).toThrow(/credentials/i);
+  });
+
+  test("classifies missing credentials as a definitive pre-request failure", async () => {
+    delete process.env.CASHFREE_PAYOUT_CLIENT_ID;
+
+    await expect(
+      provider.initiateTransfer({
+        referenceId: "withdrawal-123",
+        beneficiaryId: "beneficiary-123",
+        amountMinor: 12550,
+        mode: PAYOUT_TRANSFER_MODE.IMPS,
+        narration: "Hydacon payout",
+      }),
+    ).rejects.toMatchObject({ definitive: true, ambiguous: false });
+
+    expect(axios).not.toHaveBeenCalled();
   });
 });

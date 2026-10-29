@@ -20,14 +20,28 @@ const CASHFREE_PAYOUT_STATUS = Object.freeze({
   PENDING: "PENDING",
   PROCESSING: "PROCESSING",
 });
-const CASHFREE_PAYOUT_STATUS_CODE = Object.freeze({ COMPLETED: "COMPLETED" });
+const CASHFREE_PAYOUT_STATUS_CODE = Object.freeze({
+  COMPLETED: "COMPLETED",
+  SENT_TO_BENEFICIARY: "SENT_TO_BENEFICIARY",
+});
 const CASHFREE_PAYOUT_EVENT = Object.freeze({
   TRANSFER_REVERSED: "TRANSFER_REVERSED",
   TRANSFER_FAILED: "TRANSFER_FAILED",
   TRANSFER_REJECTED: "TRANSFER_REJECTED",
   TRANSFER_ACKNOWLEDGED: "TRANSFER_ACKNOWLEDGED",
   TRANSFER_SUCCESS: "TRANSFER_SUCCESS",
+  BULK_TRANSFER_REJECTED: "BULK_TRANSFER_REJECTED",
+  BENEFICIARY_INCIDENT: "BENEFICIARY_INCIDENT",
+  CREDIT_CONFIRMATION: "CREDIT_CONFIRMATION",
+  LOW_BALANCE_ALERT: "LOW_BALANCE_ALERT",
 });
+const CASHFREE_PAYOUT_TRANSFER_EVENTS = Object.freeze([
+  CASHFREE_PAYOUT_EVENT.TRANSFER_REVERSED,
+  CASHFREE_PAYOUT_EVENT.TRANSFER_FAILED,
+  CASHFREE_PAYOUT_EVENT.TRANSFER_REJECTED,
+  CASHFREE_PAYOUT_EVENT.TRANSFER_ACKNOWLEDGED,
+  CASHFREE_PAYOUT_EVENT.TRANSFER_SUCCESS,
+]);
 
 const RAZORPAYX_PAYOUT_EVENT = Object.freeze({
   PROCESSED: "payout.processed",
@@ -77,6 +91,15 @@ const PAYOUT_ATTEMPT_OUTCOME = Object.freeze({
   AMBIGUOUS_FAILURE: "AMBIGUOUS_FAILURE",
 });
 
+const PAYOUT_BATCH_STATUS = Object.freeze({
+  PENDING: "PENDING",
+  PROCESSING: "PROCESSING",
+  SUBMITTED: "SUBMITTED",
+  RECONCILIATION_REQUIRED: "RECONCILIATION_REQUIRED",
+  RECONCILED: "RECONCILED",
+  FAILED: "FAILED",
+});
+
 const PAYOUT_ATTEMPT_OUTCOME_VALUES = Object.freeze(
   Object.values(PAYOUT_ATTEMPT_OUTCOME),
 );
@@ -120,6 +143,7 @@ const PAYOUT_TRANSFER_MODE = Object.freeze({ IMPS: "IMPS" });
 const PAYOUT_ASSET = Object.freeze({
   INR: "INR",
   HYDACON_COIN: "HYDACON_COIN",
+  REWARD_POINT: "REWARD_POINT",
 });
 const PAYOUT_ASSET_VALUES = Object.freeze(Object.values(PAYOUT_ASSET));
 const PAYOUT_RESULT = Object.freeze({
@@ -132,7 +156,11 @@ const PAYOUT_RESULT = Object.freeze({
 });
 const PAYOUT_HTTP_STATUS = Object.freeze({
   BAD_REQUEST: 400,
+  NOT_FOUND: 404,
+  CONFLICT: 409,
   UNAUTHORIZED: 401,
+  CLIENT_ERROR_MIN: 400,
+  SERVER_ERROR_MIN: 500,
   SERVICE_UNAVAILABLE: 503,
   INTERNAL_SERVER_ERROR: 500,
 });
@@ -151,6 +179,8 @@ const PAYOUT_FAILURE_TERMINAL_STATUSES = Object.freeze([
 const PAYOUT_LEDGER_MOVEMENT = Object.freeze({
   WITHDRAWAL_COIN_DEBIT: "WITHDRAWAL_COIN_DEBIT",
   WITHDRAWAL_COIN_REFUND: "WITHDRAWAL_COIN_REFUND",
+  WITHDRAWAL_POINTS_DEBIT: "WITHDRAWAL_POINTS_DEBIT",
+  WITHDRAWAL_POINTS_REFUND: "WITHDRAWAL_POINTS_REFUND",
   PAYOUT_COMPLETED: "PAYOUT_COMPLETED",
   PAYOUT_REVERSED: "PAYOUT_REVERSED",
 });
@@ -169,16 +199,39 @@ const PAYOUT_LEDGER_SOURCE_VALUES = Object.freeze(
 );
 
 const PAYOUT_CONFIG = Object.freeze({
+  JSON_BODY_LIMIT: "256kb",
+  MONGODB_OBJECT_ID_HEX_LENGTH: 24,
+  MILLISECONDS_PER_SECOND: 1000,
   MINOR_UNITS_PER_INR: 100,
   MAX_NARRATION_LENGTH: 30,
   MAX_ERROR_LENGTH: 500,
   REDACT_DIGIT_SEQUENCE_LENGTH: 6,
   EVENT_LEASE_MS: 10 * 60 * 1000,
   OUTBOX_LEASE_MS: 2 * 60 * 1000,
+  OUTBOX_LEASE_RENEW_INTERVAL_MS: 30 * 1000,
   OUTBOX_BATCH_SIZE: 20,
   OUTBOX_RETRY_BASE_MS: 30 * 1000,
   OUTBOX_RETRY_MAX_MS: 60 * 60 * 1000,
   OUTBOX_RETRY_EXPONENT_LIMIT: 7,
+  CASHFREE_BATCH_MIN_SIZE: 2,
+  CASHFREE_BATCH_SANDBOX_MAX_SIZE: 1000,
+  CASHFREE_BATCH_PRODUCTION_MAX_SIZE: 5000,
+  CASHFREE_BATCH_BENEFICIARY_CONCURRENCY: 10,
+  CASHFREE_BATCH_RECONCILIATION_INTERVAL_MS: 15 * 60 * 1000,
+  CASHFREE_BATCH_REFERENCE_PREFIX: "hydacon_",
+  CASHFREE_BENEFICIARY_ID_PREFIX: "hydacon_",
+  CASHFREE_BENEFICIARY_ID_HASH_LENGTH: 20,
+  CASHFREE_BENEFICIARY_ID_MAX_LENGTH: 50,
+  CASHFREE_COUNTRY_CODE: "+91",
+  CASHFREE_PHONE_COUNTRY_PREFIX: "91",
+  CASHFREE_INTERNATIONAL_PHONE_LENGTH: 12,
+  CASHFREE_TRANSFER_REMARKS_MAX_LENGTH: 70,
+  CASHFREE_TRANSFER_REMARKS_DEFAULT: "Hydacon Payout",
+  CASHFREE_DEFAULT_API_VERSION: "2024-01-01",
+  CASHFREE_DEFAULT_TIMEOUT_MS: 15 * 1000,
+  CASHFREE_REQUEST_ID_MAX_LENGTH: 50,
+  CASHFREE_SANDBOX_BASE_URL: "https://sandbox.cashfree.com/payout",
+  CASHFREE_PRODUCTION_BASE_URL: "https://api.cashfree.com/payout",
   RECONCILIATION_AGE_MS: 30 * 60 * 1000,
   RECONCILIATION_RETRY_MS: 60 * 60 * 1000,
   RECONCILIATION_BATCH_SIZE: 50,
@@ -208,10 +261,15 @@ const PAYOUT_MESSAGE = Object.freeze({
     "Payout outbox does not match the withdrawal provider reference",
   TRANSFER_ID_MISSING: "Provider response did not include a transfer ID",
   RAW_BODY_MISSING: "Webhook raw body is unavailable",
+  CASHFREE_WEBHOOK_SECRET_MISSING:
+    "Cashfree payout webhook secret is not configured",
   SIGNATURE_HEADERS_MISSING: "Webhook signature headers are missing",
   INVALID_SIGNATURE: "Invalid webhook signature",
   EVENT_ALREADY_PROCESSING: "Payout event is already being processed",
   TRANSFER_IDENTITY_MISSING: "Transfer reference and ID are missing",
+  NON_TRANSFER_EVENT_IGNORED:
+    "Cashfree non-transfer event was recorded without changing a withdrawal",
+  BENEFICIARY_INCIDENT_LOG: "Cashfree reported a beneficiary incident",
   WITHDRAWAL_NOT_FOUND_FOR_REFERENCE:
     "Withdrawal was not found for the provider reference",
   PROVIDER_REFERENCE_MISMATCH:
@@ -228,12 +286,49 @@ const PAYOUT_MESSAGE = Object.freeze({
   QUEUE_PAYOUT_FAILED: "Failed to queue payout",
   WITHDRAWAL_APPROVED_QUEUED:
     "Withdrawal approved. Payout is queued for processing.",
+  WITHDRAWAL_BATCH_APPROVED_QUEUED:
+    "Withdrawal batch approved and queued for Cashfree processing.",
   WEBHOOK_SUCCESS: "Webhook processed successfully",
   WEBHOOK_RETRY: "Webhook processing failed; provider should retry delivery",
   WEBHOOK_FAILURE: "Failed to process webhook",
   PROVIDER_TRANSFER_DETAILS_MISMATCH:
     "Provider transfer does not match withdrawal amount, currency, or reference",
   OUTBOX_WORKER_FAILED: "Payout outbox worker failed",
+  PAYOUT_BATCH_WORKER_FAILED: "Payout batch worker failed",
+  PAYOUT_BATCH_PROVIDER_REQUIRED:
+    "Cashfree must be the configured payout provider for batch approvals",
+  PAYOUT_BATCH_SIZE_INVALID: (minimum, maximum) =>
+    `Select between ${minimum} and ${maximum} withdrawals for batch approval`,
+  PAYOUT_BATCH_IDS_REQUIRED: "Select withdrawals to approve as a batch",
+  PAYOUT_BATCH_ID_INVALID: "Each withdrawal ID must be a valid MongoDB ID",
+  PAYOUT_BATCH_DUPLICATE_WITHDRAWALS:
+    "Duplicate withdrawal IDs are not allowed",
+  PAYOUT_BATCH_PROVIDER_CONFLICT:
+    "The withdrawal is already assigned to another payout provider",
+  PAYOUT_BATCH_TRANSFER_EXISTS:
+    "A provider transfer already exists for this withdrawal",
+  PAYOUT_BATCH_BANK_UNAVAILABLE:
+    "The user or an active bank account is unavailable",
+  PAYOUT_BATCH_BANK_OWNER_MISMATCH:
+    "The bank account does not belong to the withdrawal user",
+  PAYOUT_BATCH_CHANGED_DURING_APPROVAL:
+    "One or more selected withdrawals changed during batch approval",
+  PAYOUT_BATCH_OUTBOX_INCOMPLETE:
+    "Payout batch does not have all its withdrawal outbox records",
+  PAYOUT_BATCH_WITHDRAWAL_MISSING: "A payout batch withdrawal no longer exists",
+  PAYOUT_BATCH_WITHDRAWAL_INELIGIBLE: (id, reason) =>
+    `Withdrawal ${id} cannot be included in a payout batch: ${reason}`,
+  PAYOUT_BATCH_AMOUNT_INVALID:
+    "Cashfree batch payouts require INR amounts greater than ₹1 with paise precision",
+  PAYOUT_BATCH_STATUS_UNKNOWN:
+    "Cashfree batch status could not be confirmed; reconciliation is required",
+  PAYOUT_BATCH_TRANSFER_STATUS_INCOMPLETE: (count) =>
+    `Cashfree batch status is incomplete for ${count} transfer(s)`,
+  PAYOUT_BATCH_TRANSFER_STATUS_INVALID:
+    "Cashfree returned a transfer without a recognized status",
+  PAYOUT_BATCH_RECONCILIATION_QUEUED:
+    "Cashfree batch rejection received; transfer reconciliation was queued",
+  CASHFREE_BENEFICIARY_ID_MISSING: "Cashfree did not return a beneficiary ID",
   RECONCILIATION_FAILED: "Payout reconciliation failed",
   RECONCILIATION_SCAN_FAILED: "Payout reconciliation scan failed",
   WEBHOOK_PROCESSING_FAILED: "Payout webhook processing failed",
@@ -252,12 +347,14 @@ module.exports = {
   CASHFREE_PAYOUT_STATUS,
   CASHFREE_PAYOUT_STATUS_CODE,
   CASHFREE_PAYOUT_EVENT,
+  CASHFREE_PAYOUT_TRANSFER_EVENTS,
   RAZORPAYX_PAYOUT_EVENT,
   RAZORPAYX_PAYOUT_STATUS,
   PAYOUT_PROVIDER_VALUES,
   PAYOUT_EVENT_PROVIDER_VALUES,
   PAYOUT_OUTBOX_STATUS,
   PAYOUT_OUTBOX_STATUS_VALUES,
+  PAYOUT_BATCH_STATUS,
   PAYOUT_ATTEMPT_OUTCOME,
   PAYOUT_ATTEMPT_OUTCOME_VALUES,
   PAYOUT_EVENT_STATUS,

@@ -1,3 +1,5 @@
+const { CASHFREE_PAYOUT_EVENT } = require("../constants/payouts");
+
 const razorpayPayoutEntity = {
   type: "object",
   properties: {
@@ -49,6 +51,25 @@ const razorpayxPayoutWebhookRequestType = {
   additionalProperties: false,
 };
 
+const cashfreeBeneficiaryInstrumentDetails = {
+  type: "object",
+  properties: {
+    bank_account_number: { type: "string" },
+    bank_ifsc: { type: "string" },
+    vpa: { type: "string" },
+  },
+  additionalProperties: false,
+};
+
+const cashfreeBeneficiaryDetails = {
+  type: "object",
+  properties: {
+    beneficiary_id: { type: "string" },
+    beneficiary_instrument_details: cashfreeBeneficiaryInstrumentDetails,
+  },
+  additionalProperties: false,
+};
+
 const cashfreeTransferWebhookData = {
   type: "object",
   properties: {
@@ -65,15 +86,31 @@ const cashfreeTransferWebhookData = {
     fundsource_id: { type: "string" },
     added_on: { type: "string" },
     updated_on: { type: "string" },
+    beneficiary_details: cashfreeBeneficiaryDetails,
+    batch_transfer_id: { type: "string" },
+    cf_batch_transfer_id: { type: "string" },
+    current_balance: { type: ["string", "number"] },
+    ledger_balance: { type: ["string", "number"] },
+    amount: { type: ["string", "number"] },
+    utr: { type: "string" },
+    bene_entity: { type: "string" },
+    id: { type: ["string", "number"] },
+    mode: { type: "string" },
+    started_at: { type: "string" },
+    is_scheduled: { type: "boolean" },
+    severity: { type: "string" },
+    entity_name: { type: "string" },
+    entity_code: { type: "string" },
+    resolved_at: { type: "string" },
   },
   additionalProperties: false,
 };
 
 const cashfreePayoutWebhookRequestType = {
   type: "object",
-  required: ["type"],
+  required: ["type", "data"],
   properties: {
-    type: { type: "string", minLength: 1 },
+    type: { type: "string", enum: Object.values(CASHFREE_PAYOUT_EVENT) },
     event_time: { type: "string" },
     data: cashfreeTransferWebhookData,
   },

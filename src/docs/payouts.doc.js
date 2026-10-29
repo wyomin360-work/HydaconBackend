@@ -1,3 +1,5 @@
+const { CASHFREE_PAYOUT_EVENT } = require("../constants/payouts");
+
 module.exports = {
   "/webhooks/payout": {
     post: {
@@ -40,6 +42,50 @@ module.exports = {
         401: { description: "Webhook signature is invalid" },
         500: {
           description: "Temporary processing failure; provider should retry",
+        },
+      },
+    },
+  },
+  "/withdrawals/admin/approve-batch": {
+    post: {
+      summary: "Approve and queue a Cashfree payout batch",
+      description:
+        "Validates every selected pending withdrawal before atomically approving the whole set. Requires PAYOUT_PROVIDER=cashfree. The worker creates/resolves every beneficiary before submitting one Cashfree Batch Transfer V2 request.",
+      tags: ["Withdrawals"],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["withdrawalIds"],
+              properties: {
+                withdrawalIds: {
+                  type: "array",
+                  minItems: 2,
+                  maxItems: 5000,
+                  uniqueItems: true,
+                  items: {
+                    type: "string",
+                    pattern: "^[a-fA-F0-9]{24}$",
+                  },
+                },
+              },
+              additionalProperties: false,
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description:
+            "All withdrawals were approved and queued for batch execution",
+        },
+        400: { description: "Selection or withdrawal data is invalid" },
+        401: { description: "Admin authentication is required" },
+        409: {
+          description:
+            "A selected withdrawal is not pending or cannot use Cashfree",
         },
       },
     },
@@ -163,7 +209,9 @@ module.exports = {
   },
   "/webhooks/cashfree": {
     post: {
-      summary: "Receive a Cashfree Payouts V2 transfer event",
+      summary: "Receive Cashfree Payouts V2 webhook events",
+      description:
+        "Accepts transfer events and safely records beneficiary incident, credit confirmation, and low balance events. Non-transfer events do not change withdrawal status.",
       tags: ["Payout Webhooks"],
       parameters: [
         {
@@ -185,9 +233,13 @@ module.exports = {
           "application/json": {
             schema: {
               type: "object",
-              required: ["type"],
+              required: ["type", "data"],
               properties: {
-                type: { type: "string", example: "TRANSFER_SUCCESS" },
+                type: {
+                  type: "string",
+                  enum: Object.values(CASHFREE_PAYOUT_EVENT),
+                  example: CASHFREE_PAYOUT_EVENT.TRANSFER_SUCCESS,
+                },
                 event_time: { type: "string", format: "date-time" },
                 data: {
                   type: "object",
@@ -195,9 +247,47 @@ module.exports = {
                     transfer_id: { type: "string" },
                     cf_transfer_id: { type: "string" },
                     transfer_amount: { type: "number" },
+                    transfer_mode: { type: "string" },
+                    transfer_service_charge: { type: "number" },
+                    transfer_service_tax: { type: "number" },
                     status: { type: "string" },
                     status_code: { type: "string" },
+                    status_description: { type: "string" },
                     transfer_utr: { type: "string" },
+                    fundsource_id: { type: "string" },
+                    added_on: { type: "string" },
+                    updated_on: { type: "string" },
+                    beneficiary_details: {
+                      type: "object",
+                      properties: {
+                        beneficiary_id: { type: "string" },
+                        beneficiary_instrument_details: {
+                          type: "object",
+                          properties: {
+                            bank_account_number: { type: "string" },
+                            bank_ifsc: { type: "string" },
+                            vpa: { type: "string" },
+                          },
+                          additionalProperties: false,
+                        },
+                      },
+                      additionalProperties: false,
+                    },
+                    batch_transfer_id: { type: "string" },
+                    cf_batch_transfer_id: { type: "string" },
+                    current_balance: { type: ["string", "number"] },
+                    ledger_balance: { type: ["string", "number"] },
+                    amount: { type: ["string", "number"] },
+                    utr: { type: "string" },
+                    bene_entity: { type: "string" },
+                    id: { type: ["string", "number"] },
+                    mode: { type: "string" },
+                    started_at: { type: "string" },
+                    is_scheduled: { type: "boolean" },
+                    severity: { type: "string" },
+                    entity_name: { type: "string" },
+                    entity_code: { type: "string" },
+                    resolved_at: { type: "string" },
                   },
                   additionalProperties: false,
                 },

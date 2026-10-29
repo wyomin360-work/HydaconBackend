@@ -13,6 +13,7 @@ const {
   PAYOUT_RECON_OUTCOME,
 } = require("../../constants/payouts");
 const Withdrawal = require("../../schemas/withdrawal.schema");
+const User = require("../../schemas/user.schema");
 const UserBankAccount = require("../../schemas/user-bank-account.schema");
 const PayoutAttempt = require("../../schemas/payout-attempt.schema");
 const PayoutOutbox = require("../../schemas/payout-outbox.schema");
@@ -41,6 +42,7 @@ async function enqueueApprovedWithdrawal(adminId, withdrawalId) {
         withdrawal.providerReferenceId || String(withdrawal._id);
       withdrawal.status = WITHDRAWAL_STATUS.PROCESSING;
       withdrawal.payoutProvider = provider;
+      withdrawal.payoutBatchId = null;
       withdrawal.providerReferenceId = referenceId;
       withdrawal.approvedBy = adminId;
       withdrawal.approvedAt = new Date();
@@ -51,6 +53,7 @@ async function enqueueApprovedWithdrawal(adminId, withdrawalId) {
           $set: {
             provider,
             providerReferenceId: referenceId,
+            executionBatchId: null,
             status: OUTBOX.PENDING,
             availableAt: new Date(),
             lastError: null,
@@ -518,6 +521,7 @@ async function processPayoutOutboxBatch(
     const now = new Date();
     const record = await PayoutOutbox.findOneAndUpdate(
       {
+        executionBatchId: null,
         status: {
           $in: [
             OUTBOX.PENDING,
@@ -568,4 +572,19 @@ async function scheduleOutboxRetry(outbox, error) {
   );
 }
 
-module.exports = { enqueueApprovedWithdrawal, processPayoutOutboxBatch };
+function wakePayoutOutboxWorker() {
+  processPayoutOutboxBatch(PAYOUT_CONFIG.OUTBOX_BATCH_SIZE).catch((error) => {
+    logger.error(PAYOUT_MESSAGE.OUTBOX_WORKER_FAILED, {
+      error: safeText(error.message),
+    });
+  });
+}
+
+module.exports = {
+  enqueueApprovedWithdrawal,
+  processPayoutOutboxBatch,
+  wakePayoutOutboxWorker,
+  ensureBeneficiary,
+  amountInMinorUnits,
+  payoutNarration,
+};

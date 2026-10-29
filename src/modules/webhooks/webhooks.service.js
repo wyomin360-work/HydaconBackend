@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const { WITHDRAWAL_STATUS } = require("../../constants/withdrawals");
 const {
   PAYOUT_PROVIDER,
+  CASHFREE_PAYOUT_EVENT,
   PAYOUT_EVENT_STATUS,
   PAYOUT_SOURCE,
   PAYOUT_CONFIG,
@@ -21,6 +22,9 @@ const { formatNotification } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const { getProvider, currentProviderName } = require("../../functions/payouts");
 const { applyTransferUpdate } = require("../withdrawals/payout-state.service");
+const {
+  queueCashfreeBatchReconciliation,
+} = require("../withdrawals/payout-batch-execution.service");
 const { safeText } = require("../withdrawals/payout-utils");
 const logger = require("../../config/pino.config");
 
@@ -170,6 +174,42 @@ async function processClaimedEvent({
   source,
   normalized,
 }) {
+  if (normalized.isBatchEvent) {
+    const queued = await queueCashfreeBatchReconciliation(normalized);
+    if (!queued) {
+      return ignoreEvent(
+        claimed,
+        PAYOUT_MESSAGE.WITHDRAWAL_NOT_FOUND_FOR_REFERENCE,
+      );
+    }
+    await PayoutEvent.updateOne(
+      { _id: claimed._id },
+      {
+        $set: {
+          processingStatus: PAYOUT_EVENT_STATUS.PROCESSED,
+          result: PAYOUT_MESSAGE.PAYOUT_BATCH_RECONCILIATION_QUEUED,
+          processedAt: new Date(),
+        },
+      },
+    );
+    return {
+      status: PAYOUT_RESULT.SUCCESS,
+      processed: true,
+      batchReconciliationQueued: true,
+    };
+  }
+
+  if (normalized.isTransferEvent === false) {
+    if (normalized.eventType === CASHFREE_PAYOUT_EVENT.BENEFICIARY_INCIDENT) {
+      logger.warn(PAYOUT_MESSAGE.BENEFICIARY_INCIDENT_LOG, {
+        provider: providerName,
+        eventId: claimed.providerEventId || claimed.dedupeKey,
+        payload: normalized.safePayload,
+      });
+    }
+    return ignoreEvent(claimed, PAYOUT_MESSAGE.NON_TRANSFER_EVENT_IGNORED);
+  }
+
   if (!normalized.providerReferenceId && !normalized.providerTransferId) {
     return ignoreEvent(claimed, PAYOUT_MESSAGE.TRANSFER_IDENTITY_MISSING);
   }

@@ -19,6 +19,7 @@ const {
   cleanupExpiredArchives: cleanupRewardBatchArchives,
   cleanupExpiredS3Archives: cleanupRewardBatchS3Archives,
 } = require("./modules/rewards/reward-batch-download.service");
+const { PAYOUT_CONFIG } = require("./constants/payouts");
 
 const app = express();
 app.disable("etag"); // Always return 200 with body instead of 304 Not Modified
@@ -83,6 +84,7 @@ app.use(
 // app.use(morgan("dev"));
 app.use(
   express.json({
+    limit: PAYOUT_CONFIG.JSON_BODY_LIMIT,
     verify: (req, res, buf) => {
       if (req.originalUrl.startsWith("/webhooks/")) {
         req.rawBody = Buffer.from(buf);

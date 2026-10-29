@@ -8,6 +8,11 @@ const {
 } = require("../../constants/payouts");
 const User = require("../../schemas/user.schema");
 const LedgerEntry = require("../../schemas/ledger-entry.schema");
+const PointsLedger = require("../../schemas/points-ledger.schema");
+const {
+  POINTS_TRANSACTION_TYPE,
+  POINTS_TRANSACTION_REASON,
+} = require("../../constants/points");
 const { safeText } = require("./payout-utils");
 
 async function writeLedgerEntry(entry, session) {
@@ -52,7 +57,7 @@ async function recordCompletedPayout({
   );
 }
 
-async function refundWithdrawalCoins({
+async function refundWithdrawalBalance({
   current,
   provider,
   normalized,
@@ -61,6 +66,65 @@ async function refundWithdrawalCoins({
   eventSourceId,
   session,
 }) {
+  if (Number.isFinite(current.pointsAmount)) {
+    const entryKey = `withdrawal:${current._id}:points-refund:${targetStatus.toLowerCase()}`;
+    const existingEntry = await LedgerEntry.findOne({ entryKey }).session(
+      session,
+    );
+    if (existingEntry) return;
+
+    const userBefore = await User.findOneAndUpdate(
+      { _id: current.userId },
+      { $inc: { totalPoints: current.pointsAmount } },
+      { new: false, session },
+    );
+    if (!userBefore) throw new Error(PAYOUT_MESSAGE.WITHDRAWAL_USER_MISSING);
+
+    const balanceBefore = userBefore.totalPoints || 0;
+    const balanceAfter = balanceBefore + current.pointsAmount;
+    await PointsLedger.create(
+      [
+        {
+          userId: current.userId,
+          amount: current.pointsAmount,
+          transactionType: POINTS_TRANSACTION_TYPE.CREDIT,
+          reason: POINTS_TRANSACTION_REASON.REFUND,
+          description: `Refund for ${targetStatus.toLowerCase()} withdrawal ${current._id}`,
+          balance: balanceAfter,
+          metadata: {
+            withdrawalId: String(current._id),
+            provider,
+            source,
+            sourceId: eventSourceId,
+          },
+        },
+      ],
+      { session },
+    );
+    await writeLedgerEntry(
+      {
+        entryKey,
+        userId: current.userId,
+        withdrawalId: current._id,
+        providerTransferId: normalized.providerTransferId || null,
+        movement: PAYOUT_LEDGER_MOVEMENT.WITHDRAWAL_POINTS_REFUND,
+        asset: PAYOUT_ASSET.REWARD_POINT,
+        amount: current.pointsAmount,
+        balanceBefore,
+        balanceAfter,
+        source,
+        sourceId: eventSourceId,
+        metadata: {
+          eventType: normalized.eventType || PAYOUT_RESULT.STATUS_CHECK,
+          failureReason: safeText(normalized.failureReason),
+          provider,
+        },
+      },
+      session,
+    );
+    return;
+  }
+
   const entryKey = `withdrawal:${current._id}:coin-refund:${targetStatus.toLowerCase()}`;
   const existingEntry = await LedgerEntry.findOne({ entryKey }).session(
     session,
@@ -171,7 +235,7 @@ async function applyPayoutLedgerEffects({
     targetStatus === WITHDRAWAL_STATUS.FAILED ||
     targetStatus === WITHDRAWAL_STATUS.REVERSED
   ) {
-    await refundWithdrawalCoins({
+    await refundWithdrawalBalance({
       current,
       provider,
       normalized,

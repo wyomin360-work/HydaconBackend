@@ -4,16 +4,24 @@ const fs = require("fs");
 const logger = require("../../../../config/pino.config");
 const {
   PAYOUT_MESSAGE,
+  PAYOUT_HTTP_STATUS,
+  PAYOUT_CONFIG,
   PAYOUT_PROVIDER_ENVIRONMENT,
 } = require("../../../../constants/payouts");
 
-const API_VERSION = process.env.CASHFREE_PAYOUT_API_VERSION || "2024-01-01";
-const TIMEOUT_MS = Number(process.env.CASHFREE_PAYOUT_TIMEOUT_MS || 15000);
+const API_VERSION =
+  process.env.CASHFREE_PAYOUT_API_VERSION ||
+  PAYOUT_CONFIG.CASHFREE_DEFAULT_API_VERSION;
+const TIMEOUT_MS = Number(
+  process.env.CASHFREE_PAYOUT_TIMEOUT_MS ||
+    PAYOUT_CONFIG.CASHFREE_DEFAULT_TIMEOUT_MS,
+);
 
 function getBaseUrl() {
-  return process.env.CASHFREE_PAYOUT_ENV === PAYOUT_PROVIDER_ENVIRONMENT.PRODUCTION
-    ? "https://api.cashfree.com/payout"
-    : "https://sandbox.cashfree.com/payout";
+  return process.env.CASHFREE_PAYOUT_ENV ===
+    PAYOUT_PROVIDER_ENVIRONMENT.PRODUCTION
+    ? PAYOUT_CONFIG.CASHFREE_PRODUCTION_BASE_URL
+    : PAYOUT_CONFIG.CASHFREE_SANDBOX_BASE_URL;
 }
 
 function validateConfig() {
@@ -41,7 +49,9 @@ function publicKey() {
 }
 
 function createCfSignature(clientId, pem) {
-  const input = `${clientId}.${Math.floor(Date.now() / 1000)}`;
+  const input = `${clientId}.${Math.floor(
+    Date.now() / PAYOUT_CONFIG.MILLISECONDS_PER_SECOND,
+  )}`;
   return crypto
     .publicEncrypt(
       {
@@ -52,6 +62,16 @@ function createCfSignature(clientId, pem) {
       Buffer.from(input),
     )
     .toString("base64");
+}
+
+function safeProviderErrorMessage(message) {
+  const sensitiveDigits = new RegExp(
+    `\\d{${PAYOUT_CONFIG.REDACT_DIGIT_SEQUENCE_LENGTH},}`,
+    "g",
+  );
+  return String(message)
+    .replace(sensitiveDigits, "[redacted]")
+    .slice(0, PAYOUT_CONFIG.MAX_ERROR_LENGTH);
 }
 
 function requestHeaders(requestId = crypto.randomUUID()) {
@@ -80,17 +100,18 @@ function wrapError(error, fallback) {
   const statusCode = error?.response?.status || null;
   const body = error?.response?.data || {};
   const message = body.message || error?.message || fallback;
-  const wrapped = new Error(
-    String(message)
-      .replace(/\d{6,}/g, "[redacted]")
-      .slice(0, 500),
-  );
+  const wrapped = new Error(safeProviderErrorMessage(message));
   wrapped.providerStatusCode = statusCode;
   wrapped.providerErrorCode = body.subCode || body.code || null;
   // 5xx, timeouts, and connection failures are ambiguous: the transfer may exist.
-  wrapped.definitive = Boolean(
-    statusCode >= 400 && statusCode < 500 && statusCode !== 409,
-  );
+  wrapped.definitive =
+    typeof error?.definitive === "boolean"
+      ? error.definitive
+      : Boolean(
+          statusCode >= PAYOUT_HTTP_STATUS.CLIENT_ERROR_MIN &&
+          statusCode < PAYOUT_HTTP_STATUS.SERVER_ERROR_MIN &&
+          statusCode !== PAYOUT_HTTP_STATUS.CONFLICT,
+        );
   wrapped.ambiguous = !wrapped.definitive;
   return wrapped;
 }
@@ -117,7 +138,7 @@ async function getBeneficiary(beneficiaryId) {
     });
     return response.data;
   } catch (error) {
-    if (error.providerStatusCode === 404) return null;
+    if (error.providerStatusCode === PAYOUT_HTTP_STATUS.NOT_FOUND) return null;
     throw error;
   }
 }
@@ -125,7 +146,10 @@ async function getBeneficiary(beneficiaryId) {
 async function createBeneficiary(payload, beneficiaryId) {
   const response = await call("POST", "/beneficiary", {
     data: payload,
-    requestId: `bene-${beneficiaryId}`.slice(0, 50),
+    requestId: `bene-${beneficiaryId}`.slice(
+      0,
+      PAYOUT_CONFIG.CASHFREE_REQUEST_ID_MAX_LENGTH,
+    ),
   });
   return response.data;
 }
@@ -133,7 +157,10 @@ async function createBeneficiary(payload, beneficiaryId) {
 async function createTransfer(payload) {
   const response = await call("POST", "/transfers", {
     data: payload,
-    requestId: `transfer-${payload.transfer_id}`.slice(0, 50),
+    requestId: `transfer-${payload.transfer_id}`.slice(
+      0,
+      PAYOUT_CONFIG.CASHFREE_REQUEST_ID_MAX_LENGTH,
+    ),
   });
   return { ...response.data, _httpStatus: response.status };
 }
@@ -142,11 +169,41 @@ async function fetchTransferByReference(referenceId) {
   try {
     const response = await call("GET", "/transfers", {
       params: { transfer_id: referenceId },
-      requestId: `status-${referenceId}`.slice(0, 50),
+      requestId: `status-${referenceId}`.slice(
+        0,
+        PAYOUT_CONFIG.CASHFREE_REQUEST_ID_MAX_LENGTH,
+      ),
     });
     return { ...response.data, _httpStatus: response.status };
   } catch (error) {
-    if (error.providerStatusCode === 404) return null;
+    if (error.providerStatusCode === PAYOUT_HTTP_STATUS.NOT_FOUND) return null;
+    throw error;
+  }
+}
+
+async function createBatchTransfer(payload) {
+  const response = await call("POST", "/transfers/batch", {
+    data: payload,
+    requestId: `batch-${payload.batch_transfer_id}`.slice(
+      0,
+      PAYOUT_CONFIG.CASHFREE_REQUEST_ID_MAX_LENGTH,
+    ),
+  });
+  return { ...response.data, _httpStatus: response.status };
+}
+
+async function fetchBatchTransferByReference(batchReferenceId) {
+  try {
+    const response = await call("GET", "/transfers/batch", {
+      params: { batch_transfer_id: batchReferenceId },
+      requestId: `batch-status-${batchReferenceId}`.slice(
+        0,
+        PAYOUT_CONFIG.CASHFREE_REQUEST_ID_MAX_LENGTH,
+      ),
+    });
+    return { ...response.data, _httpStatus: response.status };
+  } catch (error) {
+    if (error.providerStatusCode === PAYOUT_HTTP_STATUS.NOT_FOUND) return null;
     throw error;
   }
 }
@@ -157,4 +214,6 @@ module.exports = {
   createBeneficiary,
   createTransfer,
   fetchTransferByReference,
+  createBatchTransfer,
+  fetchBatchTransferByReference,
 };

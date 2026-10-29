@@ -10,13 +10,19 @@ const {
   PAYOUT_FAILURE_TERMINAL_STATUSES,
   PAYOUT_LEDGER_MOVEMENT,
   PAYOUT_LEDGER_SOURCE,
+  PAYOUT_HTTP_STATUS,
   PAYOUT_MESSAGE,
 } = require("../../constants/payouts");
+const {
+  POINTS_TRANSACTION_TYPE,
+  POINTS_TRANSACTION_REASON,
+} = require("../../constants/points");
 const Withdrawal = require("../../schemas/withdrawal.schema");
 const UserBankAccount = require("../../schemas/user-bank-account.schema");
 const User = require("../../schemas/user.schema");
 const AppConfig = require("../../schemas/app-config.schema");
 const LedgerEntry = require("../../schemas/ledger-entry.schema");
+const PointsLedger = require("../../schemas/points-ledger.schema");
 const PayoutAttempt = require("../../schemas/payout-attempt.schema");
 const PayoutEvent = require("../../schemas/payout-event.schema");
 const PayoutRecon = require("../../schemas/payout-recon.schema");
@@ -24,7 +30,13 @@ const { decrypt } = require("../../utils/encryption");
 const { sendFcmNotifications } = require("../../functions/fcm");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const { formatNotification } = require("../../utils/heplers");
-const { enqueueApprovedWithdrawal } = require("./payout-execution.service");
+const {
+  enqueueApprovedWithdrawal,
+  wakePayoutOutboxWorker,
+} = require("./payout-execution.service");
+const {
+  enqueueApprovedWithdrawalBatch,
+} = require("./payout-batch-execution.service");
 const logger = require("../../config/pino.config");
 
 /**
@@ -50,7 +62,11 @@ async function createWithdrawal(userId, data) {
     sendFailResponse("Failed to load coin configuration settings");
   }
 
-  const coinAmount = Math.ceil(amount / (coinConfig.coinValue || 1));
+  const cashPerPoint = Number(coinConfig.coinValue);
+  if (!Number.isFinite(cashPerPoint) || cashPerPoint <= 0) {
+    sendFailResponse("Invalid point-to-cash conversion value");
+  }
+  const pointsAmount = Math.ceil(amount / cashPerPoint);
 
   const user = await User.findById(userId);
   if (!user) {
@@ -65,9 +81,10 @@ async function createWithdrawal(userId, data) {
     );
   }
 
-  // Validate sufficient coins balance
-  if (user.hydaconCoins < coinAmount) {
-    sendFailResponse("Insufficient Hydacoins balance");
+  // Cash withdrawals spend the current reward-points balance. HydaconCoins
+  // remain a separate balance used for gift purchases.
+  if ((user.totalPoints || 0) < pointsAmount) {
+    sendFailResponse("Insufficient points balance");
   }
 
   // Validate min and max limits
@@ -91,7 +108,7 @@ async function createWithdrawal(userId, data) {
         [
           {
             userId,
-            coinAmount,
+            pointsAmount,
             cashAmount: amount,
             bankAccountId: bankAccount._id,
             status: WITHDRAWAL_STATUS.PENDING,
@@ -102,33 +119,48 @@ async function createWithdrawal(userId, data) {
       withdrawal = newWithdrawal;
 
       const userBeforeDebit = await User.findOneAndUpdate(
-        { _id: userId, hydaconCoins: { $gte: coinAmount } },
-        { $inc: { hydaconCoins: -coinAmount } },
+        { _id: userId, totalPoints: { $gte: pointsAmount } },
+        { $inc: { totalPoints: -pointsAmount } },
         { new: false, session },
       );
-      if (!userBeforeDebit) sendFailResponse("Insufficient Hydacoins balance");
+      if (!userBeforeDebit) sendFailResponse("Insufficient points balance");
+
+      await PointsLedger.create(
+        [
+          {
+            userId,
+            amount: pointsAmount,
+            transactionType: POINTS_TRANSACTION_TYPE.DEBIT,
+            reason: POINTS_TRANSACTION_REASON.WITHDRAWAL_TO_CASH,
+            description: `Withdrawal request for ₹${amount}`,
+            balance: userBeforeDebit.totalPoints - pointsAmount,
+            metadata: { withdrawalId: String(withdrawal._id) },
+          },
+        ],
+        { session },
+      );
 
       await LedgerEntry.create(
         [
           {
-            entryKey: `withdrawal:${withdrawal._id}:coin-debit`,
+            entryKey: `withdrawal:${withdrawal._id}:points-debit`,
             userId,
             withdrawalId: withdrawal._id,
-            movement: PAYOUT_LEDGER_MOVEMENT.WITHDRAWAL_COIN_DEBIT,
-            asset: PAYOUT_ASSET.HYDACON_COIN,
-            amount: coinAmount,
-            balanceBefore: userBeforeDebit.hydaconCoins,
-            balanceAfter: userBeforeDebit.hydaconCoins - coinAmount,
+            movement: PAYOUT_LEDGER_MOVEMENT.WITHDRAWAL_POINTS_DEBIT,
+            asset: PAYOUT_ASSET.REWARD_POINT,
+            amount: pointsAmount,
+            balanceBefore: userBeforeDebit.totalPoints,
+            balanceAfter: userBeforeDebit.totalPoints - pointsAmount,
             source: PAYOUT_LEDGER_SOURCE.USER_REQUEST,
           },
         ],
         { session },
       );
     });
-    logger.info("Withdrawal requested and coin debit ledgered", {
+    logger.info("Withdrawal requested and points debit ledgered", {
       withdrawalId: String(withdrawal._id),
       userId: String(userId),
-      coinAmount,
+      pointsAmount,
       cashAmount: amount,
       currency: PAYOUT_CURRENCY.INR,
     });
@@ -155,7 +187,7 @@ async function createWithdrawal(userId, data) {
       message: "Withdrawal request created successfully",
       data: {
         id: withdrawal._id,
-        coinAmount: withdrawal.coinAmount,
+        pointsAmount: withdrawal.pointsAmount,
         cashAmount: withdrawal.cashAmount,
         status: withdrawal.status,
         createdAt: withdrawal.createdAt,
@@ -444,6 +476,7 @@ async function approveWithdrawal(adminId, withdrawalId) {
   } catch (error) {
     sendFailResponse(error.message || PAYOUT_MESSAGE.QUEUE_PAYOUT_FAILED);
   }
+  wakePayoutOutboxWorker();
   const withdrawal = await Withdrawal.findById(withdrawalId)
     .populate("userId")
     .select("_id status cashAmount userId")
@@ -471,8 +504,25 @@ async function approveWithdrawal(adminId, withdrawalId) {
   };
 }
 
+async function approveWithdrawalBatch(adminId, withdrawalIds) {
+  let data;
+  try {
+    data = await enqueueApprovedWithdrawalBatch(adminId, withdrawalIds);
+  } catch (error) {
+    sendFailResponse(
+      error.message || PAYOUT_MESSAGE.QUEUE_PAYOUT_FAILED,
+      error.statusCode || PAYOUT_HTTP_STATUS.INTERNAL_SERVER_ERROR,
+    );
+  }
+  return {
+    message: PAYOUT_MESSAGE.WITHDRAWAL_BATCH_APPROVED_QUEUED,
+    withdrawalBatchApproved: true,
+    data,
+  };
+}
+
 /**
- * Admin: Cancels withdrawal request and refunds coins.
+ * Admin: Cancels a withdrawal request and refunds its debited balance.
  */
 async function cancelWithdrawal(adminId, withdrawalId, data) {
   const { remarks } = data;
@@ -514,36 +564,69 @@ async function cancelWithdrawal(adminId, withdrawalId, data) {
       if (!cancelled.modifiedCount) {
         sendFailResponse("Withdrawal is no longer pending");
       }
+      const refundsPoints = Number.isFinite(withdrawal.pointsAmount);
+      const refundAmount = refundsPoints
+        ? withdrawal.pointsAmount
+        : withdrawal.coinAmount;
+      const balanceField = refundsPoints ? "totalPoints" : "hydaconCoins";
       const userBeforeRefund = await User.findOneAndUpdate(
         { _id: user._id },
-        { $inc: { hydaconCoins: withdrawal.coinAmount } },
+        { $inc: { [balanceField]: refundAmount } },
         { new: false, session },
       );
       if (!userBeforeRefund) sendFailResponse("User not found");
+      const balanceBefore = userBeforeRefund[balanceField] || 0;
+      const balanceAfter = balanceBefore + refundAmount;
+      if (refundsPoints) {
+        await PointsLedger.create(
+          [
+            {
+              userId: user._id,
+              amount: refundAmount,
+              transactionType: POINTS_TRANSACTION_TYPE.CREDIT,
+              reason: POINTS_TRANSACTION_REASON.REFUND,
+              description: `Refund for cancelled withdrawal ${withdrawal._id}`,
+              balance: balanceAfter,
+              metadata: { withdrawalId: String(withdrawal._id) },
+            },
+          ],
+          { session },
+        );
+      }
       await LedgerEntry.create(
         [
           {
-            entryKey: `withdrawal:${withdrawal._id}:coin-refund:cancelled`,
+            entryKey: `withdrawal:${withdrawal._id}:${refundsPoints ? "points" : "coin"}-refund:cancelled`,
             userId: user._id,
             withdrawalId: withdrawal._id,
-            movement: "WITHDRAWAL_COIN_REFUND",
-            asset: "HYDACON_COIN",
-            amount: withdrawal.coinAmount,
-            balanceBefore: userBeforeRefund.hydaconCoins || 0,
-            balanceAfter:
-              (userBeforeRefund.hydaconCoins || 0) + withdrawal.coinAmount,
-            source: "ADMIN_CANCELLATION",
+            movement: refundsPoints
+              ? PAYOUT_LEDGER_MOVEMENT.WITHDRAWAL_POINTS_REFUND
+              : PAYOUT_LEDGER_MOVEMENT.WITHDRAWAL_COIN_REFUND,
+            asset: refundsPoints
+              ? PAYOUT_ASSET.REWARD_POINT
+              : PAYOUT_ASSET.HYDACON_COIN,
+            amount: refundAmount,
+            balanceBefore,
+            balanceAfter,
+            source: PAYOUT_LEDGER_SOURCE.ADMIN_CANCELLATION,
             sourceId: String(adminId),
           },
         ],
         { session },
       );
     });
-    logger.info("Withdrawal cancelled and coin refund ledgered", {
+    const refundedPoints = Number.isFinite(withdrawal.pointsAmount);
+    const refundedAmount = refundedPoints
+      ? withdrawal.pointsAmount
+      : withdrawal.coinAmount;
+    logger.info("Withdrawal cancelled and balance refund ledgered", {
       withdrawalId: String(withdrawal._id),
       userId: String(user._id),
       adminId: String(adminId),
-      coinAmount: withdrawal.coinAmount,
+      refundedAsset: refundedPoints
+        ? PAYOUT_ASSET.REWARD_POINT
+        : PAYOUT_ASSET.HYDACON_COIN,
+      refundedAmount,
     });
 
     // Send FCM notification
@@ -565,11 +648,13 @@ async function cancelWithdrawal(adminId, withdrawalId, data) {
     }
 
     return {
-      message: "Withdrawal request cancelled and coins refunded successfully",
+      message: "Withdrawal request cancelled and balance refunded successfully",
       data: {
         id: withdrawal._id,
         status: WITHDRAWAL_STATUS.CANCELLED,
-        refundedCoins: withdrawal.coinAmount,
+        ...(refundedPoints
+          ? { refundedPoints: withdrawal.pointsAmount }
+          : { refundedCoins: withdrawal.coinAmount }),
       },
     };
   } catch (error) {
@@ -587,5 +672,6 @@ module.exports = {
   getWithdrawalDetails,
   getWithdrawalsSummary,
   approveWithdrawal,
+  approveWithdrawalBatch,
   cancelWithdrawal,
 };

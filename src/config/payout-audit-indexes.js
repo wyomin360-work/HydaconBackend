@@ -3,11 +3,21 @@ const PayoutAttempt = require("../schemas/payout-attempt.schema");
 const PayoutEvent = require("../schemas/payout-event.schema");
 const PayoutRecon = require("../schemas/payout-recon.schema");
 const PayoutOutbox = require("../schemas/payout-outbox.schema");
+const PayoutBatch = require("../schemas/payout-batch.schema");
+const Withdrawal = require("../schemas/withdrawal.schema");
 const logger = require("./pino.config");
 
 async function ensurePayoutAuditIndexes() {
   await Promise.all(
-    [LedgerEntry, PayoutAttempt, PayoutEvent, PayoutRecon, PayoutOutbox].map(
+    [
+      LedgerEntry,
+      PayoutAttempt,
+      PayoutEvent,
+      PayoutRecon,
+      PayoutOutbox,
+      PayoutBatch,
+      Withdrawal,
+    ].map(
       (model) => model.createIndexes(),
     ),
   );

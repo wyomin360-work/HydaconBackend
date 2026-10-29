@@ -10,7 +10,10 @@ const withdrawalSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    coinAmount: { type: Number, required: true },
+    // New withdrawals debit reward points. coinAmount remains for legacy
+    // withdrawals created before the balance asset was corrected.
+    pointsAmount: { type: Number, min: 0, default: null },
+    coinAmount: { type: Number, min: 0, default: null },
     cashAmount: { type: Number, required: true },
     bankAccountId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -29,6 +32,11 @@ const withdrawalSchema = new mongoose.Schema(
       enum: PAYOUT_PROVIDER_VALUES,
       default: null,
       index: true,
+    },
+    payoutBatchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "PayoutBatch",
+      default: null,
     },
     providerReferenceId: { type: String, default: null, index: true },
     providerTransferId: { type: String, default: null, index: true },
@@ -70,6 +78,13 @@ withdrawalSchema.virtual("approver", {
   localField: "approvedBy",
   foreignField: "_id",
   justOne: true,
+});
+
+withdrawalSchema.index({
+  payoutBatchId: 1,
+  status: 1,
+  payoutProvider: 1,
+  approvedAt: 1,
 });
 
 const Withdrawal = mongoose.model("Withdrawal", withdrawalSchema);

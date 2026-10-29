@@ -2,17 +2,66 @@ const crypto = require("crypto");
 const api = require("./api");
 const webhook = require("./webhook");
 const mapping = require("./mapping");
-const { PAYOUT_PROVIDER } = require("../../../../constants/payouts");
+const {
+  PAYOUT_PROVIDER,
+  PAYOUT_CONFIG,
+  PAYOUT_MESSAGE,
+  PAYOUT_TRANSFER_MODE,
+} = require("../../../../constants/payouts");
 
 function beneficiaryIdFor(bankAccountId, bankDetails) {
   const fingerprint = crypto
     .createHash("sha256")
     .update(`${bankDetails.accountNumber}|${bankDetails.ifscCode}`)
     .digest("hex");
-  return `hydacon_${String(bankAccountId).replace(/[^a-zA-Z0-9_.-]/g, "")}_${fingerprint.slice(0, 20)}`.slice(
+  return `${PAYOUT_CONFIG.CASHFREE_BENEFICIARY_ID_PREFIX}${String(
+    bankAccountId,
+  ).replace(/[^a-zA-Z0-9_.-]/g, "")}_${fingerprint.slice(
     0,
-    50,
-  );
+    PAYOUT_CONFIG.CASHFREE_BENEFICIARY_ID_HASH_LENGTH,
+  )}`.slice(0, PAYOUT_CONFIG.CASHFREE_BENEFICIARY_ID_MAX_LENGTH);
+}
+
+function normalizePhoneNumber(phone) {
+  const digits = String(phone).replace(/\D/g, "");
+  const hasCountryPrefix =
+    digits.length === PAYOUT_CONFIG.CASHFREE_INTERNATIONAL_PHONE_LENGTH &&
+    digits.startsWith(PAYOUT_CONFIG.CASHFREE_PHONE_COUNTRY_PREFIX);
+  return hasCountryPrefix
+    ? digits.slice(PAYOUT_CONFIG.CASHFREE_PHONE_COUNTRY_PREFIX.length)
+    : digits;
+}
+
+function makeBeneficiaryPayload(user, bankDetails, beneficiaryId) {
+  return {
+    beneficiary_id: beneficiaryId,
+    beneficiary_name: bankDetails.accountHolderName,
+    beneficiary_instrument_details: {
+      bank_account_number: bankDetails.accountNumber,
+      bank_ifsc: bankDetails.ifscCode,
+    },
+    beneficiary_contact_details: {
+      ...(user.email ? { beneficiary_email: user.email } : {}),
+      ...(user.phone
+        ? { beneficiary_phone: normalizePhoneNumber(user.phone) }
+        : {}),
+      beneficiary_country_code: PAYOUT_CONFIG.CASHFREE_COUNTRY_CODE,
+    },
+  };
+}
+
+function makeTransferPayload(transfer) {
+  return {
+    transfer_id: transfer.referenceId,
+    transfer_amount: transfer.amountMinor / PAYOUT_CONFIG.MINOR_UNITS_PER_INR,
+    transfer_mode: String(
+      transfer.mode || PAYOUT_TRANSFER_MODE.IMPS,
+    ).toLowerCase(),
+    transfer_remarks: (
+      transfer.narration || PAYOUT_CONFIG.CASHFREE_TRANSFER_REMARKS_DEFAULT
+    ).slice(0, PAYOUT_CONFIG.CASHFREE_TRANSFER_REMARKS_MAX_LENGTH),
+    beneficiary_details: { beneficiary_id: transfer.beneficiaryId },
+  };
 }
 
 async function createBeneficiary({
@@ -25,42 +74,18 @@ async function createBeneficiary({
     existing.beneficiaryId || beneficiaryIdFor(bankAccount._id, bankDetails);
   const current = await api.getBeneficiary(id);
   if (current?.beneficiary_id) return { beneficiaryId: current.beneficiary_id };
-  const payload = {
-    beneficiary_id: id,
-    beneficiary_name: bankDetails.accountHolderName,
-    beneficiary_instrument_details: {
-      bank_account_number: bankDetails.accountNumber,
-      bank_ifsc: bankDetails.ifscCode,
-    },
-    beneficiary_contact_details: {
-      ...(user.email ? { beneficiary_email: user.email } : {}),
-      ...(user.phone
-        ? {
-            beneficiary_phone: (() => {
-              const digits = String(user.phone).replace(/\D/g, "");
-              return digits.length === 12 && digits.startsWith("91")
-                ? digits.slice(2)
-                : digits;
-            })(),
-          }
-        : {}),
-      beneficiary_country_code: "+91",
-    },
-  };
+  const payload = makeBeneficiaryPayload(user, bankDetails, id);
   const result = await api.createBeneficiary(payload, id);
-  if (!result?.beneficiary_id)
-    throw new Error("Cashfree did not return a beneficiary ID");
+  if (!result?.beneficiary_id) {
+    const error = new Error(PAYOUT_MESSAGE.CASHFREE_BENEFICIARY_ID_MISSING);
+    error.definitive = true;
+    throw error;
+  }
   return { beneficiaryId: result.beneficiary_id };
 }
 
 async function initiateTransfer(input) {
-  const transfer = await api.createTransfer({
-    transfer_id: input.referenceId,
-    transfer_amount: input.amountMinor / 100,
-    transfer_mode: String(input.mode || "imps").toLowerCase(),
-    transfer_remarks: (input.narration || "Hydacon Payout").slice(0, 70),
-    beneficiary_details: { beneficiary_id: input.beneficiaryId },
-  });
+  const transfer = await api.createTransfer(makeTransferPayload(input));
   const normalized = mapping.normalizeTransferResponse(transfer);
   return { ...normalized, httpStatus: transfer._httpStatus || null };
 }
@@ -68,6 +93,19 @@ async function initiateTransfer(input) {
 async function getTransferStatus({ referenceId }) {
   const transfer = await api.fetchTransferByReference(referenceId);
   return transfer ? mapping.normalizeTransferResponse(transfer) : null;
+}
+
+async function initiateBatchTransfer({ batchReferenceId, transfers }) {
+  const result = await api.createBatchTransfer({
+    batch_transfer_id: batchReferenceId,
+    transfers: transfers.map(makeTransferPayload),
+  });
+  return mapping.normalizeBatchTransferResponse(result);
+}
+
+async function getBatchTransferStatus({ batchReferenceId }) {
+  const result = await api.fetchBatchTransferByReference(batchReferenceId);
+  return result ? mapping.normalizeBatchTransferResponse(result) : null;
 }
 
 function createIdempotencyKey(referenceId) {
@@ -79,6 +117,8 @@ module.exports = {
   createBeneficiary,
   initiateTransfer,
   getTransferStatus,
+  initiateBatchTransfer,
+  getBatchTransferStatus,
   verifyWebhook: webhook.verifyWebhook,
   normalizeWebhook: mapping.normalizeWebhook,
   createIdempotencyKey,

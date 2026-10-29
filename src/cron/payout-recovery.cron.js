@@ -12,6 +12,9 @@ const { getProvider } = require("../functions/payouts");
 const {
   processPayoutOutboxBatch,
 } = require("../modules/withdrawals/payout-execution.service");
+const {
+  processPayoutBatchOutboxBatch,
+} = require("../modules/withdrawals/payout-batch-execution.service");
 const { processWebhook } = require("../modules/webhooks/webhooks.service");
 const { safeText } = require("../modules/withdrawals/payout-utils");
 const {
@@ -32,6 +35,7 @@ async function processPayoutReconciliationBatch() {
       $in: [WITHDRAWAL_STATUS.PROCESSING, WITHDRAWAL_STATUS.COMPLETED],
     },
     payoutProvider: { $in: PAYOUT_PROVIDER_VALUES },
+    payoutBatchId: null,
     $or: [
       { lastPayoutReconciledAt: null },
       { lastPayoutReconciledAt: { $lt: retryBefore } },
@@ -59,6 +63,7 @@ async function claimWithdrawal(withdrawal, retryBefore, requestedAt) {
       status: {
         $in: [WITHDRAWAL_STATUS.PROCESSING, WITHDRAWAL_STATUS.COMPLETED],
       },
+      payoutBatchId: null,
       $or: [
         { lastPayoutReconciledAt: null },
         { lastPayoutReconciledAt: { $lt: retryBefore } },
@@ -128,6 +133,16 @@ function registerPayoutRecoveryCron() {
       await processPayoutOutboxBatch(PAYOUT_CONFIG.OUTBOX_BATCH_SIZE);
     } catch (error) {
       logger.error(PAYOUT_MESSAGE.OUTBOX_WORKER_FAILED, {
+        error: safeText(error.message),
+      });
+    }
+  });
+
+  cron.schedule(PAYOUT_CONFIG.OUTBOX_CRON_EXPRESSION, async () => {
+    try {
+      await processPayoutBatchOutboxBatch(PAYOUT_CONFIG.OUTBOX_BATCH_SIZE);
+    } catch (error) {
+      logger.error(PAYOUT_MESSAGE.PAYOUT_BATCH_WORKER_FAILED, {
         error: safeText(error.message),
       });
     }

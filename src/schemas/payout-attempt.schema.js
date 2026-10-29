@@ -30,6 +30,8 @@ const payoutAttemptSchema = new mongoose.Schema(
     },
     idempotencyKey: { type: String, required: true },
     referenceId: { type: String, required: true },
+    providerBatchReferenceId: { type: String, default: null, index: true },
+    providerBatchTransferId: { type: String, default: null, index: true },
     providerBeneficiaryId: { type: String, default: null },
     fundAccountId: { type: String, default: null },
     amountMinor: { type: Number, default: null },

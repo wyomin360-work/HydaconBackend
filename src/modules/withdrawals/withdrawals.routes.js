@@ -8,6 +8,7 @@ const {
   createWithdrawalRequestType,
   cancelWithdrawalRequestType,
   listWithdrawalsRequestType,
+  approveWithdrawalBatchRequestType,
 } = require("../../validations/withdrawals.validations");
 
 const router = express.Router();
@@ -57,6 +58,13 @@ router.post(
   paths.adminApprove,
   verification.verifyAdmin,
   handleError(controller.approveWithdrawal),
+);
+
+router.post(
+  paths.adminApproveBatch,
+  verification.verifyAdmin,
+  validateRequest(approveWithdrawalBatchRequestType),
+  handleError(controller.approveWithdrawalBatch),
 );
 
 router.post(
