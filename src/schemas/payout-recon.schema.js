@@ -1,4 +1,9 @@
 const mongoose = require("mongoose");
+const {
+  PAYOUT_PROVIDER,
+  PAYOUT_PROVIDER_VALUES,
+  PAYOUT_RECON_OUTCOME_VALUES,
+} = require("../constants/payouts");
 
 const payoutReconSchema = new mongoose.Schema(
   {
@@ -8,12 +13,20 @@ const payoutReconSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    payoutId: { type: String, default: null, index: true },
+    provider: {
+      type: String,
+      enum: PAYOUT_PROVIDER_VALUES,
+      default: PAYOUT_PROVIDER.RAZORPAYX,
+      index: true,
+    },
+    providerTransferId: { type: String, default: null, index: true },
+    payoutId: { type: String, default: null },
+    providerReferenceId: { type: String, default: null, index: true },
     referenceId: { type: String, required: true },
     requestedAt: { type: Date, required: true },
     outcome: {
       type: String,
-      enum: ["MATCHED", "NOT_FOUND", "MISMATCH", "ERROR"],
+      enum: PAYOUT_RECON_OUTCOME_VALUES,
       required: true,
     },
     providerStatus: { type: String, default: null },

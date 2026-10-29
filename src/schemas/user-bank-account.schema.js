@@ -1,4 +1,27 @@
 const mongoose = require("mongoose");
+const { PAYOUT_PROVIDER_VALUES } = require("../constants/payouts");
+
+const providerBeneficiaryDataSchema = new mongoose.Schema(
+  { contactId: { type: String, default: null } },
+  { _id: false },
+);
+
+const providerBeneficiarySchema = new mongoose.Schema(
+  {
+    provider: {
+      type: String,
+      enum: PAYOUT_PROVIDER_VALUES,
+      required: true,
+    },
+    beneficiaryId: { type: String, required: true },
+    providerData: {
+      type: providerBeneficiaryDataSchema,
+      default: () => ({}),
+    },
+    accountFingerprint: { type: String, default: null },
+  },
+  { _id: false },
+);
 
 const userBankAccountSchema = new mongoose.Schema(
   {
@@ -16,6 +39,7 @@ const userBankAccountSchema = new mongoose.Schema(
     bankName: { type: String, required: true },
     branchName: { type: String, required: true },
     payoutFundAccountId: { type: String, default: null },
+    providerBeneficiaries: { type: [providerBeneficiarySchema], default: [] },
     isActive: { type: Boolean, default: true },
   },
   { timestamps: true },

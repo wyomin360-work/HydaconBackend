@@ -1,29 +1,30 @@
 const crypto = require("crypto");
-const mongoose = require("mongoose");
-const Withdrawal = require("../../schemas/withdrawal.schema");
-const User = require("../../schemas/user.schema");
-const LedgerEntry = require("../../schemas/ledger-entry.schema");
-const PayoutEvent = require("../../schemas/payout-event.schema");
-const { sendFcmNotifications } = require("../../functions/fcm");
+const { WITHDRAWAL_STATUS } = require("../../constants/withdrawals");
+const {
+  PAYOUT_PROVIDER,
+  PAYOUT_EVENT_STATUS,
+  PAYOUT_SOURCE,
+  PAYOUT_CONFIG,
+  PAYOUT_MESSAGE,
+  PAYOUT_RESULT,
+  PAYOUT_HTTP_STATUS,
+} = require("../../constants/payouts");
 const {
   APP_NOTIFICATIONS,
   getNotification,
 } = require("../../constants/notifications");
+const Withdrawal = require("../../schemas/withdrawal.schema");
+const PayoutEvent = require("../../schemas/payout-event.schema");
+const User = require("../../schemas/user.schema");
+const { sendFcmNotifications } = require("../../functions/fcm");
 const { formatNotification } = require("../../utils/heplers");
-const logger = require("../../config/pino.config");
+const { sendFailResponse } = require("../../utils/responseHandlers");
+const { getProvider, currentProviderName } = require("../../functions/payouts");
 const {
-  verifyPayoutWebhook,
-  getPayoutWebhookDeliveryId,
-} = require("../../functions/razorpayx");
-
-const TERMINAL_STATUSES = ["COMPLETED", "FAILED", "REVERSED", "CANCELLED"];
-const EVENT_LEASE_MS = 10 * 60 * 1000;
-
-function redactProviderText(value, maxLength = 500) {
-  return String(value)
-    .replace(/\d{6,}/g, "[redacted]")
-    .slice(0, maxLength);
-}
+  applyTransferUpdate,
+  safeText,
+} = require("../withdrawals/payout-state.service");
+const logger = require("../../config/pino.config");
 
 function verifySignature(rawBody, signature, secret) {
   if (!Buffer.isBuffer(rawBody) || !signature || !secret) return false;
@@ -31,432 +32,224 @@ function verifySignature(rawBody, signature, secret) {
     .createHmac("sha256", secret)
     .update(rawBody)
     .digest("hex");
-  const received = Buffer.from(String(signature), "ascii");
-  const expectedBuffer = Buffer.from(expected, "ascii");
+  const expectedBytes = Buffer.from(expected, "ascii");
+  const actualBytes = Buffer.from(String(signature), "ascii");
   return (
-    received.length === expectedBuffer.length &&
-    crypto.timingSafeEqual(expectedBuffer, received)
+    expectedBytes.length === actualBytes.length &&
+    crypto.timingSafeEqual(expectedBytes, actualBytes)
   );
 }
 
-function signatureError(message) {
-  const error = new Error(message);
-  error.statusCode = 401;
-  return error;
-}
-
-function getTargetStatus(event, entity) {
-  switch (event) {
-    case "payout.processed":
-      return "COMPLETED";
-    case "payout.failed":
-    case "payout.rejected":
-    case "payout.cancelled":
-      return "FAILED";
-    case "payout.reversed":
-      return "REVERSED";
-    case "payout.queued":
-    case "payout.pending":
-    case "payout.initiated":
-    case "payout.updated":
-      if (entity.status === "processed") return "COMPLETED";
-      if (entity.status === "reversed") return "REVERSED";
-      if (["failed", "rejected", "cancelled"].includes(entity.status))
-        return "FAILED";
-      return "PROCESSING";
-    default:
-      return null;
+async function processWebhookInternal(
+  headers = {},
+  rawBody,
+  body,
+  options = {},
+) {
+  const source = options.source || PAYOUT_SOURCE.WEBHOOK;
+  const providerName = options.provider || currentProviderName();
+  const provider = getProvider(providerName);
+  if (source === PAYOUT_SOURCE.WEBHOOK)
+    provider.verifyWebhook(headers, rawBody);
+  if (!Buffer.isBuffer(rawBody)) {
+    const error = new Error(PAYOUT_MESSAGE.RAW_BODY_MISSING);
+    error.statusCode = PAYOUT_HTTP_STATUS.BAD_REQUEST;
+    throw error;
   }
-}
-
-function safeWebhookPayload(event, payout) {
-  const safe = { event };
-  if (!payout) return safe;
-  for (const field of [
-    "id",
-    "reference_id",
-    "status",
-    "amount",
-    "currency",
-    "mode",
-    "utr",
-    "failure_reason",
-    "created_at",
-    "updated_at",
-  ]) {
-    if (payout[field] !== undefined && payout[field] !== null) {
-      safe[field] =
-        typeof payout[field] === "string"
-          ? (field === "failure_reason"
-              ? redactProviderText(payout[field])
-              : payout[field]
-            ).slice(0, 500)
-          : payout[field];
-    }
-  }
-  return safe;
-}
-
-async function recordIgnoredEvent(eventDoc, reason, details = {}) {
-  await PayoutEvent.updateOne(
-    { _id: eventDoc._id, processingStatus: "PROCESSING" },
-    {
-      $set: {
-        processingStatus: "IGNORED",
-        result: reason,
-        ...details,
-        processedAt: new Date(),
-      },
-    },
-  );
-  logger.warn("Payout webhook ignored", {
-    eventId: eventDoc.providerEventId || eventDoc.dedupeKey,
-    eventType: eventDoc.eventType,
-    payoutId: eventDoc.payoutId,
-    reason,
-  });
-  return { status: "ignored", reason };
-}
-
-async function recordPayoutAnomaly(eventDoc, reason, details = {}) {
-  await PayoutEvent.updateOne(
-    { _id: eventDoc._id, processingStatus: "PROCESSING" },
-    {
-      $set: {
-        processingStatus: "IGNORED",
-        result: `payout-anomaly:${reason}`,
-        ...details,
-        processedAt: new Date(),
-      },
-    },
-  );
-  logger.error("Payout webhook failed consistency checks", {
-    eventId: eventDoc.providerEventId || eventDoc.dedupeKey,
-    eventType: eventDoc.eventType,
-    payoutId: eventDoc.payoutId,
-    reason,
-  });
-  return { status: "ignored", reason };
-}
-
-async function processWebhook(headers, rawBody, body, options = {}) {
-  const deliverySource = options.source || "WEBHOOK";
-  if (deliverySource === "WEBHOOK") {
-    verifyPayoutWebhook(headers, rawBody);
-  }
-
-  if (!Buffer.isBuffer(rawBody))
-    throw signatureError("Webhook raw body is unavailable");
-  const eventType = typeof body?.event === "string" ? body.event : "unknown";
-  const payout = body?.payload?.payout?.entity || null;
-  const providerEventId =
-    deliverySource === "WEBHOOK" ? getPayoutWebhookDeliveryId(headers) : null;
+  const normalized =
+    options.normalized || provider.normalizeWebhook(body, headers);
   const payloadHash = crypto.createHash("sha256").update(rawBody).digest("hex");
-  const dedupeKey = `${deliverySource.toLowerCase()}:sha256:${payloadHash}`;
-  const safePayload = safeWebhookPayload(eventType, payout);
+  const providerEventId = normalized.providerEventId || null;
+  const dedupeKey = `${providerName}:${source.toLowerCase()}:${providerEventId || payloadHash}`;
   const eventDoc = await PayoutEvent.findOneAndUpdate(
     { dedupeKey },
     {
       $setOnInsert: {
         dedupeKey,
+        provider: providerName,
         providerEventId,
-        eventType,
-        deliverySource,
-        payoutId: payout?.id || null,
-        referenceId: payout?.reference_id || null,
-        providerStatus: payout?.status || null,
+        eventType: normalized.eventType || PAYOUT_PROVIDER.UNKNOWN,
+        deliverySource: source,
+        providerTransferId: normalized.providerTransferId || null,
+        providerReferenceId: normalized.providerReferenceId || null,
+        payoutId: normalized.providerTransferId || null,
+        referenceId: normalized.providerReferenceId || null,
+        providerStatus: normalized.rawStatus || normalized.status || null,
         payloadHash,
-        safePayload,
-        processingStatus: "RECEIVED",
+        safePayload: normalized.safePayload || {},
+        processingStatus: PAYOUT_EVENT_STATUS.RECEIVED,
       },
     },
     { upsert: true, new: true, setDefaultsOnInsert: true },
   );
-
-  if (["PROCESSED", "IGNORED"].includes(eventDoc.processingStatus)) {
-    return { status: "success", processed: false, duplicate: true };
-  }
-
-  const claimBefore = new Date(Date.now() - EVENT_LEASE_MS);
-  const claimedEvent = await PayoutEvent.findOneAndUpdate(
+  if (
+    [PAYOUT_EVENT_STATUS.PROCESSED, PAYOUT_EVENT_STATUS.IGNORED].includes(
+      eventDoc.processingStatus,
+    )
+  )
+    return { status: PAYOUT_RESULT.SUCCESS, processed: false, duplicate: true };
+  const now = new Date();
+  const claimed = await PayoutEvent.findOneAndUpdate(
     {
       _id: eventDoc._id,
       $or: [
-        { processingStatus: { $in: ["RECEIVED", "FAILED"] } },
         {
-          processingStatus: "PROCESSING",
-          processingStartedAt: { $lt: claimBefore },
+          processingStatus: {
+            $in: [PAYOUT_EVENT_STATUS.RECEIVED, PAYOUT_EVENT_STATUS.FAILED],
+          },
+        },
+        {
+          processingStatus: PAYOUT_EVENT_STATUS.PROCESSING,
+          processingStartedAt: {
+            $lt: new Date(now.getTime() - PAYOUT_CONFIG.EVENT_LEASE_MS),
+          },
         },
       ],
     },
     {
       $set: {
-        processingStatus: "PROCESSING",
-        processingStartedAt: new Date(),
+        processingStatus: PAYOUT_EVENT_STATUS.PROCESSING,
+        processingStartedAt: now,
         errorMessage: null,
       },
       $inc: { processingAttempts: 1 },
     },
     { new: true },
   );
-  if (!claimedEvent) {
-    const retryError = new Error("Webhook event is already being processed");
-    retryError.statusCode = 503;
-    throw retryError;
-  }
-
-  if (
-    !payout ||
-    typeof eventType !== "string" ||
-    !body?.payload?.payout?.entity
-  ) {
-    return recordIgnoredEvent(claimedEvent, "invalid or non-payout payload");
-  }
-  const payoutId = payout.id;
-  const referenceId = payout.reference_id;
-  if (!payoutId) return recordIgnoredEvent(claimedEvent, "payout id missing");
-  const targetStatus = getTargetStatus(eventType, payout);
-  if (!targetStatus)
-    return recordIgnoredEvent(claimedEvent, "unsupported event");
-
-  let withdrawal;
-  try {
-    withdrawal =
-      referenceId && mongoose.Types.ObjectId.isValid(referenceId)
-        ? await Withdrawal.findOne({ _id: referenceId })
-        : await Withdrawal.findOne({ providerPayoutId: payoutId });
-  } catch (error) {
-    await PayoutEvent.updateOne(
-      { _id: claimedEvent._id, processingStatus: "PROCESSING" },
-      {
-        $set: {
-          processingStatus: "FAILED",
-          errorMessage: redactProviderText(error.message),
-        },
-      },
-    );
-    logger.error("Payout webhook withdrawal lookup failed", {
-      eventId: claimedEvent.providerEventId || claimedEvent.dedupeKey,
-      payoutId,
-      error: redactProviderText(error.message),
-    });
+  if (!claimed) {
+    const error = new Error(PAYOUT_MESSAGE.EVENT_ALREADY_PROCESSING);
+    error.statusCode = PAYOUT_HTTP_STATUS.SERVICE_UNAVAILABLE;
     throw error;
   }
-  if (!withdrawal) {
-    return recordIgnoredEvent(claimedEvent, "withdrawal not found");
-  }
-  if (referenceId && referenceId !== String(withdrawal._id)) {
-    return recordPayoutAnomaly(
-      claimedEvent,
-      "reference ID does not match withdrawal",
-    );
-  }
-  if (withdrawal.providerPayoutId && withdrawal.providerPayoutId !== payoutId) {
-    return recordPayoutAnomaly(
-      claimedEvent,
-      "payout ID does not match withdrawal",
-    );
-  }
-  const expectedAmount = Math.round(withdrawal.cashAmount * 100);
-  if (payout.amount != null && Number(payout.amount) !== expectedAmount) {
-    return recordPayoutAnomaly(
-      claimedEvent,
-      "payout amount does not match withdrawal",
-      {
-        result: `payout-anomaly:amount-mismatch:expected-${expectedAmount}`,
-      },
-    );
-  }
-  if (payout.currency && payout.currency !== "INR") {
-    return recordPayoutAnomaly(claimedEvent, "payout currency is not INR");
-  }
 
-  const session = await mongoose.startSession();
-  let applied = false;
   try {
-    await session.withTransaction(async () => {
-      applied = false;
-      const result = await Withdrawal.updateOne(
-        { _id: withdrawal._id, status: { $nin: TERMINAL_STATUSES } },
-        {
-          $set: {
-            status: targetStatus,
-            providerPayoutId: payoutId,
-            ...(targetStatus === "COMPLETED"
-              ? {
-                  completedAt: new Date(),
-                  ...(payout.utr ? { utr: payout.utr } : {}),
-                }
-              : {}),
-            ...(["FAILED", "REVERSED"].includes(targetStatus)
-              ? {
-                  failureReason:
-                    (payout.failure_reason &&
-                      redactProviderText(payout.failure_reason)) ||
-                    `Payout ${targetStatus.toLowerCase()}`,
-                }
-              : {}),
-          },
-        },
-        { session },
-      );
-
-      if (result.modifiedCount && targetStatus === "COMPLETED") {
-        const userBefore = await User.findOneAndUpdate(
-          { _id: withdrawal.userId },
-          { $inc: { totalWithdraw: withdrawal.cashAmount } },
-          { new: false, session },
-        );
-        if (!userBefore) throw new Error("Withdrawal user not found");
-        await LedgerEntry.create(
-          [
-            {
-              entryKey: `withdrawal:${withdrawal._id}:payout-completed`,
-              userId: withdrawal.userId,
-              withdrawalId: withdrawal._id,
-              payoutId,
-              movement: "PAYOUT_COMPLETED",
-              asset: "INR",
-              amount: withdrawal.cashAmount,
-              balanceBefore: userBefore.totalWithdraw || 0,
-              balanceAfter:
-                (userBefore.totalWithdraw || 0) + withdrawal.cashAmount,
-              source:
-                deliverySource === "WEBHOOK"
-                  ? "PAYOUT_WEBHOOK"
-                  : "PAYOUT_RECONCILIATION",
-              sourceId: claimedEvent.providerEventId || claimedEvent.dedupeKey,
-              metadata: { eventType, utr: payout.utr || null },
-            },
-          ],
-          { session },
-        );
-        applied = true;
-      } else if (
-        result.modifiedCount &&
-        ["FAILED", "REVERSED"].includes(targetStatus)
-      ) {
-        const userBefore = await User.findOneAndUpdate(
-          { _id: withdrawal.userId },
-          { $inc: { hydaconCoins: withdrawal.coinAmount } },
-          { new: false, session },
-        );
-        if (!userBefore) throw new Error("Withdrawal user not found");
-        await LedgerEntry.create(
-          [
-            {
-              entryKey: `withdrawal:${withdrawal._id}:coin-refund:${targetStatus.toLowerCase()}`,
-              userId: withdrawal.userId,
-              withdrawalId: withdrawal._id,
-              payoutId,
-              movement: "WITHDRAWAL_COIN_REFUND",
-              asset: "HYDACON_COIN",
-              amount: withdrawal.coinAmount,
-              balanceBefore: userBefore.hydaconCoins || 0,
-              balanceAfter:
-                (userBefore.hydaconCoins || 0) + withdrawal.coinAmount,
-              source:
-                deliverySource === "WEBHOOK"
-                  ? "PAYOUT_WEBHOOK"
-                  : "PAYOUT_RECONCILIATION",
-              sourceId: claimedEvent.providerEventId || claimedEvent.dedupeKey,
-              metadata: {
-                eventType,
-                failureReason: payout.failure_reason
-                  ? redactProviderText(payout.failure_reason)
-                  : null,
-              },
-            },
-          ],
-          { session },
-        );
-        applied = true;
-      }
-
+    if (!normalized.providerReferenceId && !normalized.providerTransferId) {
       await PayoutEvent.updateOne(
-        { _id: claimedEvent._id, processingStatus: "PROCESSING" },
+        { _id: claimed._id },
         {
           $set: {
-            processingStatus: "PROCESSED",
-            result: applied
-              ? `applied:${targetStatus}`
-              : `duplicate-or-terminal:${targetStatus}`,
+            processingStatus: PAYOUT_EVENT_STATUS.IGNORED,
+            result: PAYOUT_MESSAGE.TRANSFER_IDENTITY_MISSING,
             processedAt: new Date(),
-            errorMessage: null,
           },
         },
-        { session },
       );
-    });
-  } catch (error) {
-    logger.error("Payout webhook processing failed", {
-      eventId: claimedEvent.providerEventId || claimedEvent.dedupeKey,
-      eventType,
-      payoutId,
-      withdrawalId: String(withdrawal._id),
-      error: redactProviderText(error.message),
-    });
-    try {
+      return {
+        status: PAYOUT_RESULT.IGNORED,
+        reason: PAYOUT_MESSAGE.TRANSFER_IDENTITY_MISSING,
+      };
+    }
+    const withdrawal = await Withdrawal.findOne({
+      payoutProvider: providerName,
+      $or: [
+        ...(normalized.providerReferenceId
+          ? [{ providerReferenceId: normalized.providerReferenceId }]
+          : []),
+        ...(normalized.providerTransferId
+          ? [{ providerTransferId: normalized.providerTransferId }]
+          : []),
+      ],
+    }).lean();
+    if (!withdrawal) {
       await PayoutEvent.updateOne(
-        { _id: claimedEvent._id, processingStatus: "PROCESSING" },
+        { _id: claimed._id },
         {
           $set: {
-            processingStatus: "FAILED",
-            errorMessage: redactProviderText(error.message),
+            processingStatus: PAYOUT_EVENT_STATUS.IGNORED,
+            result: PAYOUT_MESSAGE.WITHDRAWAL_NOT_FOUND_FOR_REFERENCE,
+            processedAt: new Date(),
           },
         },
       );
-    } catch (auditError) {
-      logger.error("Failed to persist Payout webhook processing error", {
-        eventId: claimedEvent.providerEventId || claimedEvent.dedupeKey,
-        error: auditError.message,
-      });
+      return {
+        status: PAYOUT_RESULT.IGNORED,
+        reason: PAYOUT_MESSAGE.WITHDRAWAL_NOT_FOUND_FOR_REFERENCE,
+      };
     }
-    throw error;
-  } finally {
-    await session.endSession();
-  }
-
-  logger.info("Payout webhook processed", {
-    eventId: claimedEvent.providerEventId || claimedEvent.dedupeKey,
-    eventType,
-    deliverySource,
-    payoutId,
-    withdrawalId: String(withdrawal._id),
-    targetStatus,
-    applied,
-  });
-
-  if (applied && ["COMPLETED", "FAILED", "REVERSED"].includes(targetStatus)) {
-    const user = await User.findById(withdrawal.userId);
-    if (user?.fcmTokens?.length && user.enableNotification) {
-      const notificationKey =
-        targetStatus === "COMPLETED" ? "success" : "failed";
-      const localized = getNotification(
-        APP_NOTIFICATIONS.withdraw[notificationKey],
-        user.language,
-      );
-      const message =
-        targetStatus === "COMPLETED"
+    if (
+      normalized.providerReferenceId &&
+      normalized.providerReferenceId !== withdrawal.providerReferenceId
+    ) {
+      throw new Error(PAYOUT_MESSAGE.PROVIDER_REFERENCE_MISMATCH);
+    }
+    if (
+      normalized.providerTransferId &&
+      withdrawal.providerTransferId &&
+      normalized.providerTransferId !== withdrawal.providerTransferId
+    ) {
+      throw new Error(PAYOUT_MESSAGE.PROVIDER_TRANSFER_ID_MISMATCH);
+    }
+    const result = await applyTransferUpdate({
+      withdrawal,
+      provider: providerName,
+      normalized,
+      eventDoc: claimed,
+      source:
+        source === PAYOUT_SOURCE.WEBHOOK
+          ? PAYOUT_SOURCE.PAYOUT_WEBHOOK
+          : PAYOUT_SOURCE.PAYOUT_RECONCILIATION,
+    });
+    if (
+      result.processed &&
+      [
+        WITHDRAWAL_STATUS.COMPLETED,
+        WITHDRAWAL_STATUS.FAILED,
+        WITHDRAWAL_STATUS.REVERSED,
+      ].includes(normalized.targetStatus)
+    ) {
+      const user = await User.findById(withdrawal.userId).lean();
+      if (user?.fcmTokens?.length && user.enableNotification) {
+        const success = normalized.targetStatus === WITHDRAWAL_STATUS.COMPLETED;
+        const localized = getNotification(
+          APP_NOTIFICATIONS.withdraw[success ? "success" : "failed"],
+          user.language,
+        );
+        const message = success
           ? formatNotification(localized.body, {
               amount: withdrawal.cashAmount,
             })
           : localized.body;
-      sendFcmNotifications(user.fcmTokens, localized.title, message).catch(
-        (error) =>
-          logger.error("FCM withdrawal webhook notification failed", {
-            withdrawalId: String(withdrawal._id),
-            error: error.message,
-          }),
-      );
+        sendFcmNotifications(user.fcmTokens, localized.title, message).catch(
+          (error) =>
+            logger.error(PAYOUT_MESSAGE.FCM_NOTIFICATION_LOG, {
+              withdrawalId: String(withdrawal._id),
+              error: safeText(error.message),
+            }),
+        );
+      }
     }
+    return result;
+  } catch (error) {
+    await PayoutEvent.updateOne(
+      { _id: claimed._id, processingStatus: PAYOUT_EVENT_STATUS.PROCESSING },
+      {
+        $set: {
+          processingStatus: PAYOUT_EVENT_STATUS.FAILED,
+          errorMessage: safeText(error.message),
+        },
+      },
+    );
+    logger.error(PAYOUT_MESSAGE.WEBHOOK_PROCESSING_FAILED, {
+      provider: providerName,
+      eventId: providerEventId || dedupeKey,
+      error: safeText(error.message),
+    });
+    throw error;
   }
-
-  return {
-    status: "success",
-    processed: applied,
-    duplicateOrTerminal: !applied,
-  };
 }
 
-module.exports = { processWebhook, verifySignature, getTargetStatus };
+async function processWebhook(headers = {}, rawBody, body, options = {}) {
+  try {
+    return await processWebhookInternal(headers, rawBody, body, options);
+  } catch (error) {
+    const statusCode =
+      error.statusCode || PAYOUT_HTTP_STATUS.INTERNAL_SERVER_ERROR;
+    const message =
+      statusCode >= PAYOUT_HTTP_STATUS.INTERNAL_SERVER_ERROR
+        ? PAYOUT_MESSAGE.WEBHOOK_RETRY
+        : safeText(error.message);
+    sendFailResponse(message || PAYOUT_MESSAGE.WEBHOOK_FAILURE, statusCode);
+  }
+}
+
+module.exports = { processWebhook, verifySignature };

@@ -1,4 +1,17 @@
 const mongoose = require("mongoose");
+const {
+  APP_NOTIFICATIONS,
+  getNotification,
+} = require("../../constants/notifications");
+const { WITHDRAWAL_STATUS } = require("../../constants/withdrawals");
+const {
+  PAYOUT_ASSET,
+  PAYOUT_CURRENCY,
+  PAYOUT_FAILURE_TERMINAL_STATUSES,
+  PAYOUT_LEDGER_MOVEMENT,
+  PAYOUT_LEDGER_SOURCE,
+  PAYOUT_MESSAGE,
+} = require("../../constants/payouts");
 const Withdrawal = require("../../schemas/withdrawal.schema");
 const UserBankAccount = require("../../schemas/user-bank-account.schema");
 const User = require("../../schemas/user.schema");
@@ -8,50 +21,11 @@ const PayoutAttempt = require("../../schemas/payout-attempt.schema");
 const PayoutEvent = require("../../schemas/payout-event.schema");
 const PayoutRecon = require("../../schemas/payout-recon.schema");
 const { decrypt } = require("../../utils/encryption");
-const {
-  createPayoutContact,
-  createPayoutFundAccount,
-  createPayout: createProviderPayout,
-  createIdempotencyKey: payoutIdempotencyKey,
-} = require("../../functions/razorpayx");
 const { sendFcmNotifications } = require("../../functions/fcm");
-const {
-  APP_NOTIFICATIONS,
-  getNotification,
-} = require("../../constants/notifications");
 const { sendFailResponse } = require("../../utils/responseHandlers");
-const { attachId, formatNotification } = require("../../utils/heplers");
-const { WITHDRAWAL_STATUS } = require("../../constants/withdrawals");
+const { formatNotification } = require("../../utils/heplers");
+const { enqueueApprovedWithdrawal } = require("./payout-execution.service");
 const logger = require("../../config/pino.config");
-
-function safePayoutResponse(payout = {}) {
-  const allowedFields = [
-    "id",
-    "status",
-    "amount",
-    "currency",
-    "mode",
-    "purpose",
-    "reference_id",
-    "fees",
-    "tax",
-    "utr",
-    "failure_reason",
-  ];
-  return Object.fromEntries(
-    allowedFields
-      .filter((field) => payout[field] !== undefined && payout[field] !== null)
-      .map((field) => [
-        field,
-        typeof payout[field] === "string"
-          ? (field === "failure_reason"
-              ? payout[field].replace(/\d{6,}/g, "[redacted]")
-              : payout[field]
-            ).slice(0, 500)
-          : payout[field],
-      ]),
-  );
-}
 
 /**
  * User initiates a withdrawal request.
@@ -140,12 +114,12 @@ async function createWithdrawal(userId, data) {
             entryKey: `withdrawal:${withdrawal._id}:coin-debit`,
             userId,
             withdrawalId: withdrawal._id,
-            movement: "WITHDRAWAL_COIN_DEBIT",
-            asset: "HYDACON_COIN",
+            movement: PAYOUT_LEDGER_MOVEMENT.WITHDRAWAL_COIN_DEBIT,
+            asset: PAYOUT_ASSET.HYDACON_COIN,
             amount: coinAmount,
             balanceBefore: userBeforeDebit.hydaconCoins,
             balanceAfter: userBeforeDebit.hydaconCoins - coinAmount,
-            source: "USER_REQUEST",
+            source: PAYOUT_LEDGER_SOURCE.USER_REQUEST,
           },
         ],
         { session },
@@ -156,7 +130,7 @@ async function createWithdrawal(userId, data) {
       userId: String(userId),
       coinAmount,
       cashAmount: amount,
-      currency: "INR",
+      currency: PAYOUT_CURRENCY.INR,
     });
 
     // Send FCM notification
@@ -257,7 +231,7 @@ async function listWithdrawals(data) {
 
     query.$or = [
       { userId: { $in: userIds.map((u) => u._id) } },
-      { providerPayoutId: { $regex: search, $options: "i" } },
+      { providerTransferId: { $regex: search, $options: "i" } },
       { utr: { $regex: search, $options: "i" } },
     ];
   }
@@ -355,8 +329,11 @@ async function getWithdrawalDetails(id) {
       PayoutEvent.find({
         $or: [
           { referenceId: String(withdrawal._id) },
-          ...(withdrawal.providerPayoutId
-            ? [{ payoutId: withdrawal.providerPayoutId }]
+          ...(withdrawal.providerTransferId
+            ? [{ providerTransferId: withdrawal.providerTransferId }]
+            : []),
+          ...(withdrawal.providerReferenceId
+            ? [{ providerReferenceId: withdrawal.providerReferenceId }]
             : []),
         ],
       })
@@ -370,13 +347,19 @@ async function getWithdrawalDetails(id) {
     ]);
   const ledgerKeys = new Set(financialLedger.map((entry) => entry.entryKey));
   const requiredLedgerKeys = [`withdrawal:${withdrawal._id}:coin-debit`];
-  if (["FAILED", "REVERSED", "CANCELLED"].includes(withdrawal.status)) {
+  if (PAYOUT_FAILURE_TERMINAL_STATUSES.includes(withdrawal.status)) {
     requiredLedgerKeys.push(
       `withdrawal:${withdrawal._id}:coin-refund:${withdrawal.status.toLowerCase()}`,
     );
   }
-  if (withdrawal.status === "COMPLETED") {
+  if (withdrawal.status === WITHDRAWAL_STATUS.COMPLETED) {
     requiredLedgerKeys.push(`withdrawal:${withdrawal._id}:payout-completed`);
+  }
+  if (
+    withdrawal.status === WITHDRAWAL_STATUS.REVERSED &&
+    ledgerKeys.has(`withdrawal:${withdrawal._id}:payout-completed`)
+  ) {
+    requiredLedgerKeys.push(`withdrawal:${withdrawal._id}:payout-reversed-inr`);
   }
 
   // Decrypt bank details for display
@@ -452,298 +435,21 @@ async function getWithdrawalsSummary() {
 }
 
 /**
- * Admin: Approves withdrawal, registers Contact/Fund Account, initiates Payout.
+ * Admin: Approves a withdrawal and transactionally enqueues provider execution.
  */
 async function approveWithdrawal(adminId, withdrawalId) {
-  const now = new Date();
-  // Claim the request atomically. A stale PROCESSING record without a provider
-  // payout id can be retried safely because the payout idempotency key is stable.
-  const withdrawal = await Withdrawal.findOneAndUpdate(
-    {
-      _id: withdrawalId,
-      $or: [
-        { status: WITHDRAWAL_STATUS.PENDING },
-        {
-          status: WITHDRAWAL_STATUS.PROCESSING,
-          providerPayoutId: null,
-          approvedAt: { $lt: new Date(now.getTime() - 5 * 60 * 1000) },
-        },
-      ],
-    },
-    {
-      $set: {
-        status: WITHDRAWAL_STATUS.PROCESSING,
-        approvedBy: adminId,
-        approvedAt: now,
-      },
-    },
-    { new: true },
-  )
-    .populate("userId")
-    .populate("bankAccountId");
-
-  if (!withdrawal) {
-    const current = await Withdrawal.findById(withdrawalId).select("status");
-    if (!current) sendFailResponse("Withdrawal request not found");
-    sendFailResponse(
-      `Cannot approve a withdrawal with ${current.status} status`,
-    );
-  }
-
-  const releaseClaim = () =>
-    Withdrawal.updateOne(
-      {
-        _id: withdrawal._id,
-        status: WITHDRAWAL_STATUS.PROCESSING,
-        providerPayoutId: null,
-      },
-      {
-        $set: {
-          status: WITHDRAWAL_STATUS.PENDING,
-          approvedBy: null,
-          approvedAt: null,
-        },
-      },
-    );
-
-  const user = withdrawal.userId;
-  const bankAccount = withdrawal.bankAccountId;
-
-  if (!user || !bankAccount) {
-    await releaseClaim();
-    sendFailResponse("Associated user or bank details are missing");
-  }
-
-  // 1. Create payout provider Contact if missing
-  let contactId = user.payoutContactId;
-  if (!contactId) {
-    try {
-      const contact = await createPayoutContact(user);
-      if (!contact?.id)
-        throw new Error("payout provider did not return a contact ID");
-      contactId = contact.id;
-      user.payoutContactId = contactId;
-      await user.save();
-    } catch (err) {
-      logger.error("payout provider contact setup failed for withdrawal", {
-        withdrawalId: String(withdrawal._id),
-        error: err.message,
-      });
-      await releaseClaim();
-      sendFailResponse(
-        `payout provider Contact Creation Failed: ${err.message}`,
-      );
-    }
-  }
-
-  // 2. Create payout provider Fund Account if missing
-  let fundAccountId = bankAccount.payoutFundAccountId;
-  if (!fundAccountId) {
-    try {
-      const accountNumber = decrypt(
-        bankAccount.accountNumber,
-        bankAccount.accountIv,
-      );
-      const ifscCode = decrypt(bankAccount.ifscCode, bankAccount.ifscIv);
-      const fundAccount = await createPayoutFundAccount(contactId, {
-        accountHolderName: bankAccount.accountHolderName,
-        accountNumber,
-        ifscCode,
-      });
-      if (!fundAccount?.id)
-        throw new Error("payout provider did not return a fund account ID");
-      fundAccountId = fundAccount.id;
-      bankAccount.payoutFundAccountId = fundAccountId;
-      await bankAccount.save();
-    } catch (err) {
-      logger.error("payout provider fund account setup failed for withdrawal", {
-        withdrawalId: String(withdrawal._id),
-        error: err.message,
-      });
-      await releaseClaim();
-      sendFailResponse(
-        `payout provider Fund Account Creation Failed: ${err.message}`,
-      );
-    }
-  }
-
-  // 3. Initiate payout provider Payout (amount in paise, so cashAmount * 100)
-  const amountInPaise = Math.round(withdrawal.cashAmount * 100);
-  const referenceId = withdrawal._id.toString(); // Idempotency key
-  const narration = `Payout of ${withdrawal.cashAmount}`
-    .replace(/[^a-zA-Z0-9 ]/g, "")
-    .slice(0, 30);
-
-  const requestStartedAt = new Date();
-  const attemptSession = await mongoose.startSession();
-  let payoutAttempt;
+  let data;
   try {
-    await attemptSession.withTransaction(async () => {
-      const updatedWithdrawal = await Withdrawal.findOneAndUpdate(
-        {
-          _id: withdrawal._id,
-          status: WITHDRAWAL_STATUS.PROCESSING,
-          providerPayoutId: null,
-        },
-        { $inc: { payoutAttemptCount: 1 } },
-        { new: true, session: attemptSession },
-      );
-      if (!updatedWithdrawal) {
-        throw new Error("Withdrawal is no longer eligible for payout");
-      }
-      payoutAttempt = new PayoutAttempt({
-        withdrawalId: withdrawal._id,
-        attemptNumber: updatedWithdrawal.payoutAttemptCount,
-        adminId,
-        idempotencyKey: payoutIdempotencyKey(referenceId),
-        referenceId,
-        fundAccountId,
-        amount: amountInPaise,
-        currency: "INR",
-        mode: "IMPS",
-        purpose: "payout",
-        narration,
-        queueIfLowBalance: true,
-        requestStartedAt,
-        outcome: "REQUESTED",
-      });
-      await payoutAttempt.save({ session: attemptSession });
-    });
-    logger.info("payout provider attempt recorded", {
-      withdrawalId: String(withdrawal._id),
-      payoutAttemptId: String(payoutAttempt._id),
-      attemptNumber: payoutAttempt.attemptNumber,
-      idempotencyKey: payoutAttempt.idempotencyKey,
-      amount: amountInPaise,
-      currency: "INR",
-      mode: "IMPS",
-    });
+    data = await enqueueApprovedWithdrawal(adminId, withdrawalId);
   } catch (error) {
-    await releaseClaim();
-    throw error;
-  } finally {
-    await attemptSession.endSession();
+    sendFailResponse(error.message || PAYOUT_MESSAGE.QUEUE_PAYOUT_FAILED);
   }
-
-  let payout;
-  try {
-    payout = await createProviderPayout(
-      fundAccountId,
-      amountInPaise,
-      referenceId,
-      narration,
-    );
-  } catch (err) {
-    const failedAt = new Date();
-    const definitive = Boolean(
-      err?.definitive ||
-      (err?.providerStatusCode >= 400 && err.providerStatusCode < 500),
-    );
-    await PayoutAttempt.updateOne(
-      { _id: payoutAttempt._id },
-      {
-        $set: {
-          outcome: definitive ? "DEFINITIVE_FAILURE" : "AMBIGUOUS_FAILURE",
-          httpStatus: err?.providerStatusCode || null,
-          providerErrorCode: err?.providerErrorCode || null,
-          providerErrorDescription: err.message,
-          responseReceivedAt: failedAt,
-          durationMs: failedAt.getTime() - requestStartedAt.getTime(),
-        },
-      },
-    );
-    logger.error("payout provider request failed", {
-      withdrawalId: String(withdrawal._id),
-      payoutAttemptId: String(payoutAttempt._id),
-      providerStatusCode: err?.providerStatusCode || null,
-      providerErrorCode: err?.providerErrorCode || null,
-      outcome: definitive ? "DEFINITIVE_FAILURE" : "AMBIGUOUS_FAILURE",
-    });
-
-    if (definitive) await releaseClaim();
-    sendFailResponse(
-      `payout provider Payout Initiation Failed: ${err.message}`,
-    );
-  }
-
-  const responseReceivedAt = new Date();
-  const safeResponse = safePayoutResponse(payout);
-  if (!payout?.id) {
-    await PayoutAttempt.updateOne(
-      { _id: payoutAttempt._id },
-      {
-        $set: {
-          outcome: "AMBIGUOUS_FAILURE",
-          providerResponse: safeResponse,
-          responseReceivedAt,
-          durationMs: responseReceivedAt.getTime() - requestStartedAt.getTime(),
-          providerErrorDescription:
-            "payout provider response did not contain a payout ID",
-        },
-      },
-    );
-    logger.error("payout provider returned a payout response without an ID", {
-      withdrawalId: String(withdrawal._id),
-      payoutAttemptId: String(payoutAttempt._id),
-      providerResponse: safeResponse,
-    });
-    sendFailResponse("payout provider response did not contain a payout ID");
-  }
-
-  const responseSession = await mongoose.startSession();
-  try {
-    await responseSession.withTransaction(async () => {
-      await Withdrawal.updateOne(
-        {
-          _id: withdrawal._id,
-          status: {
-            $nin: [
-              WITHDRAWAL_STATUS.COMPLETED,
-              WITHDRAWAL_STATUS.FAILED,
-              WITHDRAWAL_STATUS.REVERSED,
-              WITHDRAWAL_STATUS.CANCELLED,
-            ],
-          },
-        },
-        { $set: { providerPayoutId: payout.id } },
-        { session: responseSession },
-      );
-      const attemptUpdate = await PayoutAttempt.updateOne(
-        { _id: payoutAttempt._id },
-        {
-          $set: {
-            outcome: "SUCCEEDED",
-            httpStatus: payout._httpStatus || null,
-            payoutId: payout.id,
-            providerStatus: payout.status || null,
-            providerResponse: safeResponse,
-            responseReceivedAt,
-            durationMs:
-              responseReceivedAt.getTime() - requestStartedAt.getTime(),
-          },
-        },
-        { session: responseSession },
-      );
-      if (!attemptUpdate.matchedCount)
-        throw new Error("Payout attempt audit record was not found");
-    });
-  } finally {
-    await responseSession.endSession();
-  }
-  const latestWithdrawal = await Withdrawal.findById(withdrawal._id).select(
-    "status",
-  );
-  logger.info("payout provider request accepted", {
-    withdrawalId: String(withdrawal._id),
-    payoutAttemptId: String(payoutAttempt._id),
-    payoutId: payout.id,
-    providerStatus: payout.status || null,
-    amount: amountInPaise,
-    currency: "INR",
-  });
-
-  // Send FCM notification
-  if (user.fcmTokens?.length && user.enableNotification) {
+  const withdrawal = await Withdrawal.findById(withdrawalId)
+    .populate("userId")
+    .select("_id status cashAmount userId")
+    .lean();
+  const user = withdrawal?.userId;
+  if (user?.fcmTokens?.length && user.enableNotification) {
     const localizedNotif = getNotification(
       APP_NOTIFICATIONS.withdraw.approved,
       user.language,
@@ -753,20 +459,15 @@ async function approveWithdrawal(adminId, withdrawalId) {
       localizedNotif.title,
       localizedNotif.body,
     ).catch((err) =>
-      logger.error("FCM withdrawal approval notification failed", {
-        withdrawalId: String(withdrawal._id),
+      logger.error(PAYOUT_MESSAGE.FCM_APPROVAL_LOG, {
+        withdrawalId: String(withdrawalId),
         error: err.message,
       }),
     );
   }
-
   return {
-    message: "Withdrawal approved. Payout is being processed.",
-    data: {
-      id: withdrawal._id,
-      status: latestWithdrawal?.status || WITHDRAWAL_STATUS.PROCESSING,
-      providerPayoutId: payout.id,
-    },
+    message: PAYOUT_MESSAGE.WITHDRAWAL_APPROVED_QUEUED,
+    data: { ...data, status: withdrawal?.status || data.status },
   };
 }
 

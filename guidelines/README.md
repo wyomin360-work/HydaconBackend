@@ -4,3 +4,5 @@ Welcome! This folder contains guidelines and architectural rules for developers 
 
 - **[Project Rules & Guidelines (Architecture, Routes, Validation, Constants)](file:///Users/princeroy/Development/work/hydacon/HydaconBackend/guidelines/project-rules.md)**: Rules on file structures, controller logic, route validation, error handling, route access, and enums.
 - **[Mongoose Schema Rules (Database & Model Design)](file:///Users/princeroy/Development/work/hydacon/HydaconBackend/guidelines/schema-rules.md)**: Guidelines on nested sub-schema design patterns, disabling ID fields for subdocuments, and defining default properties.
+- **[Payout Provider Architecture](file:///Users/princeroy/Development/work/hydacon/HydaconBackend/guidelines/payout-provider-architecture.md)**: Provider adapter responsibilities, durable payout processing, webhook handling, ledger updates, and reconciliation.
+- **[Payout Provider Rollout](file:///Users/princeroy/Development/work/hydacon/HydaconBackend/guidelines/payout-contract-migration.md)**: Required backup, migration, configuration, and deployment sequence for the provider-neutral payout contract.

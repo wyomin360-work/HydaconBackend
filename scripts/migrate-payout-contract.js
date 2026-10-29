@@ -23,7 +23,14 @@ async function migratePayoutContract() {
     ["users", "razorpayContactId", "payoutContactId"],
     ["userbankaccounts", "razorpayFundAccountId", "payoutFundAccountId"],
     ["withdrawals", "razorpayPayoutId", "providerPayoutId"],
+    ["withdrawals", "providerPayoutId", "providerTransferId"],
     ["withdrawals", "lastRazorpayReconciledAt", "lastPayoutReconciledAt"],
+    ["payoutattempts", "payoutId", "providerTransferId"],
+    ["payoutattempts", "fundAccountId", "providerBeneficiaryId"],
+    ["payoutevents", "payoutId", "providerTransferId"],
+    ["payoutevents", "referenceId", "providerReferenceId"],
+    ["payoutrecons", "payoutId", "providerTransferId"],
+    ["ledgerentries", "payoutId", "providerTransferId"],
   ];
   for (const [collection, oldField, newField] of fieldRenames) {
     const conflict = await db
@@ -71,6 +78,94 @@ async function migratePayoutContract() {
         `Renamed ${oldField} to ${newField} on ${result.modifiedCount} ${collection} records`,
       );
     }
+  }
+
+  await db.collection("withdrawals").updateMany(
+    {
+      payoutProvider: { $in: [null] },
+      $or: [
+        { providerTransferId: { $exists: true, $ne: null } },
+        {
+          status: { $in: ["PROCESSING", "COMPLETED", "FAILED", "REVERSED"] },
+          approvedAt: { $ne: null },
+        },
+      ],
+    },
+    { $set: { payoutProvider: "razorpayx" } },
+  );
+  for (const collection of ["payoutattempts", "payoutevents", "payoutrecons"]) {
+    await db
+      .collection(collection)
+      .updateMany(
+        { provider: { $exists: false } },
+        { $set: { provider: "razorpayx" } },
+      );
+  }
+  await db.collection("userbankaccounts").updateMany(
+    {
+      payoutFundAccountId: { $exists: true, $ne: null },
+      providerBeneficiaries: { $exists: false },
+    },
+    [
+      {
+        $set: {
+          providerBeneficiaries: [
+            {
+              provider: "razorpayx",
+              beneficiaryId: "$payoutFundAccountId",
+              providerData: {},
+              accountFingerprint: null,
+            },
+          ],
+        },
+      },
+    ],
+  );
+  await db.collection("payoutrecons").updateMany(
+    {
+      providerReferenceId: { $exists: false },
+      referenceId: { $exists: true },
+    },
+    [{ $set: { providerReferenceId: "$referenceId" } }],
+  );
+  await db.collection("withdrawals").updateMany(
+    {
+      payoutProvider: { $exists: true, $ne: null },
+      providerReferenceId: { $exists: false },
+    },
+    [{ $set: { providerReferenceId: { $toString: "$_id" } } }],
+  );
+
+  const recoverable = await db
+    .collection("withdrawals")
+    .find({
+      status: "PROCESSING",
+      payoutProvider: { $in: ["razorpayx", "cashfree"] },
+      providerTransferId: null,
+      providerReferenceId: { $exists: true, $ne: null },
+    })
+    .project({ _id: 1, payoutProvider: 1, providerReferenceId: 1 })
+    .toArray();
+  if (recoverable.length) {
+    await db.collection("payoutoutboxes").bulkWrite(
+      recoverable.map((withdrawal) => ({
+        updateOne: {
+          filter: { withdrawalId: withdrawal._id },
+          update: {
+            $setOnInsert: {
+              withdrawalId: withdrawal._id,
+              provider: withdrawal.payoutProvider,
+              providerReferenceId: withdrawal.providerReferenceId,
+              status: "PENDING",
+              attempts: 0,
+              availableAt: new Date(),
+              leaseExpiresAt: null,
+            },
+          },
+          upsert: true,
+        },
+      })),
+    );
   }
 
   const ledger = db.collection("ledgerentries");

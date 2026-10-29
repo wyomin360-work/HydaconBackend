@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const { WITHDRAWAL_STATUS } = require("../constants/withdrawals");
+const { PAYOUT_PROVIDER_VALUES } = require("../constants/payouts");
 
 const withdrawalSchema = new mongoose.Schema(
   {
@@ -23,7 +24,14 @@ const withdrawalSchema = new mongoose.Schema(
       default: WITHDRAWAL_STATUS.PENDING,
       index: true,
     },
-    providerPayoutId: { type: String, default: null, index: true },
+    payoutProvider: {
+      type: String,
+      enum: PAYOUT_PROVIDER_VALUES,
+      default: null,
+      index: true,
+    },
+    providerReferenceId: { type: String, default: null, index: true },
+    providerTransferId: { type: String, default: null, index: true },
     payoutAttemptCount: { type: Number, default: 0, min: 0 },
     lastPayoutReconciledAt: { type: Date, default: null },
     utr: { type: String, default: null },
