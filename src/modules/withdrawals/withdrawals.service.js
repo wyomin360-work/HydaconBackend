@@ -14,6 +14,9 @@ const {
   PAYOUT_MESSAGE,
   PAYOUT_CONFIG,
   PAYOUT_BATCH_STATUS,
+  PAYOUT_APPROVAL_SOURCE,
+  PAYOUT_BENEFICIARY_STATUS,
+  PAYOUT_OUTBOX_STATUS,
 } = require("../../constants/payouts");
 const {
   POINTS_TRANSACTION_TYPE,
@@ -22,6 +25,7 @@ const {
 const Withdrawal = require("../../schemas/withdrawal.schema");
 const UserBankAccount = require("../../schemas/user-bank-account.schema");
 const User = require("../../schemas/user.schema");
+const { KYC_STATUS } = require("../../constants/user");
 const AppConfig = require("../../schemas/app-config.schema");
 const LedgerEntry = require("../../schemas/ledger-entry.schema");
 const PointsLedger = require("../../schemas/points-ledger.schema");
@@ -37,11 +41,13 @@ const { formatNotification } = require("../../utils/heplers");
 const {
   enqueueApprovedWithdrawal,
   wakePayoutOutboxWorker,
+  getVerifiedBankAccountBeneficiary,
 } = require("../payouts/payout-execution.service");
 const {
   enqueueApprovedWithdrawalBatch,
 } = require("../payouts/payout-batch.service");
 const logger = require("../../config/pino.config");
+const { currentProviderName, getProvider } = require("../../functions/payouts");
 
 // Withdrawal request validation, persistence, ledgering, and notifications.
 function validateWithdrawalAmount(cashAmount) {
@@ -76,6 +82,9 @@ async function getWithdrawalUserAndBankAccount(userId) {
   if (!user) {
     sendFailResponse("User not found");
   }
+  if (user.kycStatus !== KYC_STATUS.APPROVED) {
+    sendFailResponse(PAYOUT_MESSAGE.KYC_REQUIRED, PAYOUT_HTTP_STATUS.FORBIDDEN);
+  }
 
   // Validate active bank account configured
   const bankAccount = await UserBankAccount.findOne({
@@ -108,23 +117,61 @@ async function createWithdrawalRecord({
   pointsAmount,
   amount,
   bankAccount,
+  autoPayoutProvider,
   session,
 }) {
   let withdrawal;
   await session.withTransaction(async () => {
+    const currentUser = await User.findById(userId).session(session);
+    if (!currentUser || currentUser.kycStatus !== KYC_STATUS.APPROVED) {
+      sendFailResponse(
+        PAYOUT_MESSAGE.KYC_REQUIRED,
+        PAYOUT_HTTP_STATUS.FORBIDDEN,
+      );
+    }
+    const shouldAutoApprove =
+      Boolean(autoPayoutProvider) && Boolean(currentUser.enableAutoPayout);
+    const withdrawalId = new mongoose.Types.ObjectId();
+    const autoApprovedAt = shouldAutoApprove ? new Date() : null;
     const [newWithdrawal] = await Withdrawal.create(
       [
         {
+          _id: withdrawalId,
           userId,
           pointsAmount,
           cashAmount: amount,
           bankAccountId: bankAccount._id,
-          status: WITHDRAWAL_STATUS.PENDING,
+          status: shouldAutoApprove
+            ? WITHDRAWAL_STATUS.PROCESSING
+            : WITHDRAWAL_STATUS.PENDING,
+          ...(shouldAutoApprove
+            ? {
+                payoutProvider: autoPayoutProvider,
+                providerReferenceId: String(withdrawalId),
+                approvalSource: PAYOUT_APPROVAL_SOURCE.AUTO,
+                approvedAt: autoApprovedAt,
+              }
+            : {}),
         },
       ],
       { session },
     );
     withdrawal = newWithdrawal;
+
+    if (shouldAutoApprove) {
+      await PayoutOutbox.create(
+        [
+          {
+            withdrawalId,
+            provider: autoPayoutProvider,
+            providerReferenceId: String(withdrawalId),
+            status: PAYOUT_OUTBOX_STATUS.PENDING,
+            availableAt: autoApprovedAt,
+          },
+        ],
+        { session },
+      );
+    }
 
     const userBeforeDebit = await User.findOneAndUpdate(
       { _id: userId, totalPoints: { $gte: pointsAmount } },
@@ -221,24 +268,54 @@ async function createWithdrawal(userId, data) {
     sendFailResponse("Insufficient points balance");
   }
   validateWithdrawalLimits(amount, coinConfig);
+  const beneficiary = await getVerifiedBankAccountBeneficiary({
+    user,
+    bankAccount,
+  });
+  if (beneficiary.status !== PAYOUT_BENEFICIARY_STATUS.READY) {
+    sendFailResponse(
+      PAYOUT_MESSAGE.BENEFICIARY_NOT_READY,
+      PAYOUT_HTTP_STATUS.CONFLICT,
+    );
+  }
+
+  let autoPayoutProvider = null;
+  if (user.enableAutoPayout) {
+    autoPayoutProvider = currentProviderName();
+    const provider = getProvider(autoPayoutProvider);
+    provider.validateConfig?.();
+  }
 
   const session = await mongoose.startSession();
+  let withdrawal;
   try {
-    const withdrawal = await createWithdrawalRecord({
+    withdrawal = await createWithdrawalRecord({
       userId,
       pointsAmount,
       amount,
       bankAccount,
+      autoPayoutProvider,
       session,
     });
     logWithdrawalRequest({ withdrawal, userId, pointsAmount, amount });
     notifyWithdrawalCreated(user, withdrawal, amount);
-    return formatCreatedWithdrawal(withdrawal);
   } catch (error) {
     sendFailResponse(error.message || "Failed to create withdrawal request");
   } finally {
     await session.endSession();
   }
+
+  const automaticProcessing =
+    withdrawal.approvalSource === PAYOUT_APPROVAL_SOURCE.AUTO;
+  if (automaticProcessing) wakePayoutOutboxWorker();
+  const response = formatCreatedWithdrawal(withdrawal);
+  response.data.status = automaticProcessing
+    ? WITHDRAWAL_STATUS.PROCESSING
+    : withdrawal.status;
+  response.data.approvalSource = automaticProcessing
+    ? PAYOUT_APPROVAL_SOURCE.AUTO
+    : null;
+  return response;
 }
 
 // Withdrawal history and admin list query helpers.
@@ -463,11 +540,16 @@ async function loadAdminWithdrawalAudit(withdrawal) {
 
 function getLedgerAuditCoverage(withdrawal, financialLedger) {
   const ledgerKeys = new Set(financialLedger.map((entry) => entry.entryKey));
-  const requiredLedgerKeys = [`withdrawal:${withdrawal._id}:coin-debit`];
+  const balanceLedgerType = Number.isFinite(withdrawal.pointsAmount)
+    ? "points"
+    : "coin";
+  const requiredLedgerKeys = [
+    `withdrawal:${withdrawal._id}:${balanceLedgerType}-debit`,
+  ];
 
   if (PAYOUT_FAILURE_TERMINAL_STATUSES.includes(withdrawal.status)) {
     requiredLedgerKeys.push(
-      `withdrawal:${withdrawal._id}:coin-refund:${withdrawal.status.toLowerCase()}`,
+      `withdrawal:${withdrawal._id}:${balanceLedgerType}-refund:${withdrawal.status.toLowerCase()}`,
     );
   }
   if (withdrawal.status === WITHDRAWAL_STATUS.COMPLETED) {

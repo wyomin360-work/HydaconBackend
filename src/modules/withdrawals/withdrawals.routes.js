@@ -4,6 +4,7 @@ const verification = require("../../middlewares/jwtVerification");
 const { handleError } = require("../../utils/heplers");
 const controller = require("./withdrawals.controller");
 const validateRequest = require("../../middlewares/validator");
+const { requireVerifiedKyc } = require("../../middlewares/kycVerification");
 const {
   createWithdrawalRequestType,
   cancelWithdrawalRequestType,
@@ -18,6 +19,7 @@ const router = express.Router();
 router.post(
   paths.createWithdrawal,
   verification.verifyUser,
+  requireVerifiedKyc,
   validateRequest(createWithdrawalRequestType),
   handleError(controller.createWithdrawal),
 );

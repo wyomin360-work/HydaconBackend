@@ -229,6 +229,7 @@ describe("kyc.service unit tests", () => {
 
       expect(mockUser.kycDocuments.pan.status).toBe("APPROVED");
       expect(mockUser.kycStatus).toBe("APPROVED");
+      expect(mockUser.enableAutoPayout).toBe(true);
     });
 
     it("should set status to REJECTED if any document is rejected", async () => {
@@ -257,6 +258,7 @@ describe("kyc.service unit tests", () => {
 
       expect(mockUser.kycDocuments.pan.status).toBe("REJECTED");
       expect(mockUser.kycStatus).toBe("REJECTED");
+      expect(mockUser.enableAutoPayout).toBe(false);
     });
 
     it("should set status to NOT_STARTED when single document is approved but others are missing (Bug 4 Fix)", async () => {

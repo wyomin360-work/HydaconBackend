@@ -1,7 +1,10 @@
 const api = require("./api");
 const webhook = require("./webhook");
 const mapping = require("./mapping");
-const { PAYOUT_PROVIDER } = require("../../../../constants/payouts");
+const {
+  PAYOUT_PROVIDER,
+  PAYOUT_BENEFICIARY_STATUS,
+} = require("../../../../constants/payouts");
 
 async function createBeneficiary({ user, bankDetails, existing = {} }) {
   let contactId =
@@ -18,7 +21,11 @@ async function createBeneficiary({ user, bankDetails, existing = {} }) {
       throw new Error("RazorpayX did not return a fund account ID");
     fundAccountId = fundAccount.id;
   }
-  return { beneficiaryId: fundAccountId, providerData: { contactId } };
+  return {
+    beneficiaryId: fundAccountId,
+    providerData: { contactId },
+    status: PAYOUT_BENEFICIARY_STATUS.READY,
+  };
 }
 
 async function initiateTransfer(input) {

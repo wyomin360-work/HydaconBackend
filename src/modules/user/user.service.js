@@ -38,7 +38,17 @@ const {
   verifyGoogleToken,
   verifyAppleIdentityToken,
 } = require("../../functions/auth");
-const { AuthTypes } = require("../../constants/user");
+const { AuthTypes, KYC_STATUS } = require("../../constants/user");
+const {
+  PAYOUT_BENEFICIARY_STATUS,
+  PAYOUT_MESSAGE,
+  PAYOUT_HTTP_STATUS,
+} = require("../../constants/payouts");
+const {
+  registerBankAccountBeneficiary,
+} = require("../payouts/payout-execution.service");
+const { currentProviderName } = require("../../functions/payouts");
+const logger = require("../../config/pino.config");
 const { encrypt, decrypt } = require("../../utils/encryption");
 const { validateIFSC } = require("../../functions/razorPay");
 const { sendFcmNotifications } = require("../../functions/fcm");
@@ -1108,7 +1118,41 @@ async function getUserBankDetails(userId) {
     bankName: bankAccount.bankName,
     branchName: bankAccount.branchName,
     payoutFundAccountId: bankAccount.payoutFundAccountId,
+    beneficiaryStatus: getActiveBeneficiaryStatus(bankAccount),
   };
+}
+
+// Returns the saved readiness state for the currently configured provider.
+function getActiveBeneficiaryStatus(bankAccount) {
+  let provider;
+  try {
+    provider = currentProviderName();
+  } catch {
+    return PAYOUT_BENEFICIARY_STATUS.UNKNOWN;
+  }
+  const beneficiary = (bankAccount.providerBeneficiaries || []).find(
+    (entry) => entry.provider === provider,
+  );
+  return beneficiary?.status || PAYOUT_BENEFICIARY_STATUS.UNKNOWN;
+}
+
+// Attempts provider setup without discarding the locally saved bank details.
+async function provisionBankAccountBeneficiary(userId, bankAccountId) {
+  try {
+    const beneficiary = await registerBankAccountBeneficiary({
+      userId,
+      bankAccountId,
+    });
+    return beneficiary.status || PAYOUT_BENEFICIARY_STATUS.UNKNOWN;
+  } catch (error) {
+    logger.error(PAYOUT_MESSAGE.BANK_BENEFICIARY_SETUP_FAILED, {
+      userId: String(userId),
+      bankAccountId: String(bankAccountId),
+      providerStatusCode: error.providerStatusCode || null,
+      providerErrorCode: error.providerErrorCode || null,
+    });
+    return PAYOUT_BENEFICIARY_STATUS.UNKNOWN;
+  }
 }
 
 // ----------------------
@@ -1138,7 +1182,7 @@ async function addUserBankDetails(data, userId) {
   if (!encryptedAccountNumber || !encryptedIfscCode)
     sendFailResponse("Unable to process bank details , try again");
 
-  await UserBankAccount.create({
+  const bankAccount = await UserBankAccount.create({
     userId,
     accountHolderName: userName || user.name || "Unknown",
     accountNumber: encryptedAccountNumber.encryptedData,
@@ -1149,10 +1193,14 @@ async function addUserBankDetails(data, userId) {
     bankName: bankInfo?.BANK || "Unknown Bank",
     isActive: true,
   });
+  const beneficiaryStatus = await provisionBankAccountBeneficiary(
+    userId,
+    bankAccount._id,
+  );
 
   return {
     message: "Bank details been added successfully",
-    data: { addedBankDetails: true },
+    data: { addedBankDetails: true, beneficiaryStatus },
   };
 }
 
@@ -1184,7 +1232,7 @@ async function updateBankDetails(data, userId) {
   );
 
   // Create new active account
-  await UserBankAccount.create({
+  const bankAccount = await UserBankAccount.create({
     userId,
     accountHolderName: userName || "Unknown",
     accountNumber: encryptedAccountNumber.encryptedData,
@@ -1195,10 +1243,14 @@ async function updateBankDetails(data, userId) {
     bankName: bankInfo?.BANK || "Unknown Bank",
     isActive: true,
   });
+  const beneficiaryStatus = await provisionBankAccountBeneficiary(
+    userId,
+    bankAccount._id,
+  );
 
   return {
     message: "Bank details been updated successfully",
-    data: { updatedBankDetails: true },
+    data: { updatedBankDetails: true, beneficiaryStatus },
   };
 }
 
@@ -1419,6 +1471,24 @@ async function getAdminUserDetails(userId) {
 
   if (!user) sendFailResponse("User not found");
 
+  const activeBankAccount = await UserBankAccount.findOne({
+    userId,
+    isActive: true,
+  }).lean();
+  if (activeBankAccount) {
+    user.bankDetails = {
+      accountNumber: decrypt(
+        activeBankAccount.accountNumber,
+        activeBankAccount.accountIv,
+      ),
+      ifscCode: decrypt(activeBankAccount.ifscCode, activeBankAccount.ifscIv),
+      userName: activeBankAccount.accountHolderName,
+      bankName: activeBankAccount.bankName,
+      branchName: activeBankAccount.branchName,
+      beneficiaryStatus: getActiveBeneficiaryStatus(activeBankAccount),
+    };
+  }
+
   if (
     user.bankDetails &&
     user.bankDetails.accountNumber &&
@@ -1476,6 +1546,48 @@ async function getAdminUserDetails(userId) {
       ...attachId(user),
       purchasedProducts,
     },
+  };
+}
+
+// Applies and audits an admin's automatic payout setting change.
+async function updateAutoPayout(userId, enableAutoPayout, adminId) {
+  const session = await mongoose.startSession();
+  let user;
+  try {
+    await session.withTransaction(async () => {
+      user = await User.findById(userId).session(session);
+      if (!user) sendFailResponse(PAYOUT_MESSAGE.USER_NOT_FOUND);
+      if (enableAutoPayout && user.kycStatus !== KYC_STATUS.APPROVED) {
+        sendFailResponse(
+          PAYOUT_MESSAGE.AUTO_PAYOUT_KYC_REQUIRED,
+          PAYOUT_HTTP_STATUS.FORBIDDEN,
+        );
+      }
+      const previousValue = Boolean(user.enableAutoPayout);
+      user.enableAutoPayout = enableAutoPayout;
+      await user.save({ session });
+      await logAudit(
+        AUDIT_LOG_ACTIONS.USER_AUTO_PAYOUT_UPDATED,
+        {
+          changedBy: adminId,
+          changes: [
+            {
+              field: "enableAutoPayout",
+              oldValue: previousValue,
+              newValue: user.enableAutoPayout,
+            },
+          ],
+          metadata: { userId: String(user._id) },
+        },
+        { session },
+      );
+    });
+  } finally {
+    await session.endSession();
+  }
+  return {
+    message: PAYOUT_MESSAGE.AUTO_PAYOUT_KYC_UPDATED_LOG,
+    data: { autoPayoutUpdated: true, enableAutoPayout: user.enableAutoPayout },
   };
 }
 
@@ -1741,6 +1853,7 @@ module.exports = {
   simpleLoginWithOtp,
   getUserDetails,
   getAdminUserDetails,
+  updateAutoPayout,
   updateUserProfile,
   addFcmToken,
   addUserBankDetails,

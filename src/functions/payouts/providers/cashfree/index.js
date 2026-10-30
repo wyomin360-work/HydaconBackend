@@ -7,7 +7,33 @@ const {
   PAYOUT_CONFIG,
   PAYOUT_MESSAGE,
   PAYOUT_TRANSFER_MODE,
+  PAYOUT_BENEFICIARY_STATUS,
+  CASHFREE_BENEFICIARY_STATUS,
 } = require("../../../../constants/payouts");
+
+// Converts Cashfree's beneficiary state to the canonical payout readiness state.
+function normalizeBeneficiaryStatus(providerStatus) {
+  const status = String(providerStatus || "").toUpperCase();
+  if (status === CASHFREE_BENEFICIARY_STATUS.VERIFIED) {
+    return PAYOUT_BENEFICIARY_STATUS.READY;
+  }
+  if (status === CASHFREE_BENEFICIARY_STATUS.INITIATED) {
+    return PAYOUT_BENEFICIARY_STATUS.PENDING;
+  }
+  if (
+    [
+      CASHFREE_BENEFICIARY_STATUS.INVALID,
+      CASHFREE_BENEFICIARY_STATUS.DELETED,
+      CASHFREE_BENEFICIARY_STATUS.CANCELLED,
+    ].includes(status)
+  ) {
+    return PAYOUT_BENEFICIARY_STATUS.REJECTED;
+  }
+  if (status === CASHFREE_BENEFICIARY_STATUS.FAILED) {
+    return PAYOUT_BENEFICIARY_STATUS.FAILED;
+  }
+  return PAYOUT_BENEFICIARY_STATUS.UNKNOWN;
+}
 
 function beneficiaryIdFor(bankAccountId, bankDetails) {
   const fingerprint = crypto
@@ -73,7 +99,12 @@ async function createBeneficiary({
   const id =
     existing.beneficiaryId || beneficiaryIdFor(bankAccount._id, bankDetails);
   const current = await api.getBeneficiary(id);
-  if (current?.beneficiary_id) return { beneficiaryId: current.beneficiary_id };
+  if (current?.beneficiary_id) {
+    return {
+      beneficiaryId: current.beneficiary_id,
+      status: normalizeBeneficiaryStatus(current.beneficiary_status),
+    };
+  }
   const payload = makeBeneficiaryPayload(user, bankDetails, id);
   const result = await api.createBeneficiary(payload, id);
   if (!result?.beneficiary_id) {
@@ -81,7 +112,19 @@ async function createBeneficiary({
     error.definitive = true;
     throw error;
   }
-  return { beneficiaryId: result.beneficiary_id };
+  const currentStatus = result.beneficiary_status
+    ? result
+    : await api.getBeneficiary(result.beneficiary_id);
+  return {
+    beneficiaryId: result.beneficiary_id,
+    status: normalizeBeneficiaryStatus(currentStatus?.beneficiary_status),
+  };
+}
+
+async function getBeneficiaryStatus({ beneficiaryId }) {
+  const beneficiary = await api.getBeneficiary(beneficiaryId);
+  if (!beneficiary) return PAYOUT_BENEFICIARY_STATUS.UNKNOWN;
+  return normalizeBeneficiaryStatus(beneficiary.beneficiary_status);
 }
 
 async function initiateTransfer(input) {
@@ -115,6 +158,7 @@ function createIdempotencyKey(referenceId) {
 module.exports = {
   id: PAYOUT_PROVIDER.CASHFREE,
   createBeneficiary,
+  getBeneficiaryStatus,
   initiateTransfer,
   getTransferStatus,
   initiateBatchTransfer,

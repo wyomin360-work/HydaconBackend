@@ -11,6 +11,8 @@ const {
   PAYOUT_RESULT,
   PAYOUT_TERMINAL_WITHDRAWAL_STATUSES,
   PAYOUT_FAILURE_TERMINAL_STATUSES,
+  PAYOUT_EMAIL_TEMPLATE,
+  PAYOUT_EMAIL_SUBJECT,
 } = require("../../constants/payouts");
 const {
   POINTS_TRANSACTION_TYPE,
@@ -23,6 +25,13 @@ const LedgerEntry = require("../../schemas/ledger-entry.schema");
 const PointsLedger = require("../../schemas/points-ledger.schema");
 const logger = require("../../config/pino.config");
 const { safeText } = require("./payout-utils");
+const {
+  APP_NOTIFICATIONS,
+  getNotification,
+} = require("../../constants/notifications");
+const { sendFcmNotifications } = require("../../functions/fcm");
+const { sendTemplateEmail } = require("../../functions/nodemailer");
+const { formatNotification } = require("../../utils/heplers");
 
 function canApplyPayoutStatus(currentStatus, targetStatus) {
   switch (targetStatus) {
@@ -254,7 +263,133 @@ async function applyTransferUpdate({
   } finally {
     await session.endSession();
   }
+  if (result?.processed) {
+    notifyUserOfPayoutOutcome({ withdrawal, targetStatus, normalized }).catch(
+      (error) => {
+        logger.error(PAYOUT_MESSAGE.PAYOUT_NOTIFICATION_LOG, {
+          withdrawalId: String(withdrawal._id),
+          error: safeText(error.message),
+        });
+      },
+    );
+  }
   return { status: PAYOUT_RESULT.SUCCESS, ...result };
+}
+
+/** Sends notifications after a terminal payout state and ledger commit. */
+async function notifyUserOfPayoutOutcome({
+  withdrawal,
+  targetStatus,
+  normalized,
+}) {
+  const notificationKey = getPayoutNotificationKey(targetStatus);
+  if (!notificationKey) return;
+
+  const user = await User.findById(withdrawal.userId)
+    .select("name email fcmTokens enableNotification language")
+    .lean();
+  if (!user) return;
+
+  const notification = getNotification(
+    APP_NOTIFICATIONS.withdraw[notificationKey],
+    user.language,
+  );
+  const notificationBody = formatNotification(notification.body, {
+    amount: withdrawal.cashAmount,
+    failureReason: safeText(
+      normalized.failureReason || PAYOUT_MESSAGE.WITHDRAWAL_FAILED_DEFAULT,
+    ),
+  });
+
+  sendPayoutFcm({
+    user,
+    withdrawal,
+    notification,
+    notificationBody,
+  });
+  sendPayoutEmail({ user, withdrawal, targetStatus, normalized });
+}
+
+function getPayoutNotificationKey(status) {
+  switch (status) {
+    case WITHDRAWAL_STATUS.COMPLETED:
+      return "success";
+    case WITHDRAWAL_STATUS.FAILED:
+      return "failed";
+    case WITHDRAWAL_STATUS.REVERSED:
+      return "reversed";
+    default:
+      return null;
+  }
+}
+
+function sendPayoutFcm({ user, withdrawal, notification, notificationBody }) {
+  if (!user.enableNotification || !user.fcmTokens?.length) return;
+
+  sendFcmNotifications(user.fcmTokens, notification.title, notificationBody)
+    .then((result) => {
+      if (result?.errors?.length) {
+        logger.error(PAYOUT_MESSAGE.FCM_NOTIFICATION_LOG, {
+          withdrawalId: String(withdrawal._id),
+          failedTokenCount: result.errors.length,
+        });
+      }
+    })
+    .catch((error) => {
+      logger.error(PAYOUT_MESSAGE.FCM_NOTIFICATION_LOG, {
+        withdrawalId: String(withdrawal._id),
+        error: safeText(error.message),
+      });
+    });
+}
+
+function sendPayoutEmail({ user, withdrawal, targetStatus, normalized }) {
+  if (!user.email || !isEmailNotificationStatus(targetStatus)) return;
+
+  const email = getPayoutEmail(targetStatus, {
+    userName: user.name || "there",
+    amount: Number(withdrawal.cashAmount).toFixed(2),
+    withdrawalId: String(withdrawal._id),
+    utr: normalized.utr || "Not available",
+    failureReason: safeText(
+      normalized.failureReason || PAYOUT_MESSAGE.WITHDRAWAL_FAILED_DEFAULT,
+    ),
+  });
+
+  sendTemplateEmail(user.email, email.template, email.subject, email.data)
+    .then((sent) => {
+      if (!sent) {
+        logger.error(PAYOUT_MESSAGE.EMAIL_NOTIFICATION_LOG, {
+          withdrawalId: String(withdrawal._id),
+        });
+      }
+    })
+    .catch((error) => {
+      logger.error(PAYOUT_MESSAGE.EMAIL_NOTIFICATION_LOG, {
+        withdrawalId: String(withdrawal._id),
+        error: safeText(error.message),
+      });
+    });
+}
+
+function isEmailNotificationStatus(status) {
+  return (
+    status === WITHDRAWAL_STATUS.COMPLETED ||
+    status === WITHDRAWAL_STATUS.FAILED
+  );
+}
+
+function getPayoutEmail(status, data) {
+  const isSuccess = status === WITHDRAWAL_STATUS.COMPLETED;
+  return {
+    template: isSuccess
+      ? PAYOUT_EMAIL_TEMPLATE.WITHDRAWAL_SUCCESS
+      : PAYOUT_EMAIL_TEMPLATE.WITHDRAWAL_FAILED,
+    subject: isSuccess
+      ? PAYOUT_EMAIL_SUBJECT.WITHDRAWAL_SUCCESS
+      : PAYOUT_EMAIL_SUBJECT.WITHDRAWAL_FAILED,
+    data,
+  };
 }
 
 async function writeLedgerEntry(entry, session) {
@@ -500,4 +635,4 @@ async function applyPayoutLedgerEffects({
   }
 }
 
-module.exports = { applyTransferUpdate };
+module.exports = { applyTransferUpdate, notifyUserOfPayoutOutcome };

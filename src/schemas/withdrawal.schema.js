@@ -1,6 +1,9 @@
 const mongoose = require("mongoose");
 const { WITHDRAWAL_STATUS } = require("../constants/withdrawals");
-const { PAYOUT_PROVIDER_VALUES } = require("../constants/payouts");
+const {
+  PAYOUT_PROVIDER_VALUES,
+  PAYOUT_APPROVAL_SOURCE_VALUES,
+} = require("../constants/payouts");
 
 const withdrawalSchema = new mongoose.Schema(
   {
@@ -49,6 +52,11 @@ const withdrawalSchema = new mongoose.Schema(
       default: null,
     },
     approvedAt: { type: Date, default: null },
+    approvalSource: {
+      type: String,
+      enum: PAYOUT_APPROVAL_SOURCE_VALUES,
+      default: null,
+    },
     completedAt: { type: Date, default: null },
     failureReason: { type: String, default: null },
     remarks: { type: String, default: null },

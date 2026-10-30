@@ -1,8 +1,11 @@
 const crypto = require("crypto");
 const mongoose = require("mongoose");
 const { WITHDRAWAL_STATUS } = require("../../constants/withdrawals");
+const { KYC_STATUS } = require("../../constants/user");
 const {
   PAYOUT_PROVIDER,
+  PAYOUT_APPROVAL_SOURCE,
+  PAYOUT_BENEFICIARY_STATUS,
   PAYOUT_PROVIDER_ENVIRONMENT,
   CASHFREE_PAYOUT_STATUS,
   PAYOUT_OUTBOX_STATUS: OUTBOX,
@@ -134,6 +137,15 @@ function validateBatchWithdrawals(withdrawals, withdrawalIds, providerName) {
         ),
       );
     }
+    if (user.kycStatus !== KYC_STATUS.APPROVED) {
+      batchValidationError(
+        PAYOUT_MESSAGE.PAYOUT_BATCH_WITHDRAWAL_INELIGIBLE(
+          id,
+          PAYOUT_MESSAGE.KYC_REQUIRED,
+        ),
+        PAYOUT_HTTP_STATUS.CONFLICT,
+      );
+    }
     if (String(bankAccount.userId) !== String(user._id)) {
       batchValidationError(
         PAYOUT_MESSAGE.PAYOUT_BATCH_WITHDRAWAL_INELIGIBLE(
@@ -151,7 +163,7 @@ async function getValidatedWithdrawals(withdrawalIds, session) {
     .select(
       "_id status payoutProvider providerTransferId providerReferenceId cashAmount userId bankAccountId",
     )
-    .populate("userId", "_id")
+    .populate("userId", "_id kycStatus")
     .populate("bankAccountId", "_id userId isActive")
     .session(session)
     .lean();
@@ -219,6 +231,7 @@ async function enqueueApprovedWithdrawalBatch(adminId, withdrawalIds) {
             payoutBatchId: batch._id,
             approvedBy: adminId,
             approvedAt: now,
+            approvalSource: PAYOUT_APPROVAL_SOURCE.ADMIN,
           },
         },
         { session },
@@ -358,6 +371,9 @@ async function prepareBatchTransfers(provider, items) {
         withdrawal.userId,
         withdrawal.bankAccountId,
       );
+      if (beneficiary.status !== PAYOUT_BENEFICIARY_STATUS.READY) {
+        throw new Error(PAYOUT_MESSAGE.BENEFICIARY_NOT_READY);
+      }
       return {
         withdrawal,
         outbox,

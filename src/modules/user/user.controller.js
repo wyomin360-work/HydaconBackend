@@ -102,6 +102,18 @@ exports.getAdminUserDetails = async (req, res, next) => {
   return sendResponse(res, response);
 };
 
+exports.updateAutoPayout = async (req, res) => {
+  const adminId = req?.userId;
+  const targetUserId = req?.params?.id;
+  const { enableAutoPayout } = req?.body || {};
+  const response = await userService.updateAutoPayout(
+    targetUserId,
+    enableAutoPayout,
+    adminId,
+  );
+  return sendResponse(res, response);
+};
+
 exports.updateProfile = async (req, res, next) => {
   let userId = req?.userId;
   let data = req?.body;

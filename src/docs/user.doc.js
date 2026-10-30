@@ -540,6 +540,43 @@ module.exports = {
   },
 
   // -----------------------------------------------------------------------
+  // Admin Automatic Payout Setting
+  "/user/admin-auto-payout/{id}": {
+    patch: {
+      summary: "Enable or disable automatic payouts for a user",
+      tags: ["User"],
+      security: [{ bearerAuth: [] }],
+      parameters: [
+        {
+          in: "path",
+          name: "id",
+          required: true,
+          schema: { type: "string" },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["enableAutoPayout"],
+              additionalProperties: false,
+              properties: { enableAutoPayout: { type: "boolean" } },
+            },
+          },
+        },
+      },
+      responses: {
+        200: { description: "Automatic payout setting updated" },
+        400: { description: "Invalid request body or user ID" },
+        401: { description: "Authentication is required" },
+        403: { description: "KYC approval is required to enable auto payout" },
+        404: { description: "User not found" },
+      },
+    },
+  },
+
   // Bank Details
   "/user/bank-details": {
     get: {
@@ -558,6 +595,10 @@ module.exports = {
                   ifscCode: { type: "string", example: "SBIN0001234" },
                   bankName: { type: "string", example: "State Bank of India" },
                   branchName: { type: "string", example: "PBB KANKARBAGH" },
+                  beneficiaryStatus: {
+                    type: "string",
+                    enum: ["READY", "PENDING", "FAILED", "REJECTED", "UNKNOWN"],
+                  },
                 },
               },
             },
@@ -606,6 +647,7 @@ module.exports = {
                     type: "object",
                     properties: {
                       addedBankDetails: { type: "boolean", example: true },
+                      beneficiaryStatus: { type: "string", example: "PENDING" },
                     },
                   },
                 },
@@ -656,6 +698,7 @@ module.exports = {
                     type: "object",
                     properties: {
                       updatedBankDetails: { type: "boolean", example: true },
+                      beneficiaryStatus: { type: "string", example: "READY" },
                     },
                   },
                 },

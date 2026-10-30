@@ -42,6 +42,14 @@ const CASHFREE_PAYOUT_TRANSFER_EVENTS = Object.freeze([
   CASHFREE_PAYOUT_EVENT.TRANSFER_ACKNOWLEDGED,
   CASHFREE_PAYOUT_EVENT.TRANSFER_SUCCESS,
 ]);
+const CASHFREE_BENEFICIARY_STATUS = Object.freeze({
+  VERIFIED: "VERIFIED",
+  INITIATED: "INITIATED",
+  INVALID: "INVALID",
+  DELETED: "DELETED",
+  CANCELLED: "CANCELLED",
+  FAILED: "FAILED",
+});
 
 const RAZORPAYX_PAYOUT_EVENT = Object.freeze({
   PROCESSED: "payout.processed",
@@ -66,6 +74,23 @@ const PAYOUT_PROVIDER_VALUES = Object.freeze([
   PAYOUT_PROVIDER.RAZORPAYX,
   PAYOUT_PROVIDER.CASHFREE,
 ]);
+const PAYOUT_BENEFICIARY_STATUS = Object.freeze({
+  READY: "READY",
+  PENDING: "PENDING",
+  FAILED: "FAILED",
+  REJECTED: "REJECTED",
+  UNKNOWN: "UNKNOWN",
+});
+const PAYOUT_BENEFICIARY_STATUS_VALUES = Object.freeze(
+  Object.values(PAYOUT_BENEFICIARY_STATUS),
+);
+const PAYOUT_APPROVAL_SOURCE = Object.freeze({
+  ADMIN: "ADMIN",
+  AUTO: "AUTO",
+});
+const PAYOUT_APPROVAL_SOURCE_VALUES = Object.freeze(
+  Object.values(PAYOUT_APPROVAL_SOURCE),
+);
 const PAYOUT_EVENT_PROVIDER_VALUES = Object.freeze([
   ...PAYOUT_PROVIDER_VALUES,
   PAYOUT_PROVIDER.UNKNOWN,
@@ -150,6 +175,14 @@ const PAYOUT_DELIVERY_SOURCE_VALUES = Object.freeze([
 ]);
 
 const PAYOUT_CURRENCY = Object.freeze({ INR: "INR" });
+const PAYOUT_EMAIL_TEMPLATE = Object.freeze({
+  WITHDRAWAL_SUCCESS: "users/withdrawalSuccess",
+  WITHDRAWAL_FAILED: "users/withdrawalFailed",
+});
+const PAYOUT_EMAIL_SUBJECT = Object.freeze({
+  WITHDRAWAL_SUCCESS: "Withdrawal completed successfully",
+  WITHDRAWAL_FAILED: "Withdrawal could not be completed",
+});
 const PAYOUT_TRANSFER_MODE = Object.freeze({ IMPS: "IMPS" });
 const PAYOUT_ASSET = Object.freeze({
   INR: "INR",
@@ -170,6 +203,7 @@ const PAYOUT_HTTP_STATUS = Object.freeze({
   NOT_FOUND: 404,
   CONFLICT: 409,
   UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
   CLIENT_ERROR_MIN: 400,
   SERVER_ERROR_MIN: 500,
   SERVICE_UNAVAILABLE: 503,
@@ -260,6 +294,15 @@ const PAYOUT_MESSAGE = Object.freeze({
     `Cannot approve a withdrawal with ${status} status`,
   PROVIDER_BENEFICIARY_MISSING: (provider) =>
     `${provider} did not return a beneficiary ID`,
+  BENEFICIARY_NOT_READY:
+    "Your bank account is still being verified for payouts. Please try again once verification is complete.",
+  KYC_REQUIRED: "KYC approval is required to request a withdrawal.",
+  AUTO_PAYOUT_KYC_REQUIRED:
+    "Auto payout can only be enabled for a user with approved KYC.",
+  AUTO_PAYOUT_DISABLED:
+    "Automatic payouts were disabled before this withdrawal could be queued.",
+  USER_NOT_FOUND: "User not found",
+  BANK_BENEFICIARY_SETUP_FAILED: "Bank account beneficiary provisioning failed",
   PROVIDER_CREDENTIALS_MISSING: (provider) =>
     `${provider} payout credentials are not configured`,
   PROVIDER_ACCOUNT_MISSING: "RazorpayX payout account number is not configured",
@@ -351,6 +394,11 @@ const PAYOUT_MESSAGE = Object.freeze({
   WEBHOOK_PROCESSING_LOG: "Payout webhook processing failed",
   FCM_APPROVAL_LOG: "FCM withdrawal approval notification failed",
   FCM_NOTIFICATION_LOG: "FCM payout notification failed",
+  EMAIL_NOTIFICATION_LOG: "Payout email notification failed",
+  PAYOUT_NOTIFICATION_LOG: "Payout outcome notification failed",
+  WITHDRAWAL_FAILED_DEFAULT:
+    "The provider could not complete the transfer. Contact support if you need help.",
+  AUTO_PAYOUT_KYC_UPDATED_LOG: "Automatic payout setting updated",
   NARRATION_PREFIX: "Payout of",
 });
 
@@ -361,9 +409,14 @@ module.exports = {
   CASHFREE_PAYOUT_STATUS_CODE,
   CASHFREE_PAYOUT_EVENT,
   CASHFREE_PAYOUT_TRANSFER_EVENTS,
+  CASHFREE_BENEFICIARY_STATUS,
   RAZORPAYX_PAYOUT_EVENT,
   RAZORPAYX_PAYOUT_STATUS,
   PAYOUT_PROVIDER_VALUES,
+  PAYOUT_BENEFICIARY_STATUS,
+  PAYOUT_BENEFICIARY_STATUS_VALUES,
+  PAYOUT_APPROVAL_SOURCE,
+  PAYOUT_APPROVAL_SOURCE_VALUES,
   PAYOUT_EVENT_PROVIDER_VALUES,
   PAYOUT_OUTBOX_STATUS,
   PAYOUT_OPERATION,
@@ -378,6 +431,8 @@ module.exports = {
   PAYOUT_SOURCE,
   PAYOUT_DELIVERY_SOURCE_VALUES,
   PAYOUT_CURRENCY,
+  PAYOUT_EMAIL_TEMPLATE,
+  PAYOUT_EMAIL_SUBJECT,
   PAYOUT_TRANSFER_MODE,
   PAYOUT_ASSET,
   PAYOUT_ASSET_VALUES,

@@ -1,5 +1,4 @@
 const crypto = require("crypto");
-const { WITHDRAWAL_STATUS } = require("../../constants/withdrawals");
 const {
   PAYOUT_PROVIDER,
   CASHFREE_PAYOUT_EVENT,
@@ -10,15 +9,8 @@ const {
   PAYOUT_RESULT,
   PAYOUT_HTTP_STATUS,
 } = require("../../constants/payouts");
-const {
-  APP_NOTIFICATIONS,
-  getNotification,
-} = require("../../constants/notifications");
 const Withdrawal = require("../../schemas/withdrawal.schema");
 const PayoutEvent = require("../../schemas/payout-event.schema");
-const User = require("../../schemas/user.schema");
-const { sendFcmNotifications } = require("../../functions/fcm");
-const { formatNotification } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const { getProvider, currentProviderName } = require("../../functions/payouts");
 const { applyTransferUpdate } = require("../payouts/payout-state.service");
@@ -230,9 +222,6 @@ async function processClaimedEvent({
     eventDoc: claimed,
     source: getLedgerSource(source),
   });
-  if (result.processed) {
-    await notifyPayoutStatus(withdrawal, normalized);
-  }
   return result;
 }
 
@@ -284,36 +273,6 @@ async function ignoreEvent(eventDoc, reason) {
     },
   );
   return { status: PAYOUT_RESULT.IGNORED, reason };
-}
-
-async function notifyPayoutStatus(withdrawal, normalized) {
-  const terminalStatuses = [
-    WITHDRAWAL_STATUS.COMPLETED,
-    WITHDRAWAL_STATUS.FAILED,
-    WITHDRAWAL_STATUS.REVERSED,
-  ];
-  if (!terminalStatuses.includes(normalized.targetStatus)) return;
-
-  const user = await User.findById(withdrawal.userId).lean();
-  if (!user?.fcmTokens?.length || !user.enableNotification) return;
-
-  const completed = normalized.targetStatus === WITHDRAWAL_STATUS.COMPLETED;
-  const notificationKey = completed ? "success" : "failed";
-  const localized = getNotification(
-    APP_NOTIFICATIONS.withdraw[notificationKey],
-    user.language,
-  );
-  const message = completed
-    ? formatNotification(localized.body, { amount: withdrawal.cashAmount })
-    : localized.body;
-
-  sendFcmNotifications(user.fcmTokens, localized.title, message).catch(
-    (error) =>
-      logger.error(PAYOUT_MESSAGE.FCM_NOTIFICATION_LOG, {
-        withdrawalId: String(withdrawal._id),
-        error: safeText(error.message),
-      }),
-  );
 }
 
 async function markEventFailed(eventDoc, error) {

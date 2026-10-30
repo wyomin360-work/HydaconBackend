@@ -1,6 +1,39 @@
 const { CASHFREE_PAYOUT_EVENT } = require("../constants/payouts");
 
 module.exports = {
+  "/withdrawals/create": {
+    post: {
+      summary: "Create a withdrawal request",
+      description:
+        "Requires approved KYC, an active payout beneficiary with READY provider status, and all balance and configured withdrawal-limit validations. Users with enableAutoPayout set are queued immediately in the same database transaction; others remain pending admin approval.",
+      tags: ["Withdrawals"],
+      security: [{ bearerAuth: [] }],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["cashAmount"],
+              properties: { cashAmount: { type: "number", minimum: 1 } },
+              additionalProperties: false,
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description:
+            "Withdrawal created and queued or awaiting admin approval",
+        },
+        403: { description: "KYC approval is required" },
+        409: {
+          description:
+            "Payout beneficiary verification is pending or unsuccessful",
+        },
+      },
+    },
+  },
   "/webhooks/payout": {
     post: {
       summary: "Receive payout events for the selected PAYOUT_PROVIDER",

@@ -1,8 +1,11 @@
 const crypto = require("crypto");
 const mongoose = require("mongoose");
 const { WITHDRAWAL_STATUS } = require("../../constants/withdrawals");
+const { KYC_STATUS } = require("../../constants/user");
 const {
   PAYOUT_PROVIDER,
+  PAYOUT_BENEFICIARY_STATUS,
+  PAYOUT_APPROVAL_SOURCE,
   PAYOUT_OUTBOX_STATUS: OUTBOX,
   PAYOUT_ATTEMPT_OUTCOME: ATTEMPT,
   PAYOUT_CURRENCY,
@@ -25,7 +28,11 @@ const { applyTransferUpdate } = require("./payout-state.service");
 const { safeText } = require("./payout-utils");
 const logger = require("../../config/pino.config");
 
-async function enqueueApprovedWithdrawal(adminId, withdrawalId) {
+async function enqueueApprovedWithdrawal(
+  adminId,
+  withdrawalId,
+  approvalSource = PAYOUT_APPROVAL_SOURCE.ADMIN,
+) {
   const session = await mongoose.startSession();
   let withdrawal;
   try {
@@ -35,6 +42,16 @@ async function enqueueApprovedWithdrawal(adminId, withdrawalId) {
         status: WITHDRAWAL_STATUS.PENDING,
       }).session(session);
       if (!withdrawal) return;
+      const user = await User.findById(withdrawal.userId).session(session);
+      if (!user || user.kycStatus !== KYC_STATUS.APPROVED) {
+        throw new Error(PAYOUT_MESSAGE.KYC_REQUIRED);
+      }
+      if (
+        approvalSource === PAYOUT_APPROVAL_SOURCE.AUTO &&
+        !user.enableAutoPayout
+      ) {
+        throw new Error(PAYOUT_MESSAGE.AUTO_PAYOUT_DISABLED);
+      }
       const provider = withdrawal.payoutProvider || currentProviderName();
       getProvider(provider).validateConfig?.();
       const referenceId =
@@ -45,6 +62,7 @@ async function enqueueApprovedWithdrawal(adminId, withdrawalId) {
       withdrawal.providerReferenceId = referenceId;
       withdrawal.approvedBy = adminId;
       withdrawal.approvedAt = new Date();
+      withdrawal.approvalSource = approvalSource;
       await withdrawal.save({ session });
       await PayoutOutbox.findOneAndUpdate(
         { withdrawalId: withdrawal._id },
@@ -92,6 +110,22 @@ async function ensureBeneficiary(provider, withdrawal, user, bankAccount) {
     fingerprint,
     user,
   );
+  if (existing.beneficiaryId && provider.getBeneficiaryStatus) {
+    const status = await provider.getBeneficiaryStatus({
+      beneficiaryId: existing.beneficiaryId,
+    });
+    if (status !== PAYOUT_BENEFICIARY_STATUS.UNKNOWN) {
+      const beneficiary = { ...existing, status };
+      await saveBeneficiary({
+        bankAccount,
+        user,
+        providerName,
+        fingerprint,
+        beneficiary,
+      });
+      return beneficiary;
+    }
+  }
   const beneficiary = await provider.createBeneficiary({
     user,
     bankAccount,
@@ -157,22 +191,58 @@ async function saveBeneficiary({
   fingerprint,
   beneficiary,
 }) {
-  await UserBankAccount.updateOne(
-    { _id: bankAccount._id },
+  const beneficiaryStatus =
+    beneficiary.status || PAYOUT_BENEFICIARY_STATUS.UNKNOWN;
+  const beneficiaryUpdate = {
+    "providerBeneficiaries.$[beneficiary].beneficiaryId":
+      beneficiary.beneficiaryId,
+    "providerBeneficiaries.$[beneficiary].providerData":
+      beneficiary.providerData || {},
+    "providerBeneficiaries.$[beneficiary].status": beneficiaryStatus,
+    "providerBeneficiaries.$[beneficiary].statusCheckedAt": new Date(),
+    ...(providerName === PAYOUT_PROVIDER.RAZORPAYX
+      ? { payoutFundAccountId: beneficiary.beneficiaryId }
+      : {}),
+  };
+  const existingResult = await UserBankAccount.updateOne(
     {
-      $addToSet: {
-        providerBeneficiaries: {
-          provider: providerName,
-          beneficiaryId: beneficiary.beneficiaryId,
-          providerData: beneficiary.providerData || {},
-          accountFingerprint: fingerprint,
-        },
+      _id: bankAccount._id,
+      providerBeneficiaries: {
+        $elemMatch: { provider: providerName, accountFingerprint: fingerprint },
       },
-      ...(providerName === PAYOUT_PROVIDER.RAZORPAYX
-        ? { $set: { payoutFundAccountId: beneficiary.beneficiaryId } }
-        : {}),
+    },
+    {
+      $set: beneficiaryUpdate,
+    },
+    {
+      arrayFilters: [
+        {
+          "beneficiary.provider": providerName,
+          "beneficiary.accountFingerprint": fingerprint,
+        },
+      ],
     },
   );
+  if (!existingResult.matchedCount) {
+    await UserBankAccount.updateOne(
+      { _id: bankAccount._id },
+      {
+        $push: {
+          providerBeneficiaries: {
+            provider: providerName,
+            beneficiaryId: beneficiary.beneficiaryId,
+            providerData: beneficiary.providerData || {},
+            accountFingerprint: fingerprint,
+            status: beneficiaryStatus,
+            statusCheckedAt: new Date(),
+          },
+        },
+        ...(providerName === PAYOUT_PROVIDER.RAZORPAYX
+          ? { $set: { payoutFundAccountId: beneficiary.beneficiaryId } }
+          : {}),
+      },
+    );
+  }
   if (
     providerName === PAYOUT_PROVIDER.RAZORPAYX &&
     beneficiary.providerData?.contactId &&
@@ -183,6 +253,42 @@ async function saveBeneficiary({
       { $set: { payoutContactId: beneficiary.providerData.contactId } },
     );
   }
+}
+
+// Creates or resolves the active provider beneficiary when bank details are saved.
+async function registerBankAccountBeneficiary({ userId, bankAccountId }) {
+  const [user, bankAccount] = await Promise.all([
+    User.findById(userId).lean(),
+    UserBankAccount.findOne({ _id: bankAccountId, userId }).lean(),
+  ]);
+  if (!user || !bankAccount) {
+    throw new Error(PAYOUT_MESSAGE.USER_OR_BANK_MISSING);
+  }
+  const providerName = currentProviderName();
+  const provider = getProvider(providerName);
+  provider.validateConfig?.();
+  return ensureBeneficiary(
+    provider,
+    { payoutProvider: providerName },
+    user,
+    bankAccount,
+  );
+}
+
+// Refreshes the current provider state and requires a payout-ready beneficiary.
+async function getVerifiedBankAccountBeneficiary({ user, bankAccount }) {
+  const providerName = currentProviderName();
+  const provider = getProvider(providerName);
+  const beneficiary = await ensureBeneficiary(
+    provider,
+    { payoutProvider: providerName },
+    user,
+    bankAccount,
+  );
+  if (beneficiary.status !== PAYOUT_BENEFICIARY_STATUS.READY) {
+    throw new Error(PAYOUT_MESSAGE.BENEFICIARY_NOT_READY);
+  }
+  return beneficiary;
 }
 
 function amountInMinorUnits(withdrawal) {
@@ -494,6 +600,11 @@ async function submitOrReconcile(outbox) {
     error.payoutOperation = PAYOUT_OPERATION.BENEFICIARY_SETUP;
     throw error;
   }
+  if (beneficiary.status !== PAYOUT_BENEFICIARY_STATUS.READY) {
+    const error = new Error(PAYOUT_MESSAGE.BENEFICIARY_NOT_READY);
+    error.payoutOperation = PAYOUT_OPERATION.BENEFICIARY_SETUP;
+    throw error;
+  }
   const requestStartedAt = new Date();
   let attempt;
   try {
@@ -785,6 +896,8 @@ module.exports = {
   processPayoutOutboxBatch,
   wakePayoutOutboxWorker,
   ensureBeneficiary,
+  registerBankAccountBeneficiary,
+  getVerifiedBankAccountBeneficiary,
   amountInMinorUnits,
   payoutNarration,
   hasTransferMismatch,

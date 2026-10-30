@@ -50,6 +50,7 @@ const userSchema = new mongoose.Schema(
     authKey: { type: String, required: false },
     agreedToTerms: { type: Boolean, default: true },
     enableNotification: { type: Boolean, default: true },
+    enableAutoPayout: { type: Boolean, default: false },
     avatarId: { type: String, required: false },
     dob: { type: Date, required: false, default: null },
     profilePhoto: { type: String, required: false, default: null },

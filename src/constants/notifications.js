@@ -88,7 +88,7 @@ const APP_NOTIFICATIONS = {
     },
     success: {
       en_US: {
-        title: "💰 Grate News",
+        title: "💰 Great News",
         body: "₹{{amount}} has successfully landed in your account!",
       },
       ml: {
@@ -99,11 +99,11 @@ const APP_NOTIFICATIONS = {
     failed: {
       en_US: {
         title: "Uh-oh! 😞",
-        body: "Something went wrong with your withdrawal. check your transaction details for reason",
+        body: "Your withdrawal of ₹{{amount}} could not be completed. Reason: {{failureReason}}",
       },
       ml: {
         title: "അയ്യോ! 😞",
-        body: "പണം പിൻവലിക്കുന്നതിൽ തടസ്സം നേരിട്ടു. കാരണം അറിയാൻ ഇടപാട് വിവരങ്ങൾ പരിശോധിക്കുക",
+        body: "₹{{amount}} പിൻവലിക്കാൻ കഴിഞ്ഞില്ല. കാരണം: {{failureReason}}",
       },
     },
     cancelled: {
@@ -119,11 +119,11 @@ const APP_NOTIFICATIONS = {
     reversed: {
       en_US: {
         title: "Reversed ↩️",
-        body: "Your withdrawal of ₹{{amount}} was reversed by the bank. Coins have been credited back.",
+        body: "Your withdrawal of ₹{{amount}} was reversed by the bank. Your account balance has been credited back.",
       },
       ml: {
         title: "തിരിച്ചുനൽകി ↩️",
-        body: "നിങ്ങൾ പിൻവലിച്ച ₹{{amount}} ബാങ്ക് തിരിച്ചയച്ചു. കോയിനുകൾ തിരികെ നൽകിയിട്ടുണ്ട്.",
+        body: "നിങ്ങൾ പിൻവലിച്ച ₹{{amount}} ബാങ്ക് തിരിച്ചയച്ചു. തുക നിങ്ങളുടെ അക്കൗണ്ടിലേക്ക് തിരികെ ചേർത്തിട്ടുണ്ട്.",
       },
     },
     approved: {

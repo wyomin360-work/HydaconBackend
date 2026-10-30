@@ -9,6 +9,7 @@ const {
   userOtpLoginRequestType,
   userRegisterRequestType,
   userBankDetailsRequestType,
+  updateAutoPayoutRequestType,
   userProfileUpdateRequestType,
   userFcmRequestType,
   verifyOldNumberRequestType,
@@ -84,6 +85,13 @@ router.get(
   userPaths.adminDetails,
   verification.verifyAdmin,
   handleError(controller.getAdminUserDetails),
+);
+
+router.patch(
+  userPaths.adminAutoPayout,
+  verification.verifyAdmin,
+  validateRequest(updateAutoPayoutRequestType),
+  handleError(controller.updateAutoPayout),
 );
 
 router.patch(

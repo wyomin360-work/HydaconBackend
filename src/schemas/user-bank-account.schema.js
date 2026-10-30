@@ -1,5 +1,9 @@
 const mongoose = require("mongoose");
-const { PAYOUT_PROVIDER_VALUES } = require("../constants/payouts");
+const {
+  PAYOUT_PROVIDER_VALUES,
+  PAYOUT_BENEFICIARY_STATUS,
+  PAYOUT_BENEFICIARY_STATUS_VALUES,
+} = require("../constants/payouts");
 
 const providerBeneficiaryDataSchema = new mongoose.Schema(
   { contactId: { type: String, default: null } },
@@ -14,6 +18,12 @@ const providerBeneficiarySchema = new mongoose.Schema(
       required: true,
     },
     beneficiaryId: { type: String, required: true },
+    status: {
+      type: String,
+      enum: PAYOUT_BENEFICIARY_STATUS_VALUES,
+      default: PAYOUT_BENEFICIARY_STATUS.UNKNOWN,
+    },
+    statusCheckedAt: { type: Date, default: null },
     providerData: {
       type: providerBeneficiaryDataSchema,
       default: () => ({}),
