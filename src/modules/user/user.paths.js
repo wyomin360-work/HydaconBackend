@@ -2,6 +2,7 @@ module.exports = {
   root: "/user",
   details: "/details",
   adminDetails: "/admin-details/:id",
+  adminAutoPayout: "/admin-auto-payout/:id",
   list: "/list",
   roles: "/roles",
   onboardingRoles: "/onboarding/roles",

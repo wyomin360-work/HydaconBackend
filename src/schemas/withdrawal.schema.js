@@ -1,5 +1,26 @@
 const mongoose = require("mongoose");
-const { WITHDRAWAL_STATUS } = require("../constants/withdrawals");
+const {
+  WITHDRAWAL_STATUS,
+  WITHDRAWAL_POINT_ROUNDING_MODE,
+} = require("../constants/withdrawals");
+const {
+  PAYOUT_RECORD_PROVIDER_VALUES,
+  PAYOUT_METHOD,
+  PAYOUT_METHOD_VALUES,
+  PAYOUT_APPROVAL_SOURCE_VALUES,
+} = require("../constants/payouts");
+
+const pointConversionSnapshotSchema = new mongoose.Schema(
+  {
+    rateInrPerPoint: { type: Number, min: 0, required: true },
+    roundingMode: {
+      type: String,
+      enum: Object.values(WITHDRAWAL_POINT_ROUNDING_MODE),
+      required: true,
+    },
+  },
+  { _id: false },
+);
 
 const withdrawalSchema = new mongoose.Schema(
   {
@@ -9,8 +30,15 @@ const withdrawalSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    coinAmount: { type: Number, required: true },
+    // New withdrawals debit reward points. coinAmount remains for legacy
+    // withdrawals created before the balance asset was corrected.
+    pointsAmount: { type: Number, min: 0, default: null },
+    coinAmount: { type: Number, min: 0, default: null },
     cashAmount: { type: Number, required: true },
+    pointConversionSnapshot: {
+      type: pointConversionSnapshotSchema,
+      default: null,
+    },
     bankAccountId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "UserBankAccount",
@@ -23,7 +51,38 @@ const withdrawalSchema = new mongoose.Schema(
       default: WITHDRAWAL_STATUS.PENDING,
       index: true,
     },
-    providerPayoutId: { type: String, default: null, index: true },
+    payoutProvider: {
+      type: String,
+      enum: PAYOUT_RECORD_PROVIDER_VALUES,
+      default: null,
+      index: true,
+    },
+    payoutMethod: {
+      type: String,
+      enum: PAYOUT_METHOD_VALUES,
+      default: PAYOUT_METHOD.PROVIDER,
+    },
+    isManualPayout: { type: Boolean, default: false, index: true },
+    createdByAdminId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+      default: null,
+    },
+    manualCompletedByAdminId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+      default: null,
+    },
+    manualCompletedAt: { type: Date, default: null },
+    manualPaymentReference: { type: String, default: null },
+    manualCompletionNotes: { type: String, default: null },
+    payoutBatchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "PayoutBatch",
+      default: null,
+    },
+    providerReferenceId: { type: String, default: null, index: true },
+    providerTransferId: { type: String, default: null, index: true },
     payoutAttemptCount: { type: Number, default: 0, min: 0 },
     lastPayoutReconciledAt: { type: Date, default: null },
     utr: { type: String, default: null },
@@ -33,6 +92,17 @@ const withdrawalSchema = new mongoose.Schema(
       default: null,
     },
     approvedAt: { type: Date, default: null },
+    cancelledBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+      default: null,
+    },
+    cancelledAt: { type: Date, default: null },
+    approvalSource: {
+      type: String,
+      enum: PAYOUT_APPROVAL_SOURCE_VALUES,
+      default: null,
+    },
     completedAt: { type: Date, default: null },
     failureReason: { type: String, default: null },
     remarks: { type: String, default: null },
@@ -62,6 +132,13 @@ withdrawalSchema.virtual("approver", {
   localField: "approvedBy",
   foreignField: "_id",
   justOne: true,
+});
+
+withdrawalSchema.index({
+  payoutBatchId: 1,
+  status: 1,
+  payoutProvider: 1,
+  approvedAt: 1,
 });
 
 const Withdrawal = mongoose.model("Withdrawal", withdrawalSchema);

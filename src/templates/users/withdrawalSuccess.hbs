@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Withdrawal completed</title>
+    <style>
+      body { margin: 0; padding: 24px; background: #f6f7fb; color: #263238; font-family: Arial, sans-serif; }
+      .container { max-width: 600px; margin: 0 auto; padding: 32px; background: #fff; border-radius: 12px; }
+      h1 { color: #218838; font-size: 24px; }
+      p { line-height: 1.6; }
+      .details { margin: 24px 0; padding: 16px; background: #f2faf4; border-radius: 8px; }
+      .footer { margin-top: 32px; color: #687780; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <h1>Withdrawal completed successfully</h1>
+      <p>Hello {{userName}},</p>
+      <p>Your withdrawal has been marked successful by the payout provider.</p>
+      <section class="details">
+        <p><strong>Amount:</strong> ₹{{amount}}</p>
+        <p><strong>Withdrawal ID:</strong> {{withdrawalId}}</p>
+        <p><strong>Bank reference (UTR):</strong> {{utr}}</p>
+      </section>
+      <p>If the funds are not visible in your bank account yet, please allow your bank time to update the balance.</p>
+      <p class="footer">Thank you for choosing Hydacon.<br />Hydacon Support Team</p>
+    </main>
+  </body>
+</html>

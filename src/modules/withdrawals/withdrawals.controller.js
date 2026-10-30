@@ -42,7 +42,18 @@ exports.getWithdrawalsSummary = async (req, res, next) => {
 exports.approveWithdrawal = async (req, res, next) => {
   const { id } = req.params;
   const adminId = req.userId; // verifyAdmin injects userId (representing admin ID)
-  const result = await service.approveWithdrawal(adminId, id);
+  const result = await service.approveWithdrawal(
+    adminId,
+    id,
+    req.body?.payoutMethod,
+  );
+  return sendResponse(res, result);
+};
+
+exports.approveWithdrawalBatch = async (req, res) => {
+  const adminId = req.userId;
+  const { withdrawalIds } = req.body;
+  const result = await service.approveWithdrawalBatch(adminId, withdrawalIds);
   return sendResponse(res, result);
 };
 

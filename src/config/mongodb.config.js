@@ -1,8 +1,6 @@
 const mongoose = require("mongoose");
-const dotenv = require("dotenv");
+require("./env.config");
 const logger = require("./pino.config");
-
-dotenv.config();
 
 class Database {
   constructor() {

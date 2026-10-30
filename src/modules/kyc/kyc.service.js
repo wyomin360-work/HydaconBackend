@@ -118,10 +118,9 @@ async function uploadDocument(userId, documentType, fileUrl) {
   } else if (allUploaded) {
     user.kycStatus = KYC_STATUS.PENDING;
   } else {
-    if (!user.kycStatus || user.kycStatus === KYC_STATUS.NOT_STARTED) {
-      user.kycStatus = KYC_STATUS.NOT_STARTED;
-    }
+    user.kycStatus = KYC_STATUS.NOT_STARTED;
   }
+  user.enableAutoPayout = false;
 
   await user.save();
 
@@ -323,6 +322,7 @@ async function reviewKycDocument(
     user.kycStatus = normalizedStatus;
   }
 
+  user.enableAutoPayout = user.kycStatus === KYC_STATUS.APPROVED;
   await user.save();
 
   // Trigger FCM notification

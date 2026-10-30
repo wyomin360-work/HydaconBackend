@@ -4,10 +4,13 @@ const verification = require("../../middlewares/jwtVerification");
 const { handleError } = require("../../utils/heplers");
 const controller = require("./withdrawals.controller");
 const validateRequest = require("../../middlewares/validator");
+const { requireVerifiedKyc } = require("../../middlewares/kycVerification");
 const {
   createWithdrawalRequestType,
   cancelWithdrawalRequestType,
   listWithdrawalsRequestType,
+  approveWithdrawalBatchRequestType,
+  approveWithdrawalRequestType,
 } = require("../../validations/withdrawals.validations");
 
 const router = express.Router();
@@ -17,6 +20,7 @@ const router = express.Router();
 router.post(
   paths.createWithdrawal,
   verification.verifyUser,
+  requireVerifiedKyc,
   validateRequest(createWithdrawalRequestType),
   handleError(controller.createWithdrawal),
 );
@@ -56,7 +60,15 @@ router.get(
 router.post(
   paths.adminApprove,
   verification.verifyAdmin,
+  validateRequest(approveWithdrawalRequestType),
   handleError(controller.approveWithdrawal),
+);
+
+router.post(
+  paths.adminApproveBatch,
+  verification.verifyAdmin,
+  validateRequest(approveWithdrawalBatchRequestType),
+  handleError(controller.approveWithdrawalBatch),
 );
 
 router.post(

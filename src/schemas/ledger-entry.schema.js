@@ -1,4 +1,9 @@
 const mongoose = require("mongoose");
+const {
+  PAYOUT_LEDGER_MOVEMENT_VALUES,
+  PAYOUT_ASSET_VALUES,
+  PAYOUT_LEDGER_SOURCE_VALUES,
+} = require("../constants/payouts");
 
 const ledgerEntrySchema = new mongoose.Schema(
   {
@@ -17,20 +22,17 @@ const ledgerEntrySchema = new mongoose.Schema(
       index: true,
       immutable: true,
     },
+    providerTransferId: { type: String, default: null, immutable: true },
     payoutId: { type: String, default: null, immutable: true },
     movement: {
       type: String,
-      enum: [
-        "WITHDRAWAL_COIN_DEBIT",
-        "WITHDRAWAL_COIN_REFUND",
-        "PAYOUT_COMPLETED",
-      ],
+      enum: PAYOUT_LEDGER_MOVEMENT_VALUES,
       required: true,
       immutable: true,
     },
     asset: {
       type: String,
-      enum: ["HYDACON_COIN", "INR"],
+      enum: PAYOUT_ASSET_VALUES,
       required: true,
       immutable: true,
     },
@@ -39,12 +41,7 @@ const ledgerEntrySchema = new mongoose.Schema(
     balanceAfter: { type: Number, required: true, immutable: true },
     source: {
       type: String,
-      enum: [
-        "USER_REQUEST",
-        "ADMIN_CANCELLATION",
-        "PAYOUT_WEBHOOK",
-        "PAYOUT_RECONCILIATION",
-      ],
+      enum: PAYOUT_LEDGER_SOURCE_VALUES,
       required: true,
       immutable: true,
     },
