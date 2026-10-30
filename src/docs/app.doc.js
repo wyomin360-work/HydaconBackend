@@ -63,6 +63,16 @@ module.exports = {
                           referralBonus: { type: "number", example: 50 },
                         },
                       },
+                      payoutSettings: {
+                        type: "object",
+                        properties: {
+                          defaultPayoutMethod: {
+                            type: "string",
+                            enum: ["MANUAL", "PROVIDER"],
+                            example: "PROVIDER",
+                          },
+                        },
+                      },
                       lastUpdatedBy: {
                         type: "string",
                         example: "64f7c4d0f1f3c9a431c5d172",
@@ -114,6 +124,15 @@ module.exports = {
                     minWithdrawAmount: { type: "number", example: 100 },
                     maxWithdrawAmount: { type: "number", example: 2000 },
                     referralBonus: { type: "number", example: 75 },
+                  },
+                },
+                payoutSettings: {
+                  type: "object",
+                  properties: {
+                    defaultPayoutMethod: {
+                      type: "string",
+                      enum: ["MANUAL", "PROVIDER"],
+                    },
                   },
                 },
               },

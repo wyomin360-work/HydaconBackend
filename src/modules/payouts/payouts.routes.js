@@ -5,6 +5,9 @@ const verification = require("../../middlewares/jwtVerification");
 const validateRequest = require("../../middlewares/validator");
 const {
   listPayoutsRequestType,
+  completeManualPayoutRequestType,
+  cancelManualPayoutRequestType,
+  convertManualPayoutRequestType,
 } = require("../../validations/payouts.validations");
 const { handleError } = require("../../utils/heplers");
 
@@ -21,6 +24,27 @@ router.get(
   paths.adminSummary,
   verification.verifyAdmin,
   handleError(controller.getPayoutSummary),
+);
+
+router.post(
+  paths.adminCompleteManual,
+  verification.verifyAdmin,
+  validateRequest(completeManualPayoutRequestType),
+  handleError(controller.completeManualPayout),
+);
+
+router.post(
+  paths.adminCancelManual,
+  verification.verifyAdmin,
+  validateRequest(cancelManualPayoutRequestType),
+  handleError(controller.cancelManualPayout),
+);
+
+router.post(
+  paths.adminConvertToProvider,
+  verification.verifyAdmin,
+  validateRequest(convertManualPayoutRequestType),
+  handleError(controller.convertManualPayoutToProvider),
 );
 
 router.get(

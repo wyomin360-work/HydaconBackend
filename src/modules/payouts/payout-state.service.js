@@ -2,6 +2,8 @@ const mongoose = require("mongoose");
 const { WITHDRAWAL_STATUS } = require("../../constants/withdrawals");
 const {
   PAYOUT_EVENT_STATUS,
+  PAYOUT_METHOD,
+  PAYOUT_PROVIDER,
   PAYOUT_ASSET,
   PAYOUT_CURRENCY,
   PAYOUT_LEDGER_MOVEMENT,
@@ -15,12 +17,16 @@ const {
   PAYOUT_FAILURE_TERMINAL_STATUSES,
   PAYOUT_EMAIL_TEMPLATE,
   PAYOUT_EMAIL_SUBJECT,
+  PAYOUT_HTTP_STATUS,
+  PAYOUT_LEDGER_SOURCE,
 } = require("../../constants/payouts");
 const {
   POINTS_TRANSACTION_TYPE,
   POINTS_TRANSACTION_REASON,
 } = require("../../constants/points");
 const Withdrawal = require("../../schemas/withdrawal.schema");
+const Payout = require("../../schemas/payout.schema");
+const PayoutAttempt = require("../../schemas/payout-attempt.schema");
 const { syncPayoutRecord } = require("./payout-record.service");
 const PayoutEvent = require("../../schemas/payout-event.schema");
 const User = require("../../schemas/user.schema");
@@ -36,6 +42,7 @@ const {
 const { sendFcmNotifications } = require("../../functions/fcm");
 const { sendTemplateEmail } = require("../../functions/nodemailer");
 const { formatNotification } = require("../../utils/heplers");
+const { sendFailResponse } = require("../../utils/responseHandlers");
 
 function canApplyPayoutStatus(currentStatus, targetStatus) {
   switch (targetStatus) {
@@ -664,4 +671,131 @@ async function applyPayoutLedgerEffects({
   }
 }
 
-module.exports = { applyTransferUpdate, notifyUserOfPayoutOutcome };
+/** Loads a manual payout only while it is pending and has no provider activity. */
+async function loadPendingManualPayout(withdrawalId, session) {
+  const payout = await Payout.findOne({
+    withdrawalId,
+    isManualPayout: true,
+    payoutMethod: PAYOUT_METHOD.MANUAL,
+    status: WITHDRAWAL_STATUS.PENDING,
+  })
+    .lean()
+    .session(session);
+  const withdrawal = await Withdrawal.findOne({
+    _id: withdrawalId,
+    status: WITHDRAWAL_STATUS.PROCESSING,
+    isManualPayout: true,
+  })
+    .lean()
+    .session(session);
+  const attemptCount = await PayoutAttempt.countDocuments({ withdrawalId }).session(
+    session,
+  );
+  if (!payout || !withdrawal || attemptCount > 0 || withdrawal.providerTransferId) {
+    sendFailResponse(
+      PAYOUT_MESSAGE.MANUAL_PAYOUT_ONLY,
+      PAYOUT_HTTP_STATUS.CONFLICT,
+    );
+  }
+  return { payout, withdrawal };
+}
+
+/** Completes a manual payment once, records its reference, and posts the payout ledger. */
+async function completeManualPayout(adminId, withdrawalId, data) {
+  const paymentReference = safeText(
+    data.paymentReference,
+    PAYOUT_CONFIG.MANUAL_PAYMENT_REFERENCE_MAX_LENGTH,
+  );
+  const utr = data.utr
+    ? safeText(data.utr, PAYOUT_CONFIG.MANUAL_UTR_MAX_LENGTH)
+    : null;
+  const notes = data.notes
+    ? safeText(data.notes, PAYOUT_CONFIG.MANUAL_COMPLETION_NOTES_MAX_LENGTH)
+    : null;
+  if (
+    !paymentReference ||
+    paymentReference.length < PAYOUT_CONFIG.MANUAL_PAYMENT_REFERENCE_MIN_LENGTH
+  ) {
+    sendFailResponse(PAYOUT_MESSAGE.MANUAL_PAYOUT_REFERENCE_REQUIRED);
+  }
+
+  const session = await mongoose.startSession();
+  let withdrawal;
+  let completedAt;
+  try {
+    await session.withTransaction(async () => {
+      const pending = await loadPendingManualPayout(withdrawalId, session);
+      withdrawal = pending.withdrawal;
+      completedAt = new Date();
+      const update = {
+        status: WITHDRAWAL_STATUS.COMPLETED,
+        completedAt,
+        utr,
+        manualPaymentReference: paymentReference,
+        manualCompletionNotes: notes,
+        manualCompletedByAdminId: adminId,
+        manualCompletedAt: completedAt,
+      };
+      const changed = await Withdrawal.updateOne(
+        {
+          _id: withdrawalId,
+          status: WITHDRAWAL_STATUS.PROCESSING,
+          isManualPayout: true,
+        },
+        { $set: update },
+        { session },
+      );
+      if (!changed.modifiedCount) {
+        sendFailResponse(
+          PAYOUT_MESSAGE.MANUAL_PAYOUT_ONLY,
+          PAYOUT_HTTP_STATUS.CONFLICT,
+        );
+      }
+      await syncPayoutRecord(withdrawalId, update, session);
+      await applyPayoutLedgerEffects({
+        current: withdrawal,
+        provider: PAYOUT_PROVIDER.MANUAL,
+        normalized: {
+          targetStatus: WITHDRAWAL_STATUS.COMPLETED,
+          utr,
+          providerTransferId: null,
+          eventType: PAYOUT_RESULT.MANUAL_COMPLETION,
+        },
+        targetStatus: WITHDRAWAL_STATUS.COMPLETED,
+        wasCompleted: false,
+        source: PAYOUT_LEDGER_SOURCE.MANUAL_PAYOUT,
+        eventSourceId: String(adminId),
+        session,
+      });
+    });
+  } finally {
+    await session.endSession();
+  }
+  notifyUserOfPayoutOutcome({
+    withdrawal,
+    targetStatus: WITHDRAWAL_STATUS.COMPLETED,
+    normalized: { utr, providerTransferId: null },
+  }).catch((error) => {
+    logger.error("Manual payout completion notification failed", {
+      withdrawalId: String(withdrawalId),
+      error: safeText(error.message),
+    });
+  });
+  return {
+    message: PAYOUT_MESSAGE.MANUAL_PAYOUT_COMPLETED,
+    manualPayoutCompleted: true,
+    data: {
+      id: String(withdrawalId),
+      status: WITHDRAWAL_STATUS.COMPLETED,
+      completedAt,
+    },
+  };
+}
+
+module.exports = {
+  applyTransferUpdate,
+  applyPayoutLedgerEffects,
+  notifyUserOfPayoutOutcome,
+  loadPendingManualPayout,
+  completeManualPayout,
+};

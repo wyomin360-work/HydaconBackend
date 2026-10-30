@@ -105,7 +105,11 @@ async function getPayoutSummary() {
 
 /** Resolves a payout record to its withdrawal and existing payout audit trail. */
 async function getPayoutDetails(payoutId) {
-  const payout = await Payout.findById(payoutId).lean();
+  const payout = await Payout.findById(payoutId)
+    .populate("createdByAdminId", "name email")
+    .populate("manualCompletedByAdminId", "name email")
+    .populate("convertedToProviderByAdminId", "name email")
+    .lean();
   if (!payout) {
     sendFailResponse(
       PAYOUT_MESSAGE.WITHDRAWAL_NOT_FOUND,
@@ -122,6 +126,15 @@ async function getPayoutDetails(payoutId) {
     withdrawalId: String(payout.withdrawalId),
     status: payout.status,
     payoutProvider: payout.payoutProvider,
+    payoutMethod: payout.payoutMethod,
+    isManualPayout: payout.isManualPayout,
+    createdByAdminId: payout.createdByAdminId,
+    manualCompletedByAdminId: payout.manualCompletedByAdminId,
+    manualCompletedAt: payout.manualCompletedAt,
+    manualPaymentReference: payout.manualPaymentReference,
+    manualCompletionNotes: payout.manualCompletionNotes,
+    convertedToProviderByAdminId: payout.convertedToProviderByAdminId,
+    convertedToProviderAt: payout.convertedToProviderAt,
     payoutBatchId: payout.payoutBatchId,
     providerReferenceId: payout.providerReferenceId,
     providerTransferId: payout.providerTransferId,

@@ -18,6 +18,8 @@ const {
   PAYOUT_CONFIG,
   PAYOUT_BATCH_STATUS,
   PAYOUT_APPROVAL_SOURCE,
+  PAYOUT_METHOD,
+  PAYOUT_PROVIDER,
   PAYOUT_BENEFICIARY_STATUS,
   PAYOUT_OUTBOX_STATUS,
 } = require("../../constants/payouts");
@@ -37,6 +39,7 @@ const PayoutEvent = require("../../schemas/payout-event.schema");
 const PayoutRecon = require("../../schemas/payout-recon.schema");
 const PayoutOutbox = require("../../schemas/payout-outbox.schema");
 const PayoutBatch = require("../../schemas/payout-batch.schema");
+const Payout = require("../../schemas/payout.schema");
 const {
   createOrUpdatePayoutRecord,
   syncPayoutRecord,
@@ -137,6 +140,7 @@ async function createWithdrawalRecord({
   amount,
   bankAccount,
   autoPayoutProvider,
+  autoPayoutMethod,
   session,
 }) {
   let withdrawal;
@@ -148,8 +152,9 @@ async function createWithdrawalRecord({
         PAYOUT_HTTP_STATUS.FORBIDDEN,
       );
     }
-    const shouldAutoApprove =
-      Boolean(autoPayoutProvider) && Boolean(currentUser.enableAutoPayout);
+    const shouldAutoApprove = Boolean(currentUser.enableAutoPayout);
+    const isManualAutoPayout =
+      shouldAutoApprove && autoPayoutMethod === PAYOUT_METHOD.MANUAL;
     const withdrawalId = new mongoose.Types.ObjectId();
     const autoApprovedAt = shouldAutoApprove ? new Date() : null;
     const [newWithdrawal] = await Withdrawal.create(
@@ -166,7 +171,12 @@ async function createWithdrawalRecord({
             : WITHDRAWAL_STATUS.PENDING,
           ...(shouldAutoApprove
             ? {
-                payoutProvider: autoPayoutProvider,
+                payoutProvider: isManualAutoPayout
+                  ? PAYOUT_PROVIDER.MANUAL
+                  : autoPayoutProvider,
+                payoutMethod: autoPayoutMethod,
+                isManualPayout: isManualAutoPayout,
+                createdByAdminId: null,
                 providerReferenceId: String(withdrawalId),
                 approvalSource: PAYOUT_APPROVAL_SOURCE.AUTO,
                 approvedAt: autoApprovedAt,
@@ -179,7 +189,15 @@ async function createWithdrawalRecord({
     withdrawal = newWithdrawal;
 
     if (shouldAutoApprove) {
-      await createAutoApprovedPayoutRecord(newWithdrawal, session);
+      await createAutoApprovedPayoutRecord(newWithdrawal, session, {
+        status: isManualAutoPayout
+          ? WITHDRAWAL_STATUS.PENDING
+          : WITHDRAWAL_STATUS.PROCESSING,
+        payoutMethod: autoPayoutMethod,
+        isManualPayout: isManualAutoPayout,
+      });
+    }
+    if (shouldAutoApprove && !isManualAutoPayout) {
       await PayoutOutbox.create(
         [
           {
@@ -240,8 +258,8 @@ async function createWithdrawalRecord({
   return withdrawal;
 }
 
-async function createAutoApprovedPayoutRecord(withdrawal, session) {
-  await createOrUpdatePayoutRecord({ withdrawal, approval: {}, session });
+async function createAutoApprovedPayoutRecord(withdrawal, session, approval) {
+  await createOrUpdatePayoutRecord({ withdrawal, approval, session });
 }
 
 function logWithdrawalRequest({
@@ -308,22 +326,34 @@ async function createWithdrawal(userId, data) {
     sendFailResponse("Insufficient points balance");
   }
   validateWithdrawalLimits(amount, coinConfig);
-  const beneficiary = await getVerifiedBankAccountBeneficiary({
-    user,
-    bankAccount,
-  });
-  if (beneficiary.status !== PAYOUT_BENEFICIARY_STATUS.READY) {
-    sendFailResponse(
-      PAYOUT_MESSAGE.BENEFICIARY_NOT_READY,
-      PAYOUT_HTTP_STATUS.CONFLICT,
-    );
+  const payoutSettings = await AppConfig.findOne()
+    .select("payoutSettings")
+    .lean();
+  const autoPayoutMethod =
+    payoutSettings?.payoutSettings?.defaultPayoutMethod ||
+    PAYOUT_METHOD.PROVIDER;
+  const autoManualPayout =
+    user.enableAutoPayout && autoPayoutMethod === PAYOUT_METHOD.MANUAL;
+  if (!autoManualPayout) {
+    const beneficiary = await getVerifiedBankAccountBeneficiary({
+      user,
+      bankAccount,
+    });
+    if (beneficiary.status !== PAYOUT_BENEFICIARY_STATUS.READY) {
+      sendFailResponse(
+        PAYOUT_MESSAGE.BENEFICIARY_NOT_READY,
+        PAYOUT_HTTP_STATUS.CONFLICT,
+      );
+    }
   }
 
   let autoPayoutProvider = null;
   if (user.enableAutoPayout) {
-    autoPayoutProvider = currentProviderName();
-    const provider = getProvider(autoPayoutProvider);
-    provider.validateConfig?.();
+    if (autoPayoutMethod === PAYOUT_METHOD.PROVIDER) {
+      autoPayoutProvider = currentProviderName();
+      const provider = getProvider(autoPayoutProvider);
+      provider.validateConfig?.();
+    }
   }
 
   const session = await mongoose.startSession();
@@ -336,6 +366,7 @@ async function createWithdrawal(userId, data) {
       amount,
       bankAccount,
       autoPayoutProvider,
+      autoPayoutMethod,
       session,
     });
     logWithdrawalRequest({
@@ -760,18 +791,26 @@ function notifyWithdrawalApproved(withdrawalId, user) {
   );
 }
 
-async function approveWithdrawal(adminId, withdrawalId) {
+async function approveWithdrawal(adminId, withdrawalId, payoutMethod = null) {
   let data;
   try {
-    data = await enqueueApprovedWithdrawal(adminId, withdrawalId);
+    data = await enqueueApprovedWithdrawal(
+      adminId,
+      withdrawalId,
+      PAYOUT_APPROVAL_SOURCE.ADMIN,
+      payoutMethod,
+    );
   } catch (error) {
     sendFailResponse(error.message || PAYOUT_MESSAGE.QUEUE_PAYOUT_FAILED);
   }
-  wakePayoutOutboxWorker();
+  if (data.shouldWakeWorker) wakePayoutOutboxWorker();
   const withdrawal = await loadWithdrawalApprovalDetails(withdrawalId);
   notifyWithdrawalApproved(withdrawalId, withdrawal?.userId);
   return {
-    message: PAYOUT_MESSAGE.WITHDRAWAL_APPROVED_QUEUED,
+    message: data.isManualPayout
+      ? PAYOUT_MESSAGE.MANUAL_PAYOUT_CREATED
+      : PAYOUT_MESSAGE.WITHDRAWAL_APPROVED_QUEUED,
+    withdrawalApproved: true,
     data: { ...data, status: withdrawal?.status || data.status },
   };
 }
@@ -794,10 +833,12 @@ async function approveWithdrawalBatch(adminId, withdrawalIds) {
 }
 
 function validateCancellationRemarks(remarks) {
-  if (!remarks || remarks.trim().length < 5) {
-    sendFailResponse(
-      "A cancellation reason of at least 5 characters is required",
-    );
+  const reason = String(remarks || "").trim();
+  if (
+    reason.length < PAYOUT_CONFIG.CANCELLATION_REASON_MIN_LENGTH ||
+    reason.length > PAYOUT_CONFIG.CANCELLATION_REASON_MAX_LENGTH
+  ) {
+    sendFailResponse(PAYOUT_MESSAGE.CANCELLATION_REASON_REQUIRED);
   }
 }
 
@@ -834,12 +875,13 @@ async function applyWithdrawalCancellation({
   adminId,
   remarks,
   session,
+  expectedStatus = WITHDRAWAL_STATUS.PENDING,
 }) {
   const { refundsPoints, refundAmount, balanceField } =
     getWithdrawalRefundDetails(withdrawal);
   const cancelledAt = new Date();
   const cancelled = await Withdrawal.updateOne(
-    { _id: withdrawal._id, status: WITHDRAWAL_STATUS.PENDING },
+    { _id: withdrawal._id, status: expectedStatus },
     {
       $set: {
         status: WITHDRAWAL_STATUS.CANCELLED,
@@ -851,7 +893,7 @@ async function applyWithdrawalCancellation({
     { session },
   );
   if (!cancelled.modifiedCount) {
-    sendFailResponse("Withdrawal is no longer pending");
+    sendFailResponse("Withdrawal changed before cancellation");
   }
   await syncPayoutRecord(
     withdrawal._id,
@@ -991,7 +1033,8 @@ function notifyWithdrawalCancelled(user, withdrawal) {
 
 function formatCancelledWithdrawal(withdrawal, refundsPoints) {
   return {
-    message: "Withdrawal request cancelled and balance refunded successfully",
+    message: PAYOUT_MESSAGE.WITHDRAWAL_CANCELLED,
+    withdrawalCancelled: true,
     data: {
       id: withdrawal._id,
       status: WITHDRAWAL_STATUS.CANCELLED,
@@ -1037,6 +1080,67 @@ async function cancelWithdrawal(adminId, withdrawalId, data) {
   }
 }
 
+/** Cancels an unsettled manual payout and uses the standard point refund ledger. */
+async function cancelApprovedManualPayout(adminId, withdrawalId, remarks) {
+  validateCancellationRemarks(remarks);
+  const session = await mongoose.startSession();
+  let withdrawal;
+  let user;
+  let refundDetails;
+  try {
+    await session.withTransaction(async () => {
+      withdrawal = await Withdrawal.findById(withdrawalId)
+        .lean()
+        .session(session);
+      const payout = await Payout.findOne({ withdrawalId })
+        .lean()
+        .session(session);
+      const attempts = await PayoutAttempt.countDocuments({
+        withdrawalId,
+      }).session(session);
+      if (
+        !withdrawal ||
+        !payout ||
+        !payout.isManualPayout ||
+        payout.status !== WITHDRAWAL_STATUS.PENDING ||
+        withdrawal.status !== WITHDRAWAL_STATUS.PROCESSING ||
+        attempts > 0
+      ) {
+        sendFailResponse(
+          PAYOUT_MESSAGE.MANUAL_PAYOUT_ONLY,
+          PAYOUT_HTTP_STATUS.CONFLICT,
+        );
+      }
+      user = await User.findById(withdrawal.userId).session(session);
+      if (!user)
+        sendFailResponse(
+          PAYOUT_MESSAGE.USER_NOT_FOUND,
+          PAYOUT_HTTP_STATUS.NOT_FOUND,
+        );
+      refundDetails = await applyWithdrawalCancellation({
+        withdrawal,
+        user,
+        adminId,
+        remarks,
+        session,
+        expectedStatus: WITHDRAWAL_STATUS.PROCESSING,
+      });
+    });
+    notifyWithdrawalCancelled(user, withdrawal);
+    return {
+      message: PAYOUT_MESSAGE.MANUAL_PAYOUT_CANCELLED,
+      payoutCancelled: true,
+      data: {
+        id: String(withdrawalId),
+        status: WITHDRAWAL_STATUS.CANCELLED,
+        ...refundDetails,
+      },
+    };
+  } finally {
+    await session.endSession();
+  }
+}
+
 module.exports = {
   createWithdrawal,
   getWithdrawalHistory,
@@ -1047,4 +1151,5 @@ module.exports = {
   approveWithdrawal,
   approveWithdrawalBatch,
   cancelWithdrawal,
+  cancelApprovedManualPayout,
 };

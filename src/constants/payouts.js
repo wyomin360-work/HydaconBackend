@@ -4,8 +4,14 @@ const { SYSTEM_ALERT_SEVERITY } = require("./alerts");
 const PAYOUT_PROVIDER = Object.freeze({
   RAZORPAYX: "razorpayx",
   CASHFREE: "cashfree",
+  MANUAL: "manual",
   UNKNOWN: "unknown",
 });
+const PAYOUT_METHOD = Object.freeze({
+  MANUAL: "MANUAL",
+  PROVIDER: "PROVIDER",
+});
+const PAYOUT_METHOD_VALUES = Object.freeze(Object.values(PAYOUT_METHOD));
 const PAYOUT_PROVIDER_ENVIRONMENT = Object.freeze({
   SANDBOX: "sandbox",
   PRODUCTION: "production",
@@ -74,6 +80,10 @@ const RAZORPAYX_PAYOUT_STATUS = Object.freeze({
 const PAYOUT_PROVIDER_VALUES = Object.freeze([
   PAYOUT_PROVIDER.RAZORPAYX,
   PAYOUT_PROVIDER.CASHFREE,
+]);
+const PAYOUT_RECORD_PROVIDER_VALUES = Object.freeze([
+  ...PAYOUT_PROVIDER_VALUES,
+  PAYOUT_PROVIDER.MANUAL,
 ]);
 const PAYOUT_BENEFICIARY_STATUS = Object.freeze({
   READY: "READY",
@@ -195,6 +205,7 @@ const PAYOUT_RESULT = Object.freeze({
   SUCCESS: "success",
   IGNORED: "ignored",
   STATUS_CHECK: "status-check",
+  MANUAL_COMPLETION: "MANUAL_COMPLETION",
   APPLIED: (status) => `applied:${status}`,
   STALE_OR_DUPLICATE: (current, requested) =>
     `stale-or-duplicate:${current}->${requested}`,
@@ -239,6 +250,7 @@ const PAYOUT_LEDGER_SOURCE = Object.freeze({
   ADMIN_CANCELLATION: "ADMIN_CANCELLATION",
   PAYOUT_WEBHOOK: PAYOUT_SOURCE.PAYOUT_WEBHOOK,
   PAYOUT_RECONCILIATION: PAYOUT_SOURCE.PAYOUT_RECONCILIATION,
+  MANUAL_PAYOUT: "MANUAL_PAYOUT",
 });
 const PAYOUT_LEDGER_SOURCE_VALUES = Object.freeze(
   Object.values(PAYOUT_LEDGER_SOURCE),
@@ -251,6 +263,12 @@ const PAYOUT_CONFIG = Object.freeze({
   MINOR_UNITS_PER_INR: 100,
   MAX_NARRATION_LENGTH: 30,
   MAX_ERROR_LENGTH: 500,
+  MANUAL_PAYMENT_REFERENCE_MIN_LENGTH: 3,
+  MANUAL_PAYMENT_REFERENCE_MAX_LENGTH: 128,
+  MANUAL_UTR_MAX_LENGTH: 64,
+  MANUAL_COMPLETION_NOTES_MAX_LENGTH: 500,
+  CANCELLATION_REASON_MIN_LENGTH: 5,
+  CANCELLATION_REASON_MAX_LENGTH: 500,
   REDACT_DIGIT_SEQUENCE_LENGTH: 6,
   EVENT_LEASE_MS: 10 * 60 * 1000,
   OUTBOX_LEASE_MS: 2 * 60 * 1000,
@@ -355,6 +373,8 @@ const PAYOUT_MESSAGE = Object.freeze({
   QUEUE_PAYOUT_FAILED: "Failed to queue payout",
   WITHDRAWAL_APPROVED_QUEUED:
     "Withdrawal approved. Payout is queued for processing.",
+  MANUAL_PAYOUT_CREATED:
+    "Withdrawal approved and added to the manual payouts queue.",
   WITHDRAWAL_BATCH_APPROVED_QUEUED:
     "Withdrawal batch approved and queued for Cashfree processing.",
   WEBHOOK_SUCCESS: "Webhook processed successfully",
@@ -416,10 +436,25 @@ const PAYOUT_MESSAGE = Object.freeze({
     "The provider could not complete the transfer. Contact support if you need help.",
   AUTO_PAYOUT_KYC_UPDATED_LOG: "Automatic payout setting updated",
   NARRATION_PREFIX: "Payout of",
+  MANUAL_PAYOUT_ONLY:
+    "This action is only available for a pending manual payout",
+  MANUAL_PAYOUT_REFERENCE_REQUIRED:
+    "A payment reference is required to complete a manual payout",
+  MANUAL_PAYOUT_CANCELLED:
+    "Manual payout cancelled and withdrawal balance refunded",
+  MANUAL_PAYOUT_COMPLETED: "Manual payout marked as completed",
+  MANUAL_PAYOUT_PROVIDER_CONVERTED:
+    "Manual payout queued with the configured provider",
+  CANCELLATION_REASON_REQUIRED:
+    "A cancellation reason of at least 5 characters is required",
+  WITHDRAWAL_CANCELLED:
+    "Withdrawal request cancelled and balance refunded successfully",
 });
 
 module.exports = {
   PAYOUT_PROVIDER,
+  PAYOUT_METHOD,
+  PAYOUT_METHOD_VALUES,
   PAYOUT_PROVIDER_ENVIRONMENT,
   CASHFREE_PAYOUT_STATUS,
   CASHFREE_PAYOUT_STATUS_CODE,
@@ -429,6 +464,7 @@ module.exports = {
   RAZORPAYX_PAYOUT_EVENT,
   RAZORPAYX_PAYOUT_STATUS,
   PAYOUT_PROVIDER_VALUES,
+  PAYOUT_RECORD_PROVIDER_VALUES,
   PAYOUT_BENEFICIARY_STATUS,
   PAYOUT_BENEFICIARY_STATUS_VALUES,
   PAYOUT_APPROVAL_SOURCE,

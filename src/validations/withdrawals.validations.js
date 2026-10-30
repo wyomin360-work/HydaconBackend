@@ -1,4 +1,8 @@
-const { PAYOUT_CONFIG, PAYOUT_MESSAGE } = require("../constants/payouts");
+const {
+  PAYOUT_CONFIG,
+  PAYOUT_MESSAGE,
+  PAYOUT_METHOD_VALUES,
+} = require("../constants/payouts");
 
 const createWithdrawalRequestType = {
   type: "object",
@@ -12,7 +16,11 @@ const createWithdrawalRequestType = {
 const cancelWithdrawalRequestType = {
   type: "object",
   properties: {
-    remarks: { type: "string" },
+    remarks: {
+      type: "string",
+      minLength: PAYOUT_CONFIG.CANCELLATION_REASON_MIN_LENGTH,
+      maxLength: PAYOUT_CONFIG.CANCELLATION_REASON_MAX_LENGTH,
+    },
   },
   additionalProperties: false,
 };
@@ -63,9 +71,18 @@ const approveWithdrawalBatchRequestType = {
   },
 };
 
+const approveWithdrawalRequestType = {
+  type: "object",
+  properties: {
+    payoutMethod: { type: "string", enum: PAYOUT_METHOD_VALUES },
+  },
+  additionalProperties: false,
+};
+
 module.exports = {
   createWithdrawalRequestType,
   cancelWithdrawalRequestType,
   listWithdrawalsRequestType,
   approveWithdrawalBatchRequestType,
+  approveWithdrawalRequestType,
 };

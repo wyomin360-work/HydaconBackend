@@ -4,6 +4,7 @@ const { WITHDRAWAL_STATUS } = require("../../constants/withdrawals");
 const { KYC_STATUS } = require("../../constants/user");
 const {
   PAYOUT_PROVIDER,
+  PAYOUT_METHOD,
   PAYOUT_BENEFICIARY_STATUS,
   PAYOUT_APPROVAL_SOURCE,
   PAYOUT_OUTBOX_STATUS: OUTBOX,
@@ -12,6 +13,7 @@ const {
   PAYOUT_TRANSFER_MODE,
   PAYOUT_CONFIG,
   PAYOUT_MESSAGE,
+  PAYOUT_HTTP_STATUS,
   PAYOUT_SOURCE,
   PAYOUT_RECON_OUTCOME,
   PAYOUT_OPERATION,
@@ -24,14 +26,19 @@ const UserBankAccount = require("../../schemas/user-bank-account.schema");
 const PayoutAttempt = require("../../schemas/payout-attempt.schema");
 const PayoutOutbox = require("../../schemas/payout-outbox.schema");
 const PayoutRecon = require("../../schemas/payout-recon.schema");
+const AppConfig = require("../../schemas/app-config.schema");
 const {
   createOrUpdatePayoutRecord,
   syncPayoutRecord,
 } = require("./payout-record.service");
 const { getProvider, currentProviderName } = require("../../functions/payouts");
 const { decrypt } = require("../../utils/encryption");
-const { applyTransferUpdate } = require("./payout-state.service");
+const {
+  applyTransferUpdate,
+  loadPendingManualPayout,
+} = require("./payout-state.service");
 const { safeText } = require("./payout-utils");
+const { sendFailResponse } = require("../../utils/responseHandlers");
 const logger = require("../../config/pino.config");
 const { reportPayoutAlert } = require("./payout-alerts");
 
@@ -39,6 +46,7 @@ async function enqueueApprovedWithdrawal(
   adminId,
   withdrawalId,
   approvalSource = PAYOUT_APPROVAL_SOURCE.ADMIN,
+  requestedPayoutMethod = null,
 ) {
   const session = await mongoose.startSession();
   let withdrawal;
@@ -59,12 +67,28 @@ async function enqueueApprovedWithdrawal(
       ) {
         throw new Error(PAYOUT_MESSAGE.AUTO_PAYOUT_DISABLED);
       }
-      const provider = withdrawal.payoutProvider || currentProviderName();
-      getProvider(provider).validateConfig?.();
+      let payoutMethod = requestedPayoutMethod;
+      if (!payoutMethod) {
+        const configured = await AppConfig.findOne()
+          .select("payoutSettings.defaultPayoutMethod")
+          .session(session)
+          .lean();
+        payoutMethod =
+          configured?.payoutSettings?.defaultPayoutMethod ||
+          PAYOUT_METHOD.PROVIDER;
+      }
+      const isManualPayout = payoutMethod === PAYOUT_METHOD.MANUAL;
+      const provider = isManualPayout
+        ? PAYOUT_PROVIDER.MANUAL
+        : withdrawal.payoutProvider || currentProviderName();
+      if (!isManualPayout) getProvider(provider).validateConfig?.();
       const referenceId =
         withdrawal.providerReferenceId || String(withdrawal._id);
       withdrawal.status = WITHDRAWAL_STATUS.PROCESSING;
       withdrawal.payoutProvider = provider;
+      withdrawal.payoutMethod = payoutMethod;
+      withdrawal.isManualPayout = isManualPayout;
+      withdrawal.createdByAdminId = adminId || null;
       withdrawal.payoutBatchId = null;
       withdrawal.providerReferenceId = referenceId;
       withdrawal.approvedBy = adminId;
@@ -74,8 +98,13 @@ async function enqueueApprovedWithdrawal(
       await createOrUpdatePayoutRecord({
         withdrawal,
         approval: {
-          status: WITHDRAWAL_STATUS.PROCESSING,
+          status: isManualPayout
+            ? WITHDRAWAL_STATUS.PENDING
+            : WITHDRAWAL_STATUS.PROCESSING,
           provider,
+          payoutMethod,
+          isManualPayout,
+          createdByAdminId: adminId || null,
           providerReferenceId: referenceId,
           adminId,
           approvalSource,
@@ -83,24 +112,26 @@ async function enqueueApprovedWithdrawal(
         },
         session,
       });
-      await PayoutOutbox.findOneAndUpdate(
-        { withdrawalId: withdrawal._id },
-        {
-          $set: {
-            provider,
-            providerReferenceId: referenceId,
-            executionBatchId: null,
-            status: OUTBOX.PENDING,
-            availableAt: new Date(),
-            lastError: null,
-            leaseExpiresAt: null,
+      if (!isManualPayout) {
+        await PayoutOutbox.findOneAndUpdate(
+          { withdrawalId: withdrawal._id },
+          {
+            $set: {
+              provider,
+              providerReferenceId: referenceId,
+              executionBatchId: null,
+              status: OUTBOX.PENDING,
+              availableAt: new Date(),
+              lastError: null,
+              leaseExpiresAt: null,
+            },
+            $setOnInsert: {
+              withdrawalId: withdrawal._id,
+            },
           },
-          $setOnInsert: {
-            withdrawalId: withdrawal._id,
-          },
-        },
-        { upsert: true, new: true, session, setDefaultsOnInsert: true },
-      );
+          { upsert: true, new: true, session, setDefaultsOnInsert: true },
+        );
+      }
     });
   } finally {
     await session.endSession();
@@ -116,6 +147,9 @@ async function enqueueApprovedWithdrawal(
     id: withdrawal._id,
     status: withdrawal.status,
     payoutProvider: withdrawal.payoutProvider,
+    payoutMethod: withdrawal.payoutMethod,
+    isManualPayout: withdrawal.isManualPayout,
+    shouldWakeWorker: !withdrawal.isManualPayout,
   };
 }
 
@@ -936,6 +970,82 @@ async function hasPossibleProviderTransferAttempt(withdrawal) {
   return Boolean(existingAttempt);
 }
 
+/** Converts a pending manual payout to the configured provider and queues execution. */
+async function convertManualPayoutToProvider(adminId, withdrawalId) {
+  const provider = currentProviderName();
+  getProvider(provider).validateConfig?.();
+  const session = await mongoose.startSession();
+  let referenceId;
+  try {
+    await session.withTransaction(async () => {
+      const { withdrawal } = await loadPendingManualPayout(
+        withdrawalId,
+        session,
+      );
+      referenceId = withdrawal.providerReferenceId || String(withdrawal._id);
+      const now = new Date();
+      const update = {
+        payoutProvider: provider,
+        payoutMethod: PAYOUT_METHOD.PROVIDER,
+        isManualPayout: false,
+        providerReferenceId: referenceId,
+      };
+      const changed = await Withdrawal.updateOne(
+        {
+          _id: withdrawalId,
+          status: WITHDRAWAL_STATUS.PROCESSING,
+          isManualPayout: true,
+        },
+        { $set: update },
+        { session },
+      );
+      if (!changed.modifiedCount) {
+        sendFailResponse(
+          PAYOUT_MESSAGE.MANUAL_PAYOUT_ONLY,
+          PAYOUT_HTTP_STATUS.CONFLICT,
+        );
+      }
+      await syncPayoutRecord(
+        withdrawalId,
+        {
+          ...update,
+          status: WITHDRAWAL_STATUS.PROCESSING,
+          convertedToProviderByAdminId: adminId,
+          convertedToProviderAt: now,
+        },
+        session,
+      );
+      await PayoutOutbox.findOneAndUpdate(
+        { withdrawalId },
+        {
+          $set: {
+            provider,
+            providerReferenceId: referenceId,
+            status: OUTBOX.PENDING,
+            availableAt: now,
+            lastError: null,
+            leaseExpiresAt: null,
+          },
+          $setOnInsert: { withdrawalId },
+        },
+        { upsert: true, new: true, session, setDefaultsOnInsert: true },
+      );
+    });
+  } finally {
+    await session.endSession();
+  }
+  wakePayoutOutboxWorker();
+  return {
+    message: PAYOUT_MESSAGE.MANUAL_PAYOUT_PROVIDER_CONVERTED,
+    manualPayoutConverted: true,
+    data: {
+      id: String(withdrawalId),
+      payoutProvider: provider,
+      providerReferenceId: referenceId,
+    },
+  };
+}
+
 async function markWithdrawalFailedWhenTransferWasNeverSubmitted(
   outbox,
   withdrawal,
@@ -972,6 +1082,7 @@ module.exports = {
   enqueueApprovedWithdrawal,
   processPayoutOutboxBatch,
   wakePayoutOutboxWorker,
+  convertManualPayoutToProvider,
   ensureBeneficiary,
   registerBankAccountBeneficiary,
   getVerifiedBankAccountBeneficiary,

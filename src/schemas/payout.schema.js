@@ -4,7 +4,9 @@ const {
   WITHDRAWAL_POINT_ROUNDING_MODE,
 } = require("../constants/withdrawals");
 const {
-  PAYOUT_PROVIDER_VALUES,
+  PAYOUT_RECORD_PROVIDER_VALUES,
+  PAYOUT_METHOD,
+  PAYOUT_METHOD_VALUES,
   PAYOUT_APPROVAL_SOURCE_VALUES,
 } = require("../constants/payouts");
 
@@ -61,10 +63,37 @@ const payoutSchema = new mongoose.Schema(
     },
     payoutProvider: {
       type: String,
-      enum: PAYOUT_PROVIDER_VALUES,
+      enum: PAYOUT_RECORD_PROVIDER_VALUES,
       required: true,
       index: true,
     },
+    payoutMethod: {
+      type: String,
+      enum: PAYOUT_METHOD_VALUES,
+      required: true,
+      default: PAYOUT_METHOD.PROVIDER,
+      index: true,
+    },
+    isManualPayout: { type: Boolean, default: false, index: true },
+    createdByAdminId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+      default: null,
+    },
+    manualCompletedByAdminId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+      default: null,
+    },
+    manualCompletedAt: { type: Date, default: null },
+    manualPaymentReference: { type: String, default: null },
+    manualCompletionNotes: { type: String, default: null },
+    convertedToProviderByAdminId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+      default: null,
+    },
+    convertedToProviderAt: { type: Date, default: null },
     payoutBatchId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "PayoutBatch",

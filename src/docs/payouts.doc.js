@@ -89,6 +89,102 @@ module.exports = {
       },
     },
   },
+  "/payouts/admin/{id}/complete-manual": {
+    post: {
+      summary: "Complete a manual payout",
+      description:
+        "Records a manual settlement reference, completes the payout transactionally, writes ledger entries, and notifies the user.",
+      security: [{ bearerAuth: [] }],
+      parameters: [
+        { in: "path", name: "id", required: true, schema: { type: "string" } },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["paymentReference"],
+              properties: {
+                paymentReference: {
+                  type: "string",
+                  minLength: 3,
+                  maxLength: 128,
+                },
+                utr: { type: "string", maxLength: 64 },
+                notes: { type: "string", maxLength: 500 },
+              },
+              additionalProperties: false,
+            },
+          },
+        },
+      },
+      responses: {
+        200: { description: "Manual payout completed" },
+        409: {
+          description: "Payout is no longer eligible for manual completion",
+        },
+      },
+    },
+  },
+  "/payouts/admin/{id}/cancel-manual": {
+    post: {
+      summary: "Cancel a manual payout",
+      description:
+        "Cancels an unsettled manual payout and refunds the withdrawal points using the existing cancellation ledger flow.",
+      security: [{ bearerAuth: [] }],
+      parameters: [
+        { in: "path", name: "id", required: true, schema: { type: "string" } },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["remarks"],
+              properties: {
+                remarks: { type: "string", minLength: 5, maxLength: 500 },
+              },
+              additionalProperties: false,
+            },
+          },
+        },
+      },
+      responses: {
+        200: { description: "Manual payout cancelled and balance refunded" },
+        409: { description: "Payout is no longer eligible for cancellation" },
+      },
+    },
+  },
+  "/payouts/admin/{id}/convert-to-provider": {
+    post: {
+      summary: "Convert a manual payout to provider execution",
+      description:
+        "Switches an unsettled manual payout to the configured provider and creates a durable outbox item.",
+      security: [{ bearerAuth: [] }],
+      parameters: [
+        { in: "path", name: "id", required: true, schema: { type: "string" } },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["confirmation"],
+              properties: { confirmation: { type: "boolean", const: true } },
+              additionalProperties: false,
+            },
+          },
+        },
+      },
+      responses: {
+        200: { description: "Manual payout queued with provider" },
+        409: { description: "Payout is no longer eligible for conversion" },
+      },
+    },
+  },
   "/withdrawals/create": {
     post: {
       summary: "Create a withdrawal request",
@@ -249,8 +345,11 @@ module.exports = {
   },
   "/withdrawals/admin/approve/{id}": {
     post: {
-      summary: "Approve a withdrawal and queue a provider payout",
+      summary: "Approve a withdrawal for manual or provider payout",
+      description:
+        "Select MANUAL to create a pending manual payout. Select PROVIDER to queue execution through the configured provider. If omitted, the system default payout method is used.",
       tags: ["Withdrawals"],
+      security: [{ bearerAuth: [] }],
       parameters: [
         {
           in: "path",
@@ -260,6 +359,20 @@ module.exports = {
           description: "Withdrawal identifier",
         },
       ],
+      requestBody: {
+        required: false,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              properties: {
+                payoutMethod: { type: "string", enum: ["MANUAL", "PROVIDER"] },
+              },
+              additionalProperties: false,
+            },
+          },
+        },
+      },
       responses: {
         200: {
           description: "Withdrawal approved and payout queued",
@@ -278,10 +391,11 @@ module.exports = {
                         properties: {
                           id: { type: "string" },
                           status: { type: "string", enum: ["PROCESSING"] },
-                          payoutProvider: {
+                          payoutMethod: {
                             type: "string",
-                            enum: ["razorpayx", "cashfree"],
+                            enum: ["MANUAL", "PROVIDER"],
                           },
+                          isManualPayout: { type: "boolean" },
                         },
                       },
                     },

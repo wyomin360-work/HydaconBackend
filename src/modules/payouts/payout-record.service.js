@@ -1,4 +1,5 @@
 const Payout = require("../../schemas/payout.schema");
+const { PAYOUT_METHOD } = require("../../constants/payouts");
 
 /** Builds the persisted payout snapshot from its approved withdrawal. */
 function buildPayoutRecord(withdrawal, approval) {
@@ -21,6 +22,22 @@ function buildPayoutRecord(withdrawal, approval) {
     pointConversionSnapshot: withdrawal.pointConversionSnapshot,
     status: payoutApproval.status || withdrawal.status,
     payoutProvider: payoutApproval.provider || withdrawal.payoutProvider,
+    payoutMethod:
+      payoutApproval.payoutMethod ||
+      withdrawal.payoutMethod ||
+      PAYOUT_METHOD.PROVIDER,
+    isManualPayout:
+      payoutApproval.isManualPayout === undefined
+        ? Boolean(withdrawal.isManualPayout)
+        : Boolean(payoutApproval.isManualPayout),
+    createdByAdminId:
+      payoutApproval.createdByAdminId === undefined
+        ? withdrawal.createdByAdminId || null
+        : payoutApproval.createdByAdminId,
+    manualCompletedByAdminId: withdrawal.manualCompletedByAdminId || null,
+    manualCompletedAt: withdrawal.manualCompletedAt || null,
+    manualPaymentReference: withdrawal.manualPaymentReference || null,
+    manualCompletionNotes: withdrawal.manualCompletionNotes || null,
     payoutBatchId:
       payoutApproval.payoutBatchId === undefined
         ? withdrawal.payoutBatchId || null
