@@ -1,35 +1,274 @@
+const crypto = require("crypto");
 const mongoose = require("mongoose");
 const { WITHDRAWAL_STATUS } = require("../../constants/withdrawals");
 const {
+  PAYOUT_PROVIDER,
+  PAYOUT_PROVIDER_ENVIRONMENT,
   CASHFREE_PAYOUT_STATUS,
   PAYOUT_OUTBOX_STATUS: OUTBOX,
   PAYOUT_BATCH_STATUS: BATCH,
   PAYOUT_ATTEMPT_OUTCOME: ATTEMPT,
   PAYOUT_CURRENCY,
   PAYOUT_TRANSFER_MODE,
+  PAYOUT_HTTP_STATUS,
   PAYOUT_CONFIG,
   PAYOUT_MESSAGE,
   PAYOUT_SOURCE,
   PAYOUT_RECON_OUTCOME,
+  PAYOUT_OPERATION,
   PAYOUT_TERMINAL_WITHDRAWAL_STATUSES,
 } = require("../../constants/payouts");
 const Withdrawal = require("../../schemas/withdrawal.schema");
 const PayoutOutbox = require("../../schemas/payout-outbox.schema");
 const PayoutBatch = require("../../schemas/payout-batch.schema");
 const PayoutAttempt = require("../../schemas/payout-attempt.schema");
-const { getProvider } = require("../../functions/payouts");
+const PayoutRecon = require("../../schemas/payout-recon.schema");
+const { currentProviderName, getProvider } = require("../../functions/payouts");
 const {
   ensureBeneficiary,
   amountInMinorUnits,
   payoutNarration,
-} = require("./payout-execution.service");
-const { applyTransferUpdate } = require("./payout-state.service");
-const {
   hasTransferMismatch,
   recordPayoutReconciliation,
-} = require("./payout-reconciliation.service");
+} = require("./payout-execution.service");
+const { applyTransferUpdate } = require("./payout-state.service");
 const { safeText } = require("./payout-utils");
+const { sendFailResponse } = require("../../utils/responseHandlers");
 const logger = require("../../config/pino.config");
+
+function batchValidationError(
+  message,
+  statusCode = PAYOUT_HTTP_STATUS.BAD_REQUEST,
+) {
+  sendFailResponse(message, statusCode);
+}
+
+function maxBatchSize() {
+  return process.env.CASHFREE_PAYOUT_ENV ===
+    PAYOUT_PROVIDER_ENVIRONMENT.PRODUCTION
+    ? PAYOUT_CONFIG.CASHFREE_BATCH_PRODUCTION_MAX_SIZE
+    : PAYOUT_CONFIG.CASHFREE_BATCH_SANDBOX_MAX_SIZE;
+}
+
+function assertBatchSize(withdrawalIds) {
+  const minimum = PAYOUT_CONFIG.CASHFREE_BATCH_MIN_SIZE;
+  const maximum = maxBatchSize();
+  if (
+    !Array.isArray(withdrawalIds) ||
+    withdrawalIds.length < minimum ||
+    withdrawalIds.length > maximum
+  ) {
+    batchValidationError(
+      PAYOUT_MESSAGE.PAYOUT_BATCH_SIZE_INVALID(minimum, maximum),
+    );
+  }
+  if (new Set(withdrawalIds).size !== withdrawalIds.length) {
+    batchValidationError(PAYOUT_MESSAGE.PAYOUT_BATCH_DUPLICATE_WITHDRAWALS);
+  }
+}
+
+function validateBatchWithdrawals(withdrawals, withdrawalIds, providerName) {
+  if (withdrawals.length !== withdrawalIds.length) {
+    batchValidationError(
+      PAYOUT_MESSAGE.WITHDRAWAL_NOT_FOUND,
+      PAYOUT_HTTP_STATUS.NOT_FOUND,
+    );
+  }
+
+  for (const withdrawal of withdrawals) {
+    const id = String(withdrawal._id);
+    if (withdrawal.status !== WITHDRAWAL_STATUS.PENDING) {
+      batchValidationError(
+        PAYOUT_MESSAGE.PAYOUT_BATCH_WITHDRAWAL_INELIGIBLE(
+          id,
+          `status is ${withdrawal.status}`,
+        ),
+        PAYOUT_HTTP_STATUS.CONFLICT,
+      );
+    }
+    if (
+      withdrawal.payoutProvider &&
+      withdrawal.payoutProvider !== providerName
+    ) {
+      batchValidationError(
+        PAYOUT_MESSAGE.PAYOUT_BATCH_WITHDRAWAL_INELIGIBLE(
+          id,
+          PAYOUT_MESSAGE.PAYOUT_BATCH_PROVIDER_CONFLICT,
+        ),
+        PAYOUT_HTTP_STATUS.CONFLICT,
+      );
+    }
+    if (withdrawal.providerTransferId) {
+      batchValidationError(
+        PAYOUT_MESSAGE.PAYOUT_BATCH_WITHDRAWAL_INELIGIBLE(
+          id,
+          PAYOUT_MESSAGE.PAYOUT_BATCH_TRANSFER_EXISTS,
+        ),
+        PAYOUT_HTTP_STATUS.CONFLICT,
+      );
+    }
+
+    const amount = Number(withdrawal.cashAmount);
+    const amountMinor = amountInMinorUnits(withdrawal);
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 1 ||
+      !Number.isSafeInteger(amountMinor) ||
+      Math.abs(amount * PAYOUT_CONFIG.MINOR_UNITS_PER_INR - amountMinor) > 1e-7
+    ) {
+      batchValidationError(
+        PAYOUT_MESSAGE.PAYOUT_BATCH_WITHDRAWAL_INELIGIBLE(
+          id,
+          PAYOUT_MESSAGE.PAYOUT_BATCH_AMOUNT_INVALID,
+        ),
+      );
+    }
+
+    const user = withdrawal.userId;
+    const bankAccount = withdrawal.bankAccountId;
+    if (!user || !bankAccount || !bankAccount.isActive) {
+      batchValidationError(
+        PAYOUT_MESSAGE.PAYOUT_BATCH_WITHDRAWAL_INELIGIBLE(
+          id,
+          PAYOUT_MESSAGE.PAYOUT_BATCH_BANK_UNAVAILABLE,
+        ),
+      );
+    }
+    if (String(bankAccount.userId) !== String(user._id)) {
+      batchValidationError(
+        PAYOUT_MESSAGE.PAYOUT_BATCH_WITHDRAWAL_INELIGIBLE(
+          id,
+          PAYOUT_MESSAGE.PAYOUT_BATCH_BANK_OWNER_MISMATCH,
+        ),
+        PAYOUT_HTTP_STATUS.CONFLICT,
+      );
+    }
+  }
+}
+
+async function getValidatedWithdrawals(withdrawalIds, session) {
+  return Withdrawal.find({ _id: { $in: withdrawalIds } })
+    .select(
+      "_id status payoutProvider providerTransferId providerReferenceId cashAmount userId bankAccountId",
+    )
+    .populate("userId", "_id")
+    .populate("bankAccountId", "_id userId isActive")
+    .session(session)
+    .lean();
+}
+
+function makeBatchReferenceId() {
+  return `${PAYOUT_CONFIG.CASHFREE_BATCH_REFERENCE_PREFIX}${crypto
+    .randomUUID()
+    .replace(/-/g, "")}`;
+}
+
+async function enqueueApprovedWithdrawalBatch(adminId, withdrawalIds) {
+  assertBatchSize(withdrawalIds);
+  const providerName = currentProviderName();
+  if (providerName !== PAYOUT_PROVIDER.CASHFREE) {
+    batchValidationError(
+      PAYOUT_MESSAGE.PAYOUT_BATCH_PROVIDER_REQUIRED,
+      PAYOUT_HTTP_STATUS.CONFLICT,
+    );
+  }
+
+  const provider = getProvider(providerName);
+  try {
+    provider.validateConfig?.();
+  } catch (error) {
+    batchValidationError(
+      error.message || PAYOUT_MESSAGE.PAYOUT_BATCH_PROVIDER_REQUIRED,
+      PAYOUT_HTTP_STATUS.SERVICE_UNAVAILABLE,
+    );
+  }
+  if (typeof provider.initiateBatchTransfer !== "function") {
+    batchValidationError(
+      PAYOUT_MESSAGE.UNSUPPORTED_PROVIDER,
+      PAYOUT_HTTP_STATUS.CONFLICT,
+    );
+  }
+
+  const batchReferenceId = makeBatchReferenceId();
+  const session = await mongoose.startSession();
+  let batch;
+  try {
+    await session.withTransaction(async () => {
+      const withdrawals = await getValidatedWithdrawals(withdrawalIds, session);
+      validateBatchWithdrawals(withdrawals, withdrawalIds, providerName);
+
+      const now = new Date();
+      batch = new PayoutBatch({
+        provider: providerName,
+        batchReferenceId,
+        status: BATCH.PENDING,
+        withdrawalCount: withdrawalIds.length,
+        adminId,
+        availableAt: now,
+      });
+      const updateResult = await Withdrawal.updateMany(
+        {
+          _id: { $in: withdrawalIds },
+          status: WITHDRAWAL_STATUS.PENDING,
+          payoutProvider: { $in: [null, providerName] },
+        },
+        {
+          $set: {
+            status: WITHDRAWAL_STATUS.PROCESSING,
+            payoutProvider: providerName,
+            payoutBatchId: batch._id,
+            approvedBy: adminId,
+            approvedAt: now,
+          },
+        },
+        { session },
+      );
+      if (updateResult.modifiedCount !== withdrawalIds.length) {
+        batchValidationError(
+          PAYOUT_MESSAGE.PAYOUT_BATCH_CHANGED_DURING_APPROVAL,
+          PAYOUT_HTTP_STATUS.CONFLICT,
+        );
+      }
+
+      await batch.save({ session });
+
+      const outboxOperations = withdrawals.map((withdrawal) => {
+        const referenceId =
+          withdrawal.providerReferenceId || String(withdrawal._id);
+        return {
+          updateOne: {
+            filter: { withdrawalId: withdrawal._id },
+            update: {
+              $set: {
+                provider: providerName,
+                providerReferenceId: referenceId,
+                executionBatchId: batch._id,
+                status: OUTBOX.PENDING,
+                availableAt: now,
+                lastError: null,
+                leaseExpiresAt: null,
+              },
+              $setOnInsert: { withdrawalId: withdrawal._id },
+            },
+            upsert: true,
+          },
+        };
+      });
+      await PayoutOutbox.bulkWrite(outboxOperations, { session });
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  wakePayoutBatchWorker();
+  return {
+    batchId: batch._id,
+    batchReferenceId,
+    status: WITHDRAWAL_STATUS.PROCESSING,
+    payoutProvider: providerName,
+    withdrawalIds,
+  };
+}
 
 async function mapWithConcurrency(items, concurrency, handler) {
   const results = new Array(items.length);
@@ -346,30 +585,114 @@ async function markBatchFailed(batch, items, error) {
   }
 }
 
-async function markBatchAmbiguous(batch, error) {
-  const availableAt = new Date(Date.now() + retryDelay(batch.attempts));
-  await PayoutBatch.updateOne(
-    { _id: batch._id },
-    {
-      $set: {
-        status: BATCH.RECONCILIATION_REQUIRED,
-        lastError: safeText(error.message),
-        availableAt,
-        leaseExpiresAt: null,
-      },
-    },
+async function markBatchAmbiguous(batch, error, affectedItems = null) {
+  const consecutiveFailures = (batch.consecutiveFailures || 0) + 1;
+  const retryLimitReached =
+    consecutiveFailures >= PAYOUT_CONFIG.OUTBOX_MAX_ATTEMPTS;
+  const now = new Date();
+  const availableAt = retryLimitReached
+    ? null
+    : new Date(now.getTime() + retryDelay(consecutiveFailures));
+  const session = await mongoose.startSession();
+  let auditItems = affectedItems;
+
+  try {
+    await session.withTransaction(async () => {
+      if (!auditItems) auditItems = await loadBatchAuditItems(batch, session);
+
+      await PayoutRecon.insertMany(
+        auditItems
+          .filter(({ withdrawal }) => withdrawal)
+          .map(({ outbox, withdrawal }) => ({
+            withdrawalId: withdrawal._id,
+            provider: batch.provider,
+            providerReferenceId: withdrawal.providerReferenceId,
+            referenceId: outbox.providerReferenceId,
+            requestedAt: now,
+            retryAttempt: consecutiveFailures,
+            operation:
+              error.payoutOperation || PAYOUT_OPERATION.BATCH_RECONCILIATION,
+            outcome: PAYOUT_RECON_OUTCOME.ERROR,
+            providerStatus: batch.providerStatus || null,
+            providerStatusCode: error.providerStatusCode || null,
+            providerErrorCode: error.providerErrorCode
+              ? safeText(error.providerErrorCode)
+              : null,
+            errorMessage: safeText(error.message),
+          })),
+        { session, ordered: true },
+      );
+
+      await PayoutBatch.updateOne(
+        { _id: batch._id },
+        {
+          $set: {
+            status: retryLimitReached
+              ? BATCH.MANUAL_REVIEW
+              : BATCH.RECONCILIATION_REQUIRED,
+            consecutiveFailures,
+            retryExhaustedAt: retryLimitReached ? now : null,
+            lastError: safeText(error.message),
+            availableAt,
+            leaseExpiresAt: null,
+            processedAt: now,
+          },
+        },
+        { session },
+      );
+
+      if (retryLimitReached) {
+        const unresolvedOutboxIds = auditItems
+          .filter(({ outbox, withdrawal }) => outbox && withdrawal)
+          .map(({ outbox }) => outbox._id);
+        await PayoutOutbox.updateMany(
+          { _id: { $in: unresolvedOutboxIds } },
+          {
+            $set: {
+              status: OUTBOX.FAILED,
+              lastError: safeText(error.message),
+              retryExhaustedAt: now,
+              manualReviewRequired: true,
+              availableAt: null,
+              leaseExpiresAt: null,
+              processedAt: now,
+            },
+          },
+          { session },
+        );
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  logger.error(PAYOUT_MESSAGE.PAYOUT_BATCH_WORKER_FAILED, {
+    batchReferenceId: batch.batchReferenceId,
+    consecutiveFailures,
+    maxAttempts: PAYOUT_CONFIG.OUTBOX_MAX_ATTEMPTS,
+    retryLimitReached,
+    error: safeText(error.message),
+  });
+}
+
+async function loadBatchAuditItems(batch, session) {
+  const outboxes = await PayoutOutbox.find({ executionBatchId: batch._id })
+    .select("_id withdrawalId providerReferenceId")
+    .session(session)
+    .lean();
+  const withdrawals = await Withdrawal.find({
+    _id: { $in: outboxes.map((outbox) => outbox.withdrawalId) },
+  })
+    .select("_id payoutProvider providerReferenceId")
+    .session(session)
+    .lean();
+  const withdrawalsById = new Map(
+    withdrawals.map((withdrawal) => [String(withdrawal._id), withdrawal]),
   );
-  await PayoutOutbox.updateMany(
-    { executionBatchId: batch._id, status: { $ne: OUTBOX.SUBMITTED } },
-    {
-      $set: {
-        status: OUTBOX.RECONCILIATION_REQUIRED,
-        lastError: safeText(error.message),
-        availableAt,
-        leaseExpiresAt: null,
-      },
-    },
-  );
+  return outboxes.map((outbox) => ({
+    outbox,
+    withdrawal: withdrawalsById.get(String(outbox.withdrawalId)),
+  }));
 }
 
 function retryDelay(attempts) {
@@ -485,7 +808,11 @@ async function reconcileBatchTransfers(batch, items, batchStatus) {
     const error = new Error(
       PAYOUT_MESSAGE.PAYOUT_BATCH_TRANSFER_STATUS_INCOMPLETE(unresolvedCount),
     );
-    await markBatchAmbiguous(batch, error);
+    error.payoutOperation = PAYOUT_OPERATION.BATCH_RECONCILIATION;
+    const unresolvedItems = items.filter(
+      (_item, index) => reconciliationResults[index] === null,
+    );
+    await markBatchAmbiguous(batch, error, unresolvedItems);
     return;
   }
 
@@ -498,6 +825,8 @@ async function reconcileBatchTransfers(batch, items, batchStatus) {
     {
       $set: {
         status: allTransfersTerminal ? BATCH.RECONCILED : BATCH.SUBMITTED,
+        consecutiveFailures: 0,
+        retryExhaustedAt: null,
         lastError: null,
         availableAt: new Date(
           now.getTime() +
@@ -528,6 +857,9 @@ function updateBatchOutboxReconciliation(outbox, transfer, outcome) {
         lastProviderStatus: transfer?.rawStatus || transfer?.status || null,
         lastProviderStatusCode: transfer?.statusCode || null,
         lastReconciliationOutcome: outcome,
+        lastError: null,
+        retryExhaustedAt: null,
+        manualReviewRequired: false,
         leaseExpiresAt: null,
         processedAt: new Date(),
       },
@@ -555,6 +887,7 @@ async function submitOrReconcileBatch(batch) {
     });
   } catch (error) {
     error.definitive = false;
+    error.payoutOperation = PAYOUT_OPERATION.BATCH_STATUS_LOOKUP;
     throw error;
   }
 
@@ -580,13 +913,21 @@ async function submitOrReconcileBatch(batch) {
       await markBatchFailed(batch, items, error);
       return;
     }
+    error.payoutOperation = PAYOUT_OPERATION.BENEFICIARY_SETUP;
     throw error;
   }
 
-  const { attemptsByWithdrawal, requestStartedAt } = await createBatchAttempts(
-    batch,
-    transfers,
-  );
+  let attemptsByWithdrawal;
+  let requestStartedAt;
+  try {
+    ({ attemptsByWithdrawal, requestStartedAt } = await createBatchAttempts(
+      batch,
+      transfers,
+    ));
+  } catch (error) {
+    error.payoutOperation = PAYOUT_OPERATION.TRANSFER_ATTEMPT_CREATION;
+    throw error;
+  }
   try {
     const result = await provider.initiateBatchTransfer({
       batchReferenceId: batch.batchReferenceId,
@@ -621,8 +962,158 @@ async function submitOrReconcileBatch(batch) {
         );
       }),
     );
+    error.payoutOperation = PAYOUT_OPERATION.BATCH_TRANSFER_SUBMISSION;
     throw error;
   }
 }
 
-module.exports = { markBatchAmbiguous, submitOrReconcileBatch };
+async function processPayoutBatchOutboxBatch(
+  limit = PAYOUT_CONFIG.OUTBOX_BATCH_SIZE,
+) {
+  for (let index = 0; index < limit; index += 1) {
+    const now = new Date();
+    const batch = await PayoutBatch.findOneAndUpdate(
+      {
+        status: {
+          $in: [
+            BATCH.PENDING,
+            BATCH.RECONCILIATION_REQUIRED,
+            BATCH.PROCESSING,
+            BATCH.SUBMITTED,
+            BATCH.RECONCILED,
+          ],
+        },
+        availableAt: { $lte: now },
+        $or: [{ leaseExpiresAt: null }, { leaseExpiresAt: { $lte: now } }],
+      },
+      {
+        $set: {
+          status: BATCH.PROCESSING,
+          leaseExpiresAt: new Date(
+            now.getTime() + PAYOUT_CONFIG.OUTBOX_LEASE_MS,
+          ),
+        },
+        $inc: { attempts: 1 },
+      },
+      { new: true, sort: { availableAt: 1 } },
+    );
+    if (!batch) break;
+    const leaseHeartbeat = startBatchLeaseHeartbeat(batch);
+    try {
+      await submitOrReconcileBatch(batch);
+    } catch (error) {
+      await markBatchAmbiguous(batch, error);
+      logger.error(PAYOUT_MESSAGE.PAYOUT_BATCH_WORKER_FAILED, {
+        batchReferenceId: batch.batchReferenceId,
+        error: safeText(error.message),
+      });
+    } finally {
+      clearInterval(leaseHeartbeat);
+    }
+  }
+}
+
+function startBatchLeaseHeartbeat(batch) {
+  return setInterval(() => {
+    PayoutBatch.updateOne(
+      {
+        _id: batch._id,
+        status: { $in: [BATCH.PROCESSING, BATCH.RECONCILIATION_REQUIRED] },
+      },
+      {
+        $set: {
+          leaseExpiresAt: new Date(Date.now() + PAYOUT_CONFIG.OUTBOX_LEASE_MS),
+        },
+      },
+    ).catch((error) => {
+      logger.error(PAYOUT_MESSAGE.PAYOUT_BATCH_WORKER_FAILED, {
+        batchReferenceId: batch.batchReferenceId,
+        error: safeText(error.message),
+      });
+    });
+  }, PAYOUT_CONFIG.OUTBOX_LEASE_RENEW_INTERVAL_MS);
+}
+
+function wakePayoutBatchWorker() {
+  processPayoutBatchOutboxBatch(PAYOUT_CONFIG.OUTBOX_BATCH_SIZE).catch(
+    (error) => {
+      logger.error(PAYOUT_MESSAGE.PAYOUT_BATCH_WORKER_FAILED, {
+        error: safeText(error.message),
+      });
+    },
+  );
+}
+
+async function queueCashfreeBatchReconciliation(normalized) {
+  const batch = await findCashfreeBatch(normalized);
+  if (!batch) return false;
+
+  const queuedBatch = await PayoutBatch.findOneAndUpdate(
+    { _id: batch._id, status: { $ne: BATCH.FAILED } },
+    {
+      $set: {
+        status: BATCH.RECONCILIATION_REQUIRED,
+        consecutiveFailures: 0,
+        retryExhaustedAt: null,
+        providerStatus: CASHFREE_PAYOUT_STATUS.REJECTED,
+        lastError: PAYOUT_MESSAGE.PAYOUT_BATCH_RECONCILIATION_QUEUED,
+        availableAt: new Date(),
+      },
+    },
+    { new: true },
+  );
+  if (!queuedBatch) return false;
+
+  await PayoutOutbox.updateMany(
+    batch.status === BATCH.MANUAL_REVIEW
+      ? { executionBatchId: batch._id }
+      : { executionBatchId: batch._id, status: OUTBOX.SUBMITTED },
+    {
+      $set: {
+        status: OUTBOX.RECONCILIATION_REQUIRED,
+        lastError: PAYOUT_MESSAGE.PAYOUT_BATCH_RECONCILIATION_QUEUED,
+        availableAt: new Date(),
+        retryExhaustedAt: null,
+        manualReviewRequired: false,
+      },
+    },
+  );
+  wakePayoutBatchWorker();
+  return true;
+}
+
+async function findCashfreeBatch(normalized) {
+  const providerFilter = { provider: PAYOUT_PROVIDER.CASHFREE };
+  let batch = null;
+
+  if (normalized.batchReferenceId) {
+    batch = await PayoutBatch.findOne({
+      ...providerFilter,
+      batchReferenceId: normalized.batchReferenceId,
+    }).lean();
+  }
+
+  if (
+    batch &&
+    normalized.providerBatchTransferId &&
+    batch.providerBatchTransferId &&
+    batch.providerBatchTransferId !== normalized.providerBatchTransferId
+  ) {
+    return null;
+  }
+  if (batch || !normalized.providerBatchTransferId) return batch;
+
+  return PayoutBatch.findOne({
+    ...providerFilter,
+    providerBatchTransferId: normalized.providerBatchTransferId,
+  }).lean();
+}
+
+module.exports = {
+  enqueueApprovedWithdrawalBatch,
+  processPayoutBatchOutboxBatch,
+  wakePayoutBatchWorker,
+  queueCashfreeBatchReconciliation,
+  markBatchAmbiguous,
+  submitOrReconcileBatch,
+};

@@ -11,18 +11,17 @@ const {
   PAYOUT_MESSAGE,
   PAYOUT_SOURCE,
   PAYOUT_RECON_OUTCOME,
+  PAYOUT_OPERATION,
 } = require("../../constants/payouts");
 const Withdrawal = require("../../schemas/withdrawal.schema");
 const User = require("../../schemas/user.schema");
 const UserBankAccount = require("../../schemas/user-bank-account.schema");
 const PayoutAttempt = require("../../schemas/payout-attempt.schema");
 const PayoutOutbox = require("../../schemas/payout-outbox.schema");
+const PayoutRecon = require("../../schemas/payout-recon.schema");
 const { getProvider, currentProviderName } = require("../../functions/payouts");
 const { decrypt } = require("../../utils/encryption");
 const { applyTransferUpdate } = require("./payout-state.service");
-const {
-  recordPayoutReconciliation,
-} = require("./payout-reconciliation.service");
 const { safeText } = require("./payout-utils");
 const logger = require("../../config/pino.config");
 
@@ -395,14 +394,6 @@ async function requireReconciliation(outbox, reason) {
   );
 }
 
-function retryDelay(attempts) {
-  return Math.min(
-    PAYOUT_CONFIG.OUTBOX_RETRY_MAX_MS,
-    PAYOUT_CONFIG.OUTBOX_RETRY_BASE_MS *
-      2 ** Math.min(attempts || 0, PAYOUT_CONFIG.OUTBOX_RETRY_EXPONENT_LIMIT),
-  );
-}
-
 async function handleTransferFailure({
   error,
   outbox,
@@ -433,14 +424,14 @@ async function handleTransferFailure({
     lastError: safeText(error.message),
     leaseExpiresAt: null,
   };
-  if (!definitive) {
-    outboxUpdate.availableAt = new Date(
-      Date.now() + retryDelay(outbox.attempts),
-    );
+  if (definitive) {
+    outboxUpdate.processedAt = completedAt;
+    await PayoutOutbox.updateOne({ _id: outbox._id }, { $set: outboxUpdate });
+    await releaseWithdrawalForRetry(withdrawal);
+  } else {
+    error.payoutOperation = PAYOUT_OPERATION.TRANSFER_SUBMISSION;
+    await scheduleOutboxRetry(outbox, error);
   }
-  await PayoutOutbox.updateOne({ _id: outbox._id }, { $set: outboxUpdate });
-
-  if (definitive) await releaseWithdrawalForRetry(withdrawal);
   logger.error(PAYOUT_MESSAGE.TRANSFER_SUBMISSION_LOG, {
     withdrawalId: String(withdrawal._id),
     provider: outbox.provider,
@@ -472,28 +463,51 @@ async function submitOrReconcile(outbox) {
 
   const provider = getProvider(outbox.provider);
   assertOutboxMatchesWithdrawal(outbox, withdrawal);
-  const existingTransfer = await provider.getTransferStatus({
-    referenceId: outbox.providerReferenceId,
-  });
+  let existingTransfer;
+  try {
+    existingTransfer = await provider.getTransferStatus({
+      referenceId: outbox.providerReferenceId,
+    });
+  } catch (error) {
+    error.payoutOperation = PAYOUT_OPERATION.TRANSFER_STATUS_LOOKUP;
+    throw error;
+  }
   if (existingTransfer) {
-    await reconcileExistingTransfer(outbox, withdrawal, existingTransfer);
+    try {
+      await reconcileExistingTransfer(outbox, withdrawal, existingTransfer);
+    } catch (error) {
+      error.payoutOperation = PAYOUT_OPERATION.TRANSFER_RECONCILIATION;
+      throw error;
+    }
     return;
   }
 
-  const beneficiary = await ensureBeneficiary(
-    provider,
-    withdrawal,
-    withdrawal.userId,
-    withdrawal.bankAccountId,
-  );
+  let beneficiary;
+  try {
+    beneficiary = await ensureBeneficiary(
+      provider,
+      withdrawal,
+      withdrawal.userId,
+      withdrawal.bankAccountId,
+    );
+  } catch (error) {
+    error.payoutOperation = PAYOUT_OPERATION.BENEFICIARY_SETUP;
+    throw error;
+  }
   const requestStartedAt = new Date();
-  const attempt = await createPayoutAttempt({
-    outbox,
-    withdrawal,
-    provider,
-    beneficiary,
-    requestStartedAt,
-  });
+  let attempt;
+  try {
+    attempt = await createPayoutAttempt({
+      outbox,
+      withdrawal,
+      provider,
+      beneficiary,
+      requestStartedAt,
+    });
+  } catch (error) {
+    error.payoutOperation = PAYOUT_OPERATION.TRANSFER_ATTEMPT_CREATION;
+    throw error;
+  }
   try {
     await initiateProviderTransfer({
       outbox,
@@ -558,26 +572,212 @@ async function processPayoutOutboxBatch(
   }
 }
 
-async function scheduleOutboxRetry(outbox, error) {
-  await PayoutOutbox.updateOne(
-    { _id: outbox._id },
-    {
-      $set: {
-        status: OUTBOX.RECONCILIATION_REQUIRED,
-        lastError: safeText(error.message),
-        availableAt: new Date(Date.now() + retryDelay(outbox.attempts)),
-        leaseExpiresAt: null,
-      },
-    },
-  );
-}
-
 function wakePayoutOutboxWorker() {
   processPayoutOutboxBatch(PAYOUT_CONFIG.OUTBOX_BATCH_SIZE).catch((error) => {
     logger.error(PAYOUT_MESSAGE.OUTBOX_WORKER_FAILED, {
       error: safeText(error.message),
     });
   });
+}
+
+function hasTransferMismatch(withdrawal, transfer) {
+  const expectedAmount = Math.round(
+    withdrawal.cashAmount * PAYOUT_CONFIG.MINOR_UNITS_PER_INR,
+  );
+  const referenceMismatch =
+    transfer.providerReferenceId &&
+    transfer.providerReferenceId !== withdrawal.providerReferenceId;
+  const transferIdMismatch =
+    transfer.providerTransferId &&
+    withdrawal.providerTransferId &&
+    transfer.providerTransferId !== withdrawal.providerTransferId;
+  const amountMismatch =
+    transfer.amountMinor != null &&
+    Number(transfer.amountMinor) !== expectedAmount;
+  const currencyMismatch =
+    transfer.currency && transfer.currency !== PAYOUT_CURRENCY.INR;
+
+  if (
+    referenceMismatch ||
+    transferIdMismatch ||
+    amountMismatch ||
+    currencyMismatch
+  ) {
+    return true;
+  }
+  return false;
+}
+
+async function recordPayoutReconciliation({
+  withdrawal,
+  requestedAt = new Date(),
+  outcome,
+  transfer = null,
+  errorMessage = null,
+  retryAttempt = null,
+  operation = null,
+  providerStatusCode = null,
+  providerErrorCode = null,
+  session = null,
+}) {
+  const [reconciliation] = await PayoutRecon.create(
+    [
+      {
+        withdrawalId: withdrawal._id,
+        provider: withdrawal.payoutProvider,
+        providerTransferId: transfer?.providerTransferId || null,
+        payoutId: transfer?.providerTransferId || null,
+        providerReferenceId: withdrawal.providerReferenceId,
+        referenceId: withdrawal.providerReferenceId,
+        requestedAt,
+        retryAttempt,
+        operation,
+        outcome,
+        providerStatus: transfer?.rawStatus || transfer?.status || null,
+        providerStatusCode,
+        providerErrorCode: providerErrorCode
+          ? safeText(providerErrorCode)
+          : null,
+        providerResponse: transfer?.safeResponse || {},
+        errorMessage: errorMessage ? safeText(errorMessage) : null,
+      },
+    ],
+    session ? { session } : undefined,
+  );
+  return reconciliation;
+}
+
+function retryDelay(attempts) {
+  return Math.min(
+    PAYOUT_CONFIG.OUTBOX_RETRY_MAX_MS,
+    PAYOUT_CONFIG.OUTBOX_RETRY_BASE_MS *
+      2 ** Math.min(attempts || 0, PAYOUT_CONFIG.OUTBOX_RETRY_EXPONENT_LIMIT),
+  );
+}
+
+async function scheduleOutboxRetry(outbox, error) {
+  const retryLimitReached =
+    outbox.attempts >= PAYOUT_CONFIG.OUTBOX_MAX_ATTEMPTS;
+  const now = new Date();
+  const session = await mongoose.startSession();
+  let withdrawal;
+
+  try {
+    await session.withTransaction(async () => {
+      withdrawal = await Withdrawal.findById(outbox.withdrawalId)
+        .select(
+          "_id payoutProvider providerReferenceId providerTransferId payoutAttemptCount status cashAmount",
+        )
+        .session(session)
+        .lean();
+
+      if (withdrawal) {
+        await recordPayoutReconciliation({
+          withdrawal,
+          requestedAt: now,
+          outcome: PAYOUT_RECON_OUTCOME.ERROR,
+          errorMessage: error.message,
+          retryAttempt: outbox.attempts,
+          operation:
+            error.payoutOperation || PAYOUT_OPERATION.OUTBOX_PROCESSING,
+          providerStatusCode: error.providerStatusCode || null,
+          providerErrorCode: error.providerErrorCode || null,
+          session,
+        });
+      }
+
+      const update = {
+        status: retryLimitReached
+          ? OUTBOX.FAILED
+          : OUTBOX.RECONCILIATION_REQUIRED,
+        lastError: safeText(error.message),
+        leaseExpiresAt: null,
+        processedAt: now,
+        retryExhaustedAt: null,
+        manualReviewRequired: false,
+      };
+      if (retryLimitReached) {
+        update.retryExhaustedAt = now;
+        update.manualReviewRequired = true;
+        update.availableAt = null;
+      } else {
+        update.availableAt = new Date(
+          now.getTime() + retryDelay(outbox.attempts),
+        );
+      }
+      await PayoutOutbox.updateOne(
+        { _id: outbox._id, status: OUTBOX.PROCESSING },
+        { $set: update },
+        { session },
+      );
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  if (!retryLimitReached) return;
+
+  const hasPossibleProviderTransfer =
+    await hasPossibleProviderTransferAttempt(withdrawal);
+  if (
+    !hasPossibleProviderTransfer &&
+    withdrawal?.status === WITHDRAWAL_STATUS.PROCESSING
+  ) {
+    await markWithdrawalFailedWhenTransferWasNeverSubmitted(outbox, withdrawal);
+  }
+
+  logger.error(PAYOUT_MESSAGE.OUTBOX_RETRIES_EXHAUSTED, {
+    withdrawalId: String(outbox.withdrawalId),
+    provider: outbox.provider,
+    attempts: outbox.attempts,
+    maxAttempts: PAYOUT_CONFIG.OUTBOX_MAX_ATTEMPTS,
+    manualReviewRequired: hasPossibleProviderTransfer,
+    error: safeText(error.message),
+  });
+}
+
+async function hasPossibleProviderTransferAttempt(withdrawal) {
+  if (!withdrawal || withdrawal.providerTransferId) return true;
+  if (withdrawal.payoutAttemptCount !== 0) return true;
+
+  const existingAttempt = await PayoutAttempt.findOne({
+    withdrawalId: withdrawal._id,
+  })
+    .select("_id")
+    .lean();
+  return Boolean(existingAttempt);
+}
+
+async function markWithdrawalFailedWhenTransferWasNeverSubmitted(
+  outbox,
+  withdrawal,
+) {
+  try {
+    const result = await applyTransferUpdate({
+      withdrawal,
+      provider: withdrawal.payoutProvider,
+      normalized: {
+        providerReferenceId: withdrawal.providerReferenceId,
+        targetStatus: WITHDRAWAL_STATUS.FAILED,
+        failureReason: PAYOUT_MESSAGE.OUTBOX_RETRIES_EXHAUSTED,
+      },
+      source: PAYOUT_SOURCE.PAYOUT_RECONCILIATION,
+    });
+    await PayoutOutbox.updateOne(
+      { _id: outbox._id, status: OUTBOX.FAILED },
+      {
+        $set: {
+          manualReviewRequired:
+            result.payoutStatus !== WITHDRAWAL_STATUS.FAILED,
+        },
+      },
+    );
+  } catch (error) {
+    logger.error(PAYOUT_MESSAGE.OUTBOX_RETRIES_EXHAUSTED, {
+      withdrawalId: String(withdrawal._id),
+      error: safeText(error.message),
+    });
+  }
 }
 
 module.exports = {
@@ -587,4 +787,7 @@ module.exports = {
   ensureBeneficiary,
   amountInMinorUnits,
   payoutNarration,
+  hasTransferMismatch,
+  recordPayoutReconciliation,
+  scheduleOutboxRetry,
 };

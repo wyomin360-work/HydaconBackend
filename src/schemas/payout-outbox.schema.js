@@ -43,6 +43,8 @@ const payoutOutboxSchema = new mongoose.Schema(
     availableAt: { type: Date, default: Date.now, index: true },
     leaseExpiresAt: { type: Date, default: null, index: true },
     lastError: { type: String, default: null },
+    retryExhaustedAt: { type: Date, default: null },
+    manualReviewRequired: { type: Boolean, default: false, index: true },
     lastProviderStatus: { type: String, default: null },
     lastProviderStatusCode: { type: String, default: null },
     lastReconciliationOutcome: {

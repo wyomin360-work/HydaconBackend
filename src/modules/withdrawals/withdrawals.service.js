@@ -12,6 +12,8 @@ const {
   PAYOUT_LEDGER_SOURCE,
   PAYOUT_HTTP_STATUS,
   PAYOUT_MESSAGE,
+  PAYOUT_CONFIG,
+  PAYOUT_BATCH_STATUS,
 } = require("../../constants/payouts");
 const {
   POINTS_TRANSACTION_TYPE,
@@ -26,6 +28,8 @@ const PointsLedger = require("../../schemas/points-ledger.schema");
 const PayoutAttempt = require("../../schemas/payout-attempt.schema");
 const PayoutEvent = require("../../schemas/payout-event.schema");
 const PayoutRecon = require("../../schemas/payout-recon.schema");
+const PayoutOutbox = require("../../schemas/payout-outbox.schema");
+const PayoutBatch = require("../../schemas/payout-batch.schema");
 const { decrypt } = require("../../utils/encryption");
 const { sendFcmNotifications } = require("../../functions/fcm");
 const { sendFailResponse } = require("../../utils/responseHandlers");
@@ -33,10 +37,10 @@ const { formatNotification } = require("../../utils/heplers");
 const {
   enqueueApprovedWithdrawal,
   wakePayoutOutboxWorker,
-} = require("./payout-execution.service");
+} = require("../payouts/payout-execution.service");
 const {
   enqueueApprovedWithdrawalBatch,
-} = require("./payout-batch-execution.service");
+} = require("../payouts/payout-batch.service");
 const logger = require("../../config/pino.config");
 
 /**
@@ -350,33 +354,51 @@ async function getWithdrawalDetails(id) {
     sendFailResponse("Withdrawal request not found");
   }
 
-  const [financialLedger, payoutAttempts, webhookEvents, reconciliations] =
-    await Promise.all([
-      LedgerEntry.find({ withdrawalId: withdrawal._id })
-        .sort({ createdAt: 1 })
-        .lean(),
-      PayoutAttempt.find({ withdrawalId: withdrawal._id })
-        .sort({ attemptNumber: 1 })
-        .lean(),
-      PayoutEvent.find({
-        $or: [
-          { referenceId: String(withdrawal._id) },
-          ...(withdrawal.providerTransferId
-            ? [{ providerTransferId: withdrawal.providerTransferId }]
-            : []),
-          ...(withdrawal.providerReferenceId
-            ? [{ providerReferenceId: withdrawal.providerReferenceId }]
-            : []),
-        ],
-      })
-        .sort({ createdAt: 1 })
-        .limit(100)
-        .lean(),
-      PayoutRecon.find({ withdrawalId: withdrawal._id })
-        .sort({ createdAt: -1 })
-        .limit(50)
-        .lean(),
-    ]);
+  const [
+    financialLedger,
+    payoutAttempts,
+    webhookEvents,
+    reconciliations,
+    payoutOutbox,
+    payoutBatch,
+  ] = await Promise.all([
+    LedgerEntry.find({ withdrawalId: withdrawal._id })
+      .sort({ createdAt: 1 })
+      .lean(),
+    PayoutAttempt.find({ withdrawalId: withdrawal._id })
+      .sort({ attemptNumber: 1 })
+      .lean(),
+    PayoutEvent.find({
+      $or: [
+        { referenceId: String(withdrawal._id) },
+        ...(withdrawal.providerTransferId
+          ? [{ providerTransferId: withdrawal.providerTransferId }]
+          : []),
+        ...(withdrawal.providerReferenceId
+          ? [{ providerReferenceId: withdrawal.providerReferenceId }]
+          : []),
+      ],
+    })
+      .sort({ createdAt: 1 })
+      .limit(100)
+      .lean(),
+    PayoutRecon.find({ withdrawalId: withdrawal._id })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean(),
+    PayoutOutbox.findOne({ withdrawalId: withdrawal._id })
+      .select(
+        "status attempts availableAt lastError retryExhaustedAt manualReviewRequired lastProviderStatus lastProviderStatusCode lastReconciliationOutcome",
+      )
+      .lean(),
+    withdrawal.payoutBatchId
+      ? PayoutBatch.findById(withdrawal.payoutBatchId)
+          .select(
+            "status consecutiveFailures availableAt lastError retryExhaustedAt",
+          )
+          .lean()
+      : null,
+  ]);
   const ledgerKeys = new Set(financialLedger.map((entry) => entry.entryKey));
   const requiredLedgerKeys = [`withdrawal:${withdrawal._id}:coin-debit`];
   if (PAYOUT_FAILURE_TERMINAL_STATUSES.includes(withdrawal.status)) {
@@ -419,6 +441,21 @@ async function getWithdrawalDetails(id) {
     id: withdrawal._id,
     user: withdrawal.userId,
     bankAccount: decryptedBank,
+    payoutExecution: payoutOutbox
+      ? {
+          ...payoutOutbox,
+          attempts: payoutBatch?.consecutiveFailures ?? payoutOutbox.attempts,
+          availableAt: payoutBatch?.availableAt || payoutOutbox.availableAt,
+          lastError: payoutBatch?.lastError || payoutOutbox.lastError,
+          retryExhaustedAt:
+            payoutBatch?.retryExhaustedAt || payoutOutbox.retryExhaustedAt,
+          manualReviewRequired:
+            payoutOutbox.manualReviewRequired ||
+            payoutBatch?.status === PAYOUT_BATCH_STATUS.MANUAL_REVIEW,
+          batchStatus: payoutBatch?.status || null,
+          maxAttempts: PAYOUT_CONFIG.OUTBOX_MAX_ATTEMPTS,
+        }
+      : null,
     audit: {
       coverage: requiredLedgerKeys.every((key) => ledgerKeys.has(key))
         ? "COMPLETE"

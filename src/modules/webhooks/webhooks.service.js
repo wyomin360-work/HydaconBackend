@@ -21,11 +21,11 @@ const { sendFcmNotifications } = require("../../functions/fcm");
 const { formatNotification } = require("../../utils/heplers");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const { getProvider, currentProviderName } = require("../../functions/payouts");
-const { applyTransferUpdate } = require("../withdrawals/payout-state.service");
+const { applyTransferUpdate } = require("../payouts/payout-state.service");
 const {
   queueCashfreeBatchReconciliation,
-} = require("../withdrawals/payout-batch-execution.service");
-const { safeText } = require("../withdrawals/payout-utils");
+} = require("../payouts/payout-batch.service");
+const { safeText } = require("../payouts/payout-utils");
 const logger = require("../../config/pino.config");
 
 function verifySignature(rawBody, signature, secret) {

@@ -11,16 +11,14 @@ const Withdrawal = require("../schemas/withdrawal.schema");
 const { getProvider } = require("../functions/payouts");
 const {
   processPayoutOutboxBatch,
-} = require("../modules/withdrawals/payout-execution.service");
-const {
-  processPayoutBatchOutboxBatch,
-} = require("../modules/withdrawals/payout-batch-execution.service");
-const { processWebhook } = require("../modules/webhooks/webhooks.service");
-const { safeText } = require("../modules/withdrawals/payout-utils");
-const {
   hasTransferMismatch,
   recordPayoutReconciliation,
-} = require("../modules/withdrawals/payout-reconciliation.service");
+} = require("../modules/payouts/payout-execution.service");
+const {
+  processPayoutBatchOutboxBatch,
+} = require("../modules/payouts/payout-batch.service");
+const { processWebhook } = require("../modules/webhooks/webhooks.service");
+const { safeText } = require("../modules/payouts/payout-utils");
 const logger = require("../config/pino.config");
 
 async function processPayoutReconciliationBatch() {

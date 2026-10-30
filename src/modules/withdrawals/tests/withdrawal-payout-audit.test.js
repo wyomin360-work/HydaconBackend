@@ -1,7 +1,7 @@
 jest.mock("../../../schemas/withdrawal.schema", () => ({
   findById: jest.fn(),
 }));
-jest.mock("../payout-execution.service", () => ({
+jest.mock("../../payouts/payout-execution.service", () => ({
   enqueueApprovedWithdrawal: jest.fn(),
   wakePayoutOutboxWorker: jest.fn(),
 }));
@@ -20,7 +20,7 @@ const Withdrawal = require("../../../schemas/withdrawal.schema");
 const {
   enqueueApprovedWithdrawal,
   wakePayoutOutboxWorker,
-} = require("../payout-execution.service");
+} = require("../../payouts/payout-execution.service");
 const service = require("../withdrawals.service");
 
 describe("withdrawal payout approval queue", () => {

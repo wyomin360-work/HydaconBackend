@@ -2,6 +2,15 @@
 
 ## Provider contract
 
+Payout business logic lives in `src/modules/payouts/`, separate from the
+withdrawal request module. Keep the service layer to three cohesive services:
+`payout-execution.service.js` for individual transfers, retries, and transfer
+audit; `payout-batch.service.js` for batch approval, execution, and recovery;
+and `payout-state.service.js` for applying provider outcomes and their ledger
+effects. Shared payout helpers belong alongside these services. The withdrawals,
+webhooks, and recovery cron modules call the payout services through their
+public exports rather than owning payout execution logic.
+
 Each adapter under `src/functions/payouts/providers/<provider>` owns its API
 requests, request/response mapping, and webhook signature verification. The
 registry resolves an adapter from `PAYOUT_PROVIDER` for new approvals or from the
@@ -38,6 +47,14 @@ attempt, and submits using the same reference. This allows recovery if the worke
 crashes before or after the external request. Provider choice is immutable for an
 approved withdrawal; ambiguous provider outcomes are reconciled against that
 provider before any further request.
+
+Outbox worker failures use bounded exponential backoff. Each failed worker pass
+is written to payout reconciliation audit with the operation, retry number,
+provider error code/status, and sanitized cause. At the retry limit the outbox
+is failed and surfaced in admin details. The withdrawal is marked failed and
+refunded only when no provider request could have been submitted; otherwise it
+remains unresolved for manual provider reconciliation to prevent a duplicate
+payout or an incorrect refund.
 
 Cashfree batch approval validates the complete selected set before changing any
 withdrawal. It atomically creates a batch record and links each withdrawal's

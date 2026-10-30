@@ -49,9 +49,9 @@ jest.mock("../../../functions/fcm", () => ({
   sendFcmNotifications: jest.fn().mockResolvedValue({ success: true }),
 }));
 
-jest.mock("../../../modules/withdrawals/payout-execution.service", () => {
+jest.mock("../../../modules/payouts/payout-execution.service", () => {
   const actual = jest.requireActual(
-    "../../../modules/withdrawals/payout-execution.service",
+    "../../../modules/payouts/payout-execution.service",
   );
   return { ...actual, wakePayoutOutboxWorker: jest.fn() };
 });

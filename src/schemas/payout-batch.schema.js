@@ -43,6 +43,12 @@ const payoutBatchSchema = new mongoose.Schema(
       default: PAYOUT_CONFIG.OUTBOX_DEFAULT_ATTEMPTS,
       min: PAYOUT_CONFIG.OUTBOX_MINIMUM_ATTEMPTS,
     },
+    consecutiveFailures: {
+      type: Number,
+      default: 0,
+      min: PAYOUT_CONFIG.OUTBOX_MINIMUM_ATTEMPTS,
+    },
+    retryExhaustedAt: { type: Date, default: null },
     availableAt: { type: Date, default: Date.now, index: true },
     leaseExpiresAt: { type: Date, default: null, index: true },
     lastError: { type: String, default: null },

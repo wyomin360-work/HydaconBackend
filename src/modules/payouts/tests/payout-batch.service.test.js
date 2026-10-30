@@ -11,6 +11,7 @@ jest.mock("../../../schemas/payout-batch.schema", () => {
     this._id = "batch-123";
     this.save = jest.fn().mockResolvedValue(this);
   });
+  PayoutBatch.findOneAndUpdate = jest.fn();
   return PayoutBatch;
 });
 jest.mock("../../../functions/payouts", () => ({
@@ -25,18 +26,11 @@ jest.mock("../payout-execution.service", () => ({
     Math.round(withdrawal.cashAmount * 100),
   ),
 }));
-jest.mock("../payout-batch-worker.service", () => ({
-  wakePayoutBatchWorker: jest.fn(),
-}));
-
 const mongoose = require("mongoose");
 const Withdrawal = require("../../../schemas/withdrawal.schema");
 const PayoutOutbox = require("../../../schemas/payout-outbox.schema");
 const PayoutBatch = require("../../../schemas/payout-batch.schema");
-const { wakePayoutBatchWorker } = require("../payout-batch-worker.service");
-const {
-  enqueueApprovedWithdrawalBatch,
-} = require("../payout-batch-approval.service");
+const { enqueueApprovedWithdrawalBatch } = require("../payout-batch.service");
 
 describe("Cashfree batch approval", () => {
   const withdrawalIds = ["withdrawal-1", "withdrawal-2"];
@@ -67,6 +61,10 @@ describe("Cashfree batch approval", () => {
       modifiedCount: withdrawalIds.length,
     });
     PayoutOutbox.bulkWrite.mockResolvedValue({});
+    PayoutBatch.findOneAndUpdate.mockImplementation(() => {
+      expect(committed).toBe(true);
+      return Promise.resolve(null);
+    });
 
     session = {
       withTransaction: jest.fn(async (callback) => {
@@ -76,9 +74,6 @@ describe("Cashfree batch approval", () => {
       endSession: jest.fn().mockResolvedValue(undefined),
     };
     jest.spyOn(mongoose, "startSession").mockResolvedValue(session);
-    wakePayoutBatchWorker.mockImplementation(() => {
-      expect(committed).toBe(true);
-    });
   });
 
   afterEach(() => jest.restoreAllMocks());
@@ -114,7 +109,7 @@ describe("Cashfree batch approval", () => {
       }),
     );
     expect(PayoutOutbox.bulkWrite).toHaveBeenCalledTimes(1);
-    expect(wakePayoutBatchWorker).toHaveBeenCalledTimes(1);
+    expect(PayoutBatch.findOneAndUpdate).toHaveBeenCalledTimes(1);
   });
 
   test("does not partially approve a set containing an ineligible withdrawal", async () => {
@@ -127,6 +122,6 @@ describe("Cashfree batch approval", () => {
     expect(Withdrawal.updateMany).not.toHaveBeenCalled();
     expect(PayoutBatch).not.toHaveBeenCalled();
     expect(PayoutOutbox.bulkWrite).not.toHaveBeenCalled();
-    expect(wakePayoutBatchWorker).not.toHaveBeenCalled();
+    expect(PayoutBatch.findOneAndUpdate).not.toHaveBeenCalled();
   });
 });
