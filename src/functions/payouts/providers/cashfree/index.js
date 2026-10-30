@@ -164,6 +164,8 @@ module.exports = {
   initiateBatchTransfer,
   getBatchTransferStatus,
   verifyWebhook: webhook.verifyWebhook,
+  isWebhookSetupValidation: webhook.isWebhookSetupValidation,
+  isWebhookSourceAllowed: webhook.isWebhookSourceAllowed,
   normalizeWebhook: mapping.normalizeWebhook,
   createIdempotencyKey,
   validateConfig: api.validateConfig,

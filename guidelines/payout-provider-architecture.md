@@ -79,6 +79,14 @@ reversal after completion also writes a compensating INR ledger entry and
 reduces the reported total. The periodic reconciliation job queries each
 withdrawal's persisted provider and applies the same canonical state handler.
 
+Cashfree may send an unsigned validation request when an admin tests and adds
+the webhook URL. Acknowledge an unsigned request with HTTP 200 only when its
+`X-Real-IP` or the first address in `X-Forwarded-For` matches the Cashfree
+production IP allowlist; do not persist or apply the request. All signed
+Cashfree events must come from an allowlisted IP and pass HMAC signature
+verification. The reverse proxy must set these headers from the actual client
+connection, and direct access to the application must be blocked.
+
 Provider responses and webhook payloads written to audit records are allowlisted
 and redacted. Bank account data remains encrypted in the user bank account; the
 provider beneficiary reference is associated with a keyed account fingerprint.

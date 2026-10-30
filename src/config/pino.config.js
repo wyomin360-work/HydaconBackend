@@ -7,6 +7,16 @@ class Logger {
     );
     this.logger = pino({
       level: isProduction ? "info" : "debug",
+      redact: {
+        paths: [
+          "req.headers.authorization",
+          "req.headers.cookie",
+          "req.headers['set-cookie']",
+          "req.headers['x-api-key']",
+          "req.headers['x-webhook-signature']",
+        ],
+        censor: "[REDACTED]",
+      },
       ...(isProduction
         ? {}
         : {

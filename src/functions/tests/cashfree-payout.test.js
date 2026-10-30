@@ -277,6 +277,7 @@ describe("Cashfree payout provider", () => {
     expect(() =>
       provider.verifyWebhook(
         {
+          "x-real-ip": "52.66.101.190",
           "x-webhook-timestamp": timestamp,
           "x-webhook-signature": signature,
         },
@@ -287,6 +288,7 @@ describe("Cashfree payout provider", () => {
     expect(() =>
       provider.verifyWebhook(
         {
+          "x-real-ip": "52.66.101.190",
           "x-webhook-timestamp": timestamp,
           "x-webhook-signature": `${signature}invalid`,
         },

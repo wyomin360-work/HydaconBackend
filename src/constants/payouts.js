@@ -44,6 +44,12 @@ const CASHFREE_PAYOUT_EVENT = Object.freeze({
   CREDIT_CONFIRMATION: "CREDIT_CONFIRMATION",
   LOW_BALANCE_ALERT: "LOW_BALANCE_ALERT",
 });
+const CASHFREE_PAYOUT_WEBHOOK_IPS = Object.freeze([
+  "52.66.101.190",
+  "3.109.102.144",
+  "18.60.134.245",
+  "18.60.183.142",
+]);
 const CASHFREE_PAYOUT_TRANSFER_EVENTS = Object.freeze([
   CASHFREE_PAYOUT_EVENT.TRANSFER_REVERSED,
   CASHFREE_PAYOUT_EVENT.TRANSFER_FAILED,
@@ -410,6 +416,7 @@ const PAYOUT_MESSAGE = Object.freeze({
   RAW_BODY_MISSING: "Webhook raw body is unavailable",
   CASHFREE_WEBHOOK_SECRET_MISSING:
     "Cashfree payout webhook secret is not configured",
+  CASHFREE_WEBHOOK_IP_REJECTED: "Cashfree webhook source IP is not allowlisted",
   SIGNATURE_HEADERS_MISSING: "Webhook signature headers are missing",
   INVALID_SIGNATURE: "Invalid webhook signature",
   WEBHOOK_SIGNATURE_REJECTED: "Payout webhook signature verification failed",
@@ -537,6 +544,7 @@ module.exports = {
   CASHFREE_PAYOUT_STATUS,
   CASHFREE_PAYOUT_STATUS_CODE,
   CASHFREE_PAYOUT_EVENT,
+  CASHFREE_PAYOUT_WEBHOOK_IPS,
   CASHFREE_PAYOUT_TRANSFER_EVENTS,
   CASHFREE_BENEFICIARY_STATUS,
   RAZORPAYX_PAYOUT_EVENT,

@@ -10,6 +10,7 @@ const AppError = require("../../utils/appError");
 const validateRequest = require("../../middlewares/validator");
 const { reportPayoutAlert } = require("../payouts/payout-alerts");
 const logger = require("../../config/pino.config");
+const { sendResponse } = require("../../utils/responseHandlers");
 const {
   cashfreePayoutWebhookRequestType,
   razorpayxPayoutWebhookRequestType,
@@ -31,7 +32,14 @@ function validatePayoutWebhook(providerName) {
     const resolvedProvider = providerName || currentProviderName();
     req.params.provider = resolvedProvider;
     try {
-      getProvider(resolvedProvider).verifyWebhook(req.headers, req.rawBody);
+      const provider = getProvider(resolvedProvider);
+      if (provider.isWebhookSetupValidation?.(req.headers, req.rawBody)) {
+        logger.info("Cashfree webhook setup validation ping acknowledged", {
+          endpoint: req.path,
+        });
+        return sendResponse(res, { acknowledged: true });
+      }
+      provider.verifyWebhook(req.headers, req.rawBody);
     } catch (error) {
       reportPayoutAlert({
         type: PAYOUT_ALERT_TYPE.WEBHOOK_SIGNATURE_FAILURE,

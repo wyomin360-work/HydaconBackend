@@ -1,5 +1,8 @@
 const crypto = require("crypto");
-const { PAYOUT_MESSAGE } = require("../../../../constants/payouts");
+const {
+  CASHFREE_PAYOUT_WEBHOOK_IPS,
+  PAYOUT_MESSAGE,
+} = require("../../../../constants/payouts");
 
 function signatureError(message) {
   const error = new Error(message);
@@ -7,7 +10,31 @@ function signatureError(message) {
   return error;
 }
 
+function isWebhookSourceAllowed(headers = {}) {
+  const sourceIp =
+    headers["x-real-ip"] || headers["x-forwarded-for"]?.split(",")[0];
+  if (typeof sourceIp !== "string") return false;
+
+  const normalizedIp = sourceIp.trim().replace(/^::ffff:/i, "");
+  return CASHFREE_PAYOUT_WEBHOOK_IPS.includes(normalizedIp);
+}
+
+function isWebhookSetupValidation(headers = {}) {
+  if (
+    !isWebhookSourceAllowed(headers) ||
+    headers["x-webhook-signature"] != null ||
+    headers["x-webhook-timestamp"] != null
+  ) {
+    return false;
+  }
+  return true;
+}
+
 function verifyWebhook(headers = {}, rawBody) {
+  if (!isWebhookSourceAllowed(headers)) {
+    throw signatureError(PAYOUT_MESSAGE.CASHFREE_WEBHOOK_IP_REJECTED);
+  }
+
   const signature = headers["x-webhook-signature"];
   const timestamp = headers["x-webhook-timestamp"];
   const secret = process.env.CASHFREE_PAYOUT_CLIENT_SECRET;
@@ -29,4 +56,8 @@ function verifyWebhook(headers = {}, rawBody) {
   }
 }
 
-module.exports = { verifyWebhook };
+module.exports = {
+  verifyWebhook,
+  isWebhookSetupValidation,
+  isWebhookSourceAllowed,
+};
