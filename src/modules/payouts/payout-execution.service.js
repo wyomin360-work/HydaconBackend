@@ -15,6 +15,8 @@ const {
   PAYOUT_SOURCE,
   PAYOUT_RECON_OUTCOME,
   PAYOUT_OPERATION,
+  PAYOUT_ALERT_TYPE,
+  PAYOUT_ALERT_SEVERITY,
 } = require("../../constants/payouts");
 const Withdrawal = require("../../schemas/withdrawal.schema");
 const User = require("../../schemas/user.schema");
@@ -22,11 +24,16 @@ const UserBankAccount = require("../../schemas/user-bank-account.schema");
 const PayoutAttempt = require("../../schemas/payout-attempt.schema");
 const PayoutOutbox = require("../../schemas/payout-outbox.schema");
 const PayoutRecon = require("../../schemas/payout-recon.schema");
+const {
+  createOrUpdatePayoutRecord,
+  syncPayoutRecord,
+} = require("./payout-record.service");
 const { getProvider, currentProviderName } = require("../../functions/payouts");
 const { decrypt } = require("../../utils/encryption");
 const { applyTransferUpdate } = require("./payout-state.service");
 const { safeText } = require("./payout-utils");
 const logger = require("../../config/pino.config");
+const { reportPayoutAlert } = require("./payout-alerts");
 
 async function enqueueApprovedWithdrawal(
   adminId,
@@ -64,6 +71,18 @@ async function enqueueApprovedWithdrawal(
       withdrawal.approvedAt = new Date();
       withdrawal.approvalSource = approvalSource;
       await withdrawal.save({ session });
+      await createOrUpdatePayoutRecord({
+        withdrawal,
+        approval: {
+          status: WITHDRAWAL_STATUS.PROCESSING,
+          provider,
+          providerReferenceId: referenceId,
+          adminId,
+          approvalSource,
+          approvedAt: withdrawal.approvedAt,
+        },
+        session,
+      });
       await PayoutOutbox.findOneAndUpdate(
         { withdrawalId: withdrawal._id },
         {
@@ -471,10 +490,23 @@ async function recordTransferResponse({
     return;
   }
 
-  await Withdrawal.updateOne(
-    { _id: withdrawal._id },
-    { $set: { providerTransferId: result.providerTransferId } },
-  );
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      await Withdrawal.updateOne(
+        { _id: withdrawal._id },
+        { $set: { providerTransferId: result.providerTransferId } },
+        { session },
+      );
+      await syncPayoutRecord(
+        withdrawal._id,
+        { providerTransferId: result.providerTransferId },
+        session,
+      );
+    });
+  } finally {
+    await session.endSession();
+  }
   await markOutboxSubmitted(outbox, result);
   if (result.targetStatus) {
     await applyTransferUpdate({
@@ -547,20 +579,35 @@ async function handleTransferFailure({
 }
 
 async function releaseWithdrawalForRetry(withdrawal) {
-  await Withdrawal.updateOne(
-    {
-      _id: withdrawal._id,
-      status: WITHDRAWAL_STATUS.PROCESSING,
-      providerTransferId: null,
-    },
-    {
-      $set: {
-        status: WITHDRAWAL_STATUS.PENDING,
-        approvedBy: null,
-        approvedAt: null,
-      },
-    },
-  );
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const result = await Withdrawal.updateOne(
+        {
+          _id: withdrawal._id,
+          status: WITHDRAWAL_STATUS.PROCESSING,
+          providerTransferId: null,
+        },
+        {
+          $set: {
+            status: WITHDRAWAL_STATUS.PENDING,
+            approvedBy: null,
+            approvedAt: null,
+          },
+        },
+        { session },
+      );
+      if (result.modifiedCount) {
+        await syncPayoutRecord(
+          withdrawal._id,
+          { status: WITHDRAWAL_STATUS.PENDING },
+          session,
+        );
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
 }
 
 async function submitOrReconcile(outbox) {
@@ -845,6 +892,36 @@ async function scheduleOutboxRetry(outbox, error) {
     manualReviewRequired: hasPossibleProviderTransfer,
     error: safeText(error.message),
   });
+  reportPayoutAlert({
+    type: PAYOUT_ALERT_TYPE.RETRIES_EXHAUSTED,
+    severity: PAYOUT_ALERT_SEVERITY.CRITICAL,
+    summary: PAYOUT_MESSAGE.OUTBOX_RETRIES_EXHAUSTED,
+    error,
+    provider: outbox.provider,
+    withdrawalId: String(outbox.withdrawalId),
+    details: {
+      attempts: outbox.attempts,
+      maxAttempts: PAYOUT_CONFIG.OUTBOX_MAX_ATTEMPTS,
+      lastOperation:
+        error.payoutOperation || PAYOUT_OPERATION.OUTBOX_PROCESSING,
+    },
+  });
+  if (hasPossibleProviderTransfer) {
+    reportPayoutAlert({
+      type: PAYOUT_ALERT_TYPE.MANUAL_REVIEW_REQUIRED,
+      severity: PAYOUT_ALERT_SEVERITY.CRITICAL,
+      summary: PAYOUT_MESSAGE.PAYOUT_MANUAL_REVIEW_REQUIRED,
+      error,
+      provider: outbox.provider,
+      withdrawalId: String(outbox.withdrawalId),
+      details: {
+        attempts: outbox.attempts,
+        maxAttempts: PAYOUT_CONFIG.OUTBOX_MAX_ATTEMPTS,
+        lastOperation:
+          error.payoutOperation || PAYOUT_OPERATION.OUTBOX_PROCESSING,
+      },
+    });
+  }
 }
 
 async function hasPossibleProviderTransferAttempt(withdrawal) {

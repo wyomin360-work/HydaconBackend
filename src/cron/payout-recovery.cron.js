@@ -6,6 +6,8 @@ const {
   PAYOUT_SOURCE,
   PAYOUT_CONFIG,
   PAYOUT_MESSAGE,
+  PAYOUT_ALERT_TYPE,
+  PAYOUT_ALERT_SEVERITY,
 } = require("../constants/payouts");
 const Withdrawal = require("../schemas/withdrawal.schema");
 const { getProvider } = require("../functions/payouts");
@@ -19,6 +21,7 @@ const {
 } = require("../modules/payouts/payout-batch.service");
 const { processWebhook } = require("../modules/webhooks/webhooks.service");
 const { safeText } = require("../modules/payouts/payout-utils");
+const { reportPayoutAlert } = require("../modules/payouts/payout-alerts");
 const logger = require("../config/pino.config");
 
 async function processPayoutReconciliationBatch() {
@@ -99,7 +102,21 @@ async function reconcileWithdrawal(withdrawal, requestedAt) {
         ? PAYOUT_MESSAGE.PROVIDER_TRANSFER_DETAILS_MISMATCH
         : null,
     });
-    if (mismatch) return;
+    if (mismatch) {
+      reportPayoutAlert({
+        type: PAYOUT_ALERT_TYPE.RECONCILIATION_MISMATCH,
+        severity: PAYOUT_ALERT_SEVERITY.CRITICAL,
+        summary: PAYOUT_MESSAGE.PROVIDER_TRANSFER_DETAILS_MISMATCH,
+        error: new Error(PAYOUT_MESSAGE.PROVIDER_TRANSFER_DETAILS_MISMATCH),
+        provider: withdrawal.payoutProvider,
+        withdrawalId: String(withdrawal._id),
+        details: {
+          providerTransferId: transfer.providerTransferId || null,
+          providerStatus: transfer.rawStatus || transfer.status || null,
+        },
+      });
+      return;
+    }
 
     await processReconciliationTransfer(withdrawal, transfer);
   } catch (error) {

@@ -3,7 +3,10 @@ const {
   APP_NOTIFICATIONS,
   getNotification,
 } = require("../../constants/notifications");
-const { WITHDRAWAL_STATUS } = require("../../constants/withdrawals");
+const {
+  WITHDRAWAL_STATUS,
+  WITHDRAWAL_POINT_ROUNDING_MODE,
+} = require("../../constants/withdrawals");
 const {
   PAYOUT_ASSET,
   PAYOUT_CURRENCY,
@@ -34,6 +37,10 @@ const PayoutEvent = require("../../schemas/payout-event.schema");
 const PayoutRecon = require("../../schemas/payout-recon.schema");
 const PayoutOutbox = require("../../schemas/payout-outbox.schema");
 const PayoutBatch = require("../../schemas/payout-batch.schema");
+const {
+  createOrUpdatePayoutRecord,
+  syncPayoutRecord,
+} = require("../payouts/payout-record.service");
 const { decrypt } = require("../../utils/encryption");
 const { sendFcmNotifications } = require("../../functions/fcm");
 const { sendFailResponse } = require("../../utils/responseHandlers");
@@ -63,18 +70,29 @@ function validateWithdrawalAmount(cashAmount) {
   return amount;
 }
 
-async function getWithdrawalCoinConfig() {
+function calculatePointsRequired(amount, rateInrPerPoint) {
+  return Math.ceil(amount / rateInrPerPoint);
+}
+
+function createPointConversionSnapshot(rateInrPerPoint) {
+  return {
+    rateInrPerPoint,
+    roundingMode: WITHDRAWAL_POINT_ROUNDING_MODE.CEILING,
+  };
+}
+
+async function getWithdrawalPointConversionConfig() {
   const appConfigList = await AppConfig.find().lean();
   const coinConfig = appConfigList[0]?.coinSettings;
   if (!coinConfig) {
     sendFailResponse("Failed to load coin configuration settings");
   }
 
-  const cashPerPoint = Number(coinConfig.coinValue);
-  if (!Number.isFinite(cashPerPoint) || cashPerPoint <= 0) {
+  const rateInrPerPoint = Number(coinConfig.coinValue);
+  if (!Number.isFinite(rateInrPerPoint) || rateInrPerPoint <= 0) {
     sendFailResponse("Invalid point-to-cash conversion value");
   }
-  return { coinConfig, cashPerPoint };
+  return { coinConfig, rateInrPerPoint };
 }
 
 async function getWithdrawalUserAndBankAccount(userId) {
@@ -115,6 +133,7 @@ function validateWithdrawalLimits(amount, coinConfig) {
 async function createWithdrawalRecord({
   userId,
   pointsAmount,
+  pointConversionSnapshot,
   amount,
   bankAccount,
   autoPayoutProvider,
@@ -140,6 +159,7 @@ async function createWithdrawalRecord({
           userId,
           pointsAmount,
           cashAmount: amount,
+          pointConversionSnapshot,
           bankAccountId: bankAccount._id,
           status: shouldAutoApprove
             ? WITHDRAWAL_STATUS.PROCESSING
@@ -159,6 +179,7 @@ async function createWithdrawalRecord({
     withdrawal = newWithdrawal;
 
     if (shouldAutoApprove) {
+      await createAutoApprovedPayoutRecord(newWithdrawal, session);
       await PayoutOutbox.create(
         [
           {
@@ -189,7 +210,10 @@ async function createWithdrawalRecord({
           reason: POINTS_TRANSACTION_REASON.WITHDRAWAL_TO_CASH,
           description: `Withdrawal request for ₹${amount}`,
           balance: userBeforeDebit.totalPoints - pointsAmount,
-          metadata: { withdrawalId: String(withdrawal._id) },
+          metadata: {
+            withdrawalId: String(withdrawal._id),
+            pointConversionSnapshot,
+          },
         },
       ],
       { session },
@@ -207,6 +231,7 @@ async function createWithdrawalRecord({
           balanceBefore: userBeforeDebit.totalPoints,
           balanceAfter: userBeforeDebit.totalPoints - pointsAmount,
           source: PAYOUT_LEDGER_SOURCE.USER_REQUEST,
+          metadata: { pointConversionSnapshot },
         },
       ],
       { session },
@@ -215,12 +240,23 @@ async function createWithdrawalRecord({
   return withdrawal;
 }
 
-function logWithdrawalRequest({ withdrawal, userId, pointsAmount, amount }) {
+async function createAutoApprovedPayoutRecord(withdrawal, session) {
+  await createOrUpdatePayoutRecord({ withdrawal, approval: {}, session });
+}
+
+function logWithdrawalRequest({
+  withdrawal,
+  userId,
+  pointsAmount,
+  pointConversionSnapshot,
+  amount,
+}) {
   logger.info("Withdrawal requested and points debit ledgered", {
     withdrawalId: String(withdrawal._id),
     userId: String(userId),
     pointsAmount,
     cashAmount: amount,
+    pointRateInrPerPoint: pointConversionSnapshot.rateInrPerPoint,
     currency: PAYOUT_CURRENCY.INR,
   });
 }
@@ -250,6 +286,7 @@ function formatCreatedWithdrawal(withdrawal) {
     data: {
       id: withdrawal._id,
       pointsAmount: withdrawal.pointsAmount,
+      pointConversionSnapshot: withdrawal.pointConversionSnapshot,
       cashAmount: withdrawal.cashAmount,
       status: withdrawal.status,
       createdAt: withdrawal.createdAt,
@@ -259,8 +296,11 @@ function formatCreatedWithdrawal(withdrawal) {
 
 async function createWithdrawal(userId, data) {
   const amount = validateWithdrawalAmount(data.cashAmount);
-  const { coinConfig, cashPerPoint } = await getWithdrawalCoinConfig();
-  const pointsAmount = Math.ceil(amount / cashPerPoint);
+  const { coinConfig, rateInrPerPoint } =
+    await getWithdrawalPointConversionConfig();
+  const pointsAmount = calculatePointsRequired(amount, rateInrPerPoint);
+  const pointConversionSnapshot =
+    createPointConversionSnapshot(rateInrPerPoint);
   const { user, bankAccount } = await getWithdrawalUserAndBankAccount(userId);
 
   // Cash withdrawals spend reward points; HydaconCoins remain separate.
@@ -292,12 +332,19 @@ async function createWithdrawal(userId, data) {
     withdrawal = await createWithdrawalRecord({
       userId,
       pointsAmount,
+      pointConversionSnapshot,
       amount,
       bankAccount,
       autoPayoutProvider,
       session,
     });
-    logWithdrawalRequest({ withdrawal, userId, pointsAmount, amount });
+    logWithdrawalRequest({
+      withdrawal,
+      userId,
+      pointsAmount,
+      pointConversionSnapshot,
+      amount,
+    });
     notifyWithdrawalCreated(user, withdrawal, amount);
   } catch (error) {
     sendFailResponse(error.message || "Failed to create withdrawal request");
@@ -583,6 +630,30 @@ function getPayoutExecutionDetails(payoutOutbox, payoutBatch) {
   };
 }
 
+/** Removes legacy cancellation fields that were incorrectly stored as approval data. */
+function clearFalseApprovalMetadataForUnapprovedCancellation(
+  withdrawal,
+  payoutAttempts,
+) {
+  const hasApprovalEvidence = Boolean(
+    withdrawal.approvalSource ||
+    withdrawal.payoutProvider ||
+    withdrawal.providerReferenceId ||
+    withdrawal.providerTransferId ||
+    withdrawal.payoutAttemptCount > 0 ||
+    payoutAttempts.length > 0,
+  );
+  if (
+    withdrawal.status !== WITHDRAWAL_STATUS.CANCELLED ||
+    hasApprovalEvidence
+  ) {
+    return;
+  }
+
+  withdrawal.approvedBy = null;
+  withdrawal.approvedAt = null;
+}
+
 /**
  * Admin: Get detailed info of a single withdrawal.
  */
@@ -597,6 +668,10 @@ async function getWithdrawalDetails(id) {
   }
 
   const auditData = await loadAdminWithdrawalAudit(withdrawal);
+  clearFalseApprovalMetadataForUnapprovedCancellation(
+    withdrawal,
+    auditData.payoutAttempts,
+  );
   const ledgerCoverage = getLedgerAuditCoverage(
     withdrawal,
     auditData.financialLedger,
@@ -762,14 +837,15 @@ async function applyWithdrawalCancellation({
 }) {
   const { refundsPoints, refundAmount, balanceField } =
     getWithdrawalRefundDetails(withdrawal);
+  const cancelledAt = new Date();
   const cancelled = await Withdrawal.updateOne(
     { _id: withdrawal._id, status: WITHDRAWAL_STATUS.PENDING },
     {
       $set: {
         status: WITHDRAWAL_STATUS.CANCELLED,
         remarks: remarks || "Cancelled by admin",
-        approvedBy: adminId,
-        approvedAt: new Date(),
+        cancelledBy: adminId,
+        cancelledAt,
       },
     },
     { session },
@@ -777,6 +853,16 @@ async function applyWithdrawalCancellation({
   if (!cancelled.modifiedCount) {
     sendFailResponse("Withdrawal is no longer pending");
   }
+  await syncPayoutRecord(
+    withdrawal._id,
+    {
+      status: WITHDRAWAL_STATUS.CANCELLED,
+      remarks: remarks || "Cancelled by admin",
+      cancelledBy: adminId,
+      cancelledAt,
+    },
+    session,
+  );
 
   const userBeforeRefund = await User.findOneAndUpdate(
     { _id: user._id },

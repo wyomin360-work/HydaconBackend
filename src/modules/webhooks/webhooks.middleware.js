@@ -1,10 +1,15 @@
 const {
   PAYOUT_PROVIDER,
   PAYOUT_HTTP_STATUS,
+  PAYOUT_ALERT_TYPE,
+  PAYOUT_ALERT_SEVERITY,
+  PAYOUT_MESSAGE,
 } = require("../../constants/payouts");
 const { getProvider, currentProviderName } = require("../../functions/payouts");
 const AppError = require("../../utils/appError");
 const validateRequest = require("../../middlewares/validator");
+const { reportPayoutAlert } = require("../payouts/payout-alerts");
+const logger = require("../../config/pino.config");
 const {
   cashfreePayoutWebhookRequestType,
   razorpayxPayoutWebhookRequestType,
@@ -28,6 +33,21 @@ function validatePayoutWebhook(providerName) {
     try {
       getProvider(resolvedProvider).verifyWebhook(req.headers, req.rawBody);
     } catch (error) {
+      reportPayoutAlert({
+        type: PAYOUT_ALERT_TYPE.WEBHOOK_SIGNATURE_FAILURE,
+        severity: PAYOUT_ALERT_SEVERITY.CRITICAL,
+        summary: PAYOUT_MESSAGE.WEBHOOK_SIGNATURE_REJECTED,
+        error,
+        provider: resolvedProvider,
+        details: {
+          endpoint: req.path,
+          reason: error.message,
+        },
+      });
+      logger.warn(PAYOUT_MESSAGE.WEBHOOK_SIGNATURE_REJECTED, {
+        provider: resolvedProvider,
+        endpoint: req.path,
+      });
       return next(
         new AppError(
           error.message,

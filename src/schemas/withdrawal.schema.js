@@ -1,9 +1,24 @@
 const mongoose = require("mongoose");
-const { WITHDRAWAL_STATUS } = require("../constants/withdrawals");
+const {
+  WITHDRAWAL_STATUS,
+  WITHDRAWAL_POINT_ROUNDING_MODE,
+} = require("../constants/withdrawals");
 const {
   PAYOUT_PROVIDER_VALUES,
   PAYOUT_APPROVAL_SOURCE_VALUES,
 } = require("../constants/payouts");
+
+const pointConversionSnapshotSchema = new mongoose.Schema(
+  {
+    rateInrPerPoint: { type: Number, min: 0, required: true },
+    roundingMode: {
+      type: String,
+      enum: Object.values(WITHDRAWAL_POINT_ROUNDING_MODE),
+      required: true,
+    },
+  },
+  { _id: false },
+);
 
 const withdrawalSchema = new mongoose.Schema(
   {
@@ -18,6 +33,10 @@ const withdrawalSchema = new mongoose.Schema(
     pointsAmount: { type: Number, min: 0, default: null },
     coinAmount: { type: Number, min: 0, default: null },
     cashAmount: { type: Number, required: true },
+    pointConversionSnapshot: {
+      type: pointConversionSnapshotSchema,
+      default: null,
+    },
     bankAccountId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "UserBankAccount",
@@ -52,6 +71,12 @@ const withdrawalSchema = new mongoose.Schema(
       default: null,
     },
     approvedAt: { type: Date, default: null },
+    cancelledBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+      default: null,
+    },
+    cancelledAt: { type: Date, default: null },
     approvalSource: {
       type: String,
       enum: PAYOUT_APPROVAL_SOURCE_VALUES,

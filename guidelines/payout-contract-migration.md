@@ -20,13 +20,24 @@ provider switch.
    processing withdrawals that have no recorded transfer ID.
 5. Confirm the migration succeeds and inspect migrated processing withdrawals,
    payout references, audit rows, and beneficiary mappings.
-6. Deploy the backend and admin application together. Confirm the payout outbox
+6. Run `npm run migrate:payout-records` to create the dedicated Payout documents
+   for historical withdrawals that show evidence of an approval or provider
+   attempt. The migration is idempotent and excludes pending requests and
+   cancellations that never reached payout approval.
+7. Deploy the backend and admin application together. Confirm the payout outbox
    worker, database indexes, webhook signature configuration, and reconciliation
    job are healthy before reopening approvals.
-7. Configure RazorpayX to `/webhooks/razorpayx`. Configure Cashfree Payouts V2
+   Configure `SYSTEM_MANAGER_EMAIL` and the mail transport in the production
+   secret manager. High and critical alerts, including webhook signature
+   failures, provider reconciliation mismatches, retry exhaustion, and payouts
+   requiring manual review, are sent using the shared system alert module.
+   Error messages and stacks are sanitized before being placed in the alert
+   email. Delivery failures are logged; alert email delivery does not use a
+   durable queue, so the mail transport should be monitored separately.
+8. Configure RazorpayX to `/webhooks/razorpayx`. Configure Cashfree Payouts V2
    to `/webhooks/cashfree`. `/webhooks/payout` resolves to the currently selected
    `PAYOUT_PROVIDER` for installations that use one provider webhook URL.
-8. To enable Cashfree for new approvals, set `PAYOUT_PROVIDER=cashfree` only after
+9. To enable Cashfree for new approvals, set `PAYOUT_PROVIDER=cashfree` only after
    Cashfree onboarding, production credentials, payout limits, and webhook
    delivery have been verified. Existing withdrawal records continue to use
    their persisted provider.

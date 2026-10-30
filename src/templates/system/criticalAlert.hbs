@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hydacon system alert</title>
+  </head>
+  <body style="margin:0;background:#f3f5f7;color:#202833;font-family:Arial,sans-serif;">
+    <main style="max-width:760px;margin:24px auto;padding:24px;background:#ffffff;border:1px solid #e2e7ec;border-radius:10px;">
+      <p style="margin:0 0 8px;color:#a12622;font-size:13px;font-weight:bold;letter-spacing:.08em;">{{severity}} ALERT</p>
+      <h1 style="margin:0 0 20px;font-size:22px;">{{summary}}</h1>
+
+      <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+        <tr><th align="left" style="padding:8px;border-bottom:1px solid #e2e7ec;">Source</th><td style="padding:8px;border-bottom:1px solid #e2e7ec;">{{source}}</td></tr>
+        <tr><th align="left" style="padding:8px;border-bottom:1px solid #e2e7ec;">Alert type</th><td style="padding:8px;border-bottom:1px solid #e2e7ec;">{{alertType}}</td></tr>
+        <tr><th align="left" style="padding:8px;border-bottom:1px solid #e2e7ec;">Occurred at</th><td style="padding:8px;border-bottom:1px solid #e2e7ec;">{{occurredAt}}</td></tr>
+        <tr><th align="left" style="padding:8px;border-bottom:1px solid #e2e7ec;">Alert key</th><td style="padding:8px;border-bottom:1px solid #e2e7ec;">{{alertKey}}</td></tr>
+      </table>
+
+      <h2 style="font-size:16px;">Context</h2>
+      <pre style="overflow-wrap:anywhere;white-space:pre-wrap;background:#f6f8fa;padding:14px;border-radius:6px;font-size:12px;">{{context}}</pre>
+
+      <h2 style="font-size:16px;">Error</h2>
+      <pre style="overflow-wrap:anywhere;white-space:pre-wrap;background:#f6f8fa;padding:14px;border-radius:6px;font-size:12px;">{{errorMessage}}</pre>
+
+      <h2 style="font-size:16px;">Sanitized raw error</h2>
+      <pre style="overflow-wrap:anywhere;white-space:pre-wrap;background:#f6f8fa;padding:14px;border-radius:6px;font-size:12px;">{{rawError}}</pre>
+
+      <p style="margin:24px 0 0;color:#66717e;font-size:12px;">Secrets, credentials, signatures, account numbers, and other sensitive values are redacted before this email is sent.</p>
+    </main>
+  </body>
+</html>

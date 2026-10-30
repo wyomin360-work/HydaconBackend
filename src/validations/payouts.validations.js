@@ -1,4 +1,5 @@
 const { CASHFREE_PAYOUT_EVENT } = require("../constants/payouts");
+const { WITHDRAWAL_STATUS } = require("../constants/withdrawals");
 
 const razorpayPayoutEntity = {
   type: "object",
@@ -117,7 +118,22 @@ const cashfreePayoutWebhookRequestType = {
   additionalProperties: false,
 };
 
+const listPayoutsRequestType = {
+  type: "object",
+  properties: {
+    page: { type: "number", minimum: 1 },
+    limit: { type: "number", minimum: 1, maximum: 100 },
+    status: {
+      type: "string",
+      enum: Object.values(WITHDRAWAL_STATUS),
+    },
+    search: { type: "string", maxLength: 128 },
+  },
+  additionalProperties: false,
+};
+
 module.exports = {
   cashfreePayoutWebhookRequestType,
+  listPayoutsRequestType,
   razorpayxPayoutWebhookRequestType,
 };

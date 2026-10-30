@@ -20,12 +20,16 @@ const {
   PAYOUT_RECON_OUTCOME,
   PAYOUT_OPERATION,
   PAYOUT_TERMINAL_WITHDRAWAL_STATUSES,
+  PAYOUT_ALERT_TYPE,
+  PAYOUT_ALERT_SEVERITY,
 } = require("../../constants/payouts");
 const Withdrawal = require("../../schemas/withdrawal.schema");
 const PayoutOutbox = require("../../schemas/payout-outbox.schema");
 const PayoutBatch = require("../../schemas/payout-batch.schema");
 const PayoutAttempt = require("../../schemas/payout-attempt.schema");
 const PayoutRecon = require("../../schemas/payout-recon.schema");
+const Payout = require("../../schemas/payout.schema");
+const { buildPayoutRecordUpsertOperation } = require("./payout-record.service");
 const { currentProviderName, getProvider } = require("../../functions/payouts");
 const {
   ensureBeneficiary,
@@ -38,6 +42,7 @@ const { applyTransferUpdate } = require("./payout-state.service");
 const { safeText } = require("./payout-utils");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const logger = require("../../config/pino.config");
+const { reportPayoutAlert } = require("./payout-alerts");
 
 function batchValidationError(
   message,
@@ -243,7 +248,52 @@ async function enqueueApprovedWithdrawalBatch(adminId, withdrawalIds) {
         );
       }
 
+      const withdrawalReferenceOperations = withdrawals.map((withdrawal) => ({
+        updateOne: {
+          filter: {
+            _id: withdrawal._id,
+            status: WITHDRAWAL_STATUS.PROCESSING,
+          },
+          update: {
+            $set: {
+              providerReferenceId:
+                withdrawal.providerReferenceId || String(withdrawal._id),
+            },
+          },
+        },
+      }));
+      await Withdrawal.bulkWrite(withdrawalReferenceOperations, { session });
+
       await batch.save({ session });
+
+      const payoutRecordOperations = withdrawals.map((withdrawal) => {
+        const providerReferenceId =
+          withdrawal.providerReferenceId || String(withdrawal._id);
+        const approvedWithdrawal = {
+          ...withdrawal,
+          status: WITHDRAWAL_STATUS.PROCESSING,
+          payoutProvider: providerName,
+          payoutBatchId: batch._id,
+          providerReferenceId,
+          approvedBy: adminId,
+          approvedAt: now,
+          approvalSource: PAYOUT_APPROVAL_SOURCE.ADMIN,
+        };
+
+        return buildPayoutRecordUpsertOperation(approvedWithdrawal, {
+          status: WITHDRAWAL_STATUS.PROCESSING,
+          provider: providerName,
+          providerReferenceId,
+          payoutBatchId: batch._id,
+          adminId,
+          approvalSource: PAYOUT_APPROVAL_SOURCE.ADMIN,
+          approvedAt: now,
+        });
+      });
+      await Payout.bulkWrite(payoutRecordOperations, {
+        session,
+        ordered: true,
+      });
 
       const outboxOperations = withdrawals.map((withdrawal) => {
         const referenceId =
@@ -579,9 +629,12 @@ async function markBatchFailed(batch, items, error) {
         },
         { session },
       );
+      const releasedWithdrawalIds = items.map(
+        ({ withdrawal }) => withdrawal._id,
+      );
       await Withdrawal.updateMany(
         {
-          _id: { $in: items.map(({ withdrawal }) => withdrawal._id) },
+          _id: { $in: releasedWithdrawalIds },
           status: WITHDRAWAL_STATUS.PROCESSING,
           providerTransferId: null,
         },
@@ -593,6 +646,15 @@ async function markBatchFailed(batch, items, error) {
             approvedAt: null,
           },
         },
+        { session },
+      );
+      await Payout.updateMany(
+        {
+          withdrawalId: { $in: releasedWithdrawalIds },
+          status: WITHDRAWAL_STATUS.PROCESSING,
+          providerTransferId: null,
+        },
+        { $set: { status: WITHDRAWAL_STATUS.PENDING } },
         { session },
       );
     });
@@ -689,6 +751,36 @@ async function markBatchAmbiguous(batch, error, affectedItems = null) {
     retryLimitReached,
     error: safeText(error.message),
   });
+  if (retryLimitReached) {
+    const alertDetails = {
+      attempts: consecutiveFailures,
+      maxAttempts: PAYOUT_CONFIG.OUTBOX_MAX_ATTEMPTS,
+      lastOperation:
+        error.payoutOperation || PAYOUT_OPERATION.BATCH_RECONCILIATION,
+    };
+    reportPayoutAlert({
+      type: PAYOUT_ALERT_TYPE.RETRIES_EXHAUSTED,
+      severity: PAYOUT_ALERT_SEVERITY.CRITICAL,
+      summary: PAYOUT_MESSAGE.OUTBOX_RETRIES_EXHAUSTED,
+      error,
+      provider: batch.provider,
+      batchReferenceId: batch.batchReferenceId,
+      details: alertDetails,
+    });
+    reportPayoutAlert({
+      type: PAYOUT_ALERT_TYPE.MANUAL_REVIEW_REQUIRED,
+      severity: PAYOUT_ALERT_SEVERITY.CRITICAL,
+      summary: PAYOUT_MESSAGE.PAYOUT_MANUAL_REVIEW_REQUIRED,
+      error,
+      provider: batch.provider,
+      batchReferenceId: batch.batchReferenceId,
+      details: {
+        ...alertDetails,
+        withdrawalCount: auditItems.filter(({ withdrawal }) => withdrawal)
+          .length,
+      },
+    });
+  }
 }
 
 async function loadBatchAuditItems(batch, session) {
@@ -777,6 +869,22 @@ async function reconcileBatchTransfers(batch, items, batchStatus) {
               outcome: PAYOUT_RECON_OUTCOME.MISMATCH,
               transfer,
               errorMessage: PAYOUT_MESSAGE.PROVIDER_TRANSFER_DETAILS_MISMATCH,
+            });
+            reportPayoutAlert({
+              type: PAYOUT_ALERT_TYPE.RECONCILIATION_MISMATCH,
+              severity: PAYOUT_ALERT_SEVERITY.CRITICAL,
+              summary: PAYOUT_MESSAGE.PROVIDER_TRANSFER_DETAILS_MISMATCH,
+              error: new Error(
+                PAYOUT_MESSAGE.PROVIDER_TRANSFER_DETAILS_MISMATCH,
+              ),
+              provider: batch.provider,
+              withdrawalId: String(withdrawal._id),
+              batchReferenceId: batch.batchReferenceId,
+              details: {
+                providerTransferId: transfer.providerTransferId || null,
+                providerStatus: transfer.rawStatus || transfer.status || null,
+                statusCode: transfer.statusCode || null,
+              },
             });
           }
           await updateBatchOutboxReconciliation(

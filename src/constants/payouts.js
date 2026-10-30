@@ -1,4 +1,5 @@
 const { WITHDRAWAL_STATUS } = require("./withdrawals");
+const { SYSTEM_ALERT_SEVERITY } = require("./alerts");
 
 const PAYOUT_PROVIDER = Object.freeze({
   RAZORPAYX: "razorpayx",
@@ -287,6 +288,18 @@ const PAYOUT_CONFIG = Object.freeze({
   RECONCILIATION_CRON_EXPRESSION: "*/15 * * * *",
 });
 
+const PAYOUT_ALERT_TYPE = Object.freeze({
+  WEBHOOK_SIGNATURE_FAILURE: "PAYOUT_WEBHOOK_SIGNATURE_FAILURE",
+  RECONCILIATION_MISMATCH: "PAYOUT_RECONCILIATION_MISMATCH",
+  RETRIES_EXHAUSTED: "PAYOUT_RETRIES_EXHAUSTED",
+  MANUAL_REVIEW_REQUIRED: "PAYOUT_MANUAL_REVIEW_REQUIRED",
+});
+
+const PAYOUT_ALERT_SEVERITY = Object.freeze({
+  WARNING: SYSTEM_ALERT_SEVERITY.WARNING,
+  CRITICAL: SYSTEM_ALERT_SEVERITY.CRITICAL,
+});
+
 const PAYOUT_MESSAGE = Object.freeze({
   UNSUPPORTED_PROVIDER: "Unsupported payout provider",
   WITHDRAWAL_NOT_FOUND: "Withdrawal request not found",
@@ -320,6 +333,7 @@ const PAYOUT_MESSAGE = Object.freeze({
     "Cashfree payout webhook secret is not configured",
   SIGNATURE_HEADERS_MISSING: "Webhook signature headers are missing",
   INVALID_SIGNATURE: "Invalid webhook signature",
+  WEBHOOK_SIGNATURE_REJECTED: "Payout webhook signature verification failed",
   EVENT_ALREADY_PROCESSING: "Payout event is already being processed",
   TRANSFER_IDENTITY_MISSING: "Transfer reference and ID are missing",
   NON_TRANSFER_EVENT_IGNORED:
@@ -391,6 +405,8 @@ const PAYOUT_MESSAGE = Object.freeze({
   TRANSFER_SUBMISSION_LOG: "Payout provider transfer submission failed",
   OUTBOX_PROCESSING_LOG: "Payout outbox processing failed",
   OUTBOX_RETRIES_EXHAUSTED: "Automatic payout retry limit was reached",
+  PAYOUT_MANUAL_REVIEW_REQUIRED:
+    "Payout requires manual provider reconciliation",
   WEBHOOK_PROCESSING_LOG: "Payout webhook processing failed",
   FCM_APPROVAL_LOG: "FCM withdrawal approval notification failed",
   FCM_NOTIFICATION_LOG: "FCM payout notification failed",
@@ -445,5 +461,7 @@ module.exports = {
   PAYOUT_LEDGER_SOURCE,
   PAYOUT_LEDGER_SOURCE_VALUES,
   PAYOUT_CONFIG,
+  PAYOUT_ALERT_TYPE,
+  PAYOUT_ALERT_SEVERITY,
   PAYOUT_MESSAGE,
 };

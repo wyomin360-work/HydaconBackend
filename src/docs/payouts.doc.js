@@ -1,6 +1,94 @@
 const { CASHFREE_PAYOUT_EVENT } = require("../constants/payouts");
+const {
+  WITHDRAWAL_POINT_ROUNDING_MODE,
+  WITHDRAWAL_STATUS,
+} = require("../constants/withdrawals");
 
 module.exports = {
+  "/payouts/admin/list": {
+    post: {
+      summary: "List approved payout records",
+      description:
+        "Returns payout documents created when a withdrawal is manually approved or automatically approved. Unapproved and pre-approval cancelled withdrawal requests are not payouts and are not included.",
+      tags: ["Payouts"],
+      security: [{ bearerAuth: [] }],
+      requestBody: {
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              properties: {
+                page: { type: "integer", minimum: 1, default: 1 },
+                limit: {
+                  type: "integer",
+                  minimum: 1,
+                  maximum: 100,
+                  default: 10,
+                },
+                status: {
+                  type: "string",
+                  enum: Object.values(WITHDRAWAL_STATUS),
+                },
+                search: { type: "string" },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Paginated payout records",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  payouts: { type: "array", items: { type: "object" } },
+                  total: { type: "integer" },
+                  page: { type: "integer" },
+                  limit: { type: "integer" },
+                  totalPages: { type: "integer" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  "/payouts/admin/summary": {
+    get: {
+      summary: "Get payout counts by status",
+      description:
+        "Counts persisted payout records, excluding unapproved withdrawals.",
+      tags: ["Payouts"],
+      security: [{ bearerAuth: [] }],
+      responses: {
+        200: { description: "Payout counts keyed by global withdrawal status" },
+      },
+    },
+  },
+  "/payouts/admin/details/{id}": {
+    get: {
+      summary: "Get approved payout details",
+      description:
+        "Returns the linked withdrawal, payout amount and point conversion snapshot, beneficiary, provider references, execution audit, and status history.",
+      tags: ["Payouts"],
+      security: [{ bearerAuth: [] }],
+      parameters: [
+        {
+          name: "id",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+        },
+      ],
+      responses: {
+        200: { description: "Payout details" },
+        404: { description: "Payout record not found" },
+      },
+    },
+  },
   "/withdrawals/create": {
     post: {
       summary: "Create a withdrawal request",
@@ -24,7 +112,43 @@ module.exports = {
       responses: {
         200: {
           description:
-            "Withdrawal created and queued or awaiting admin approval",
+            "Withdrawal created and queued or awaiting admin approval. The response includes the requested cash amount, points debited, and the point conversion rate captured at request time.",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  data: {
+                    type: "object",
+                    properties: {
+                      cashAmount: {
+                        type: "number",
+                        description: "INR sent to the beneficiary",
+                      },
+                      pointsAmount: {
+                        type: "number",
+                        description: "Points debited for this withdrawal",
+                      },
+                      pointConversionSnapshot: {
+                        type: "object",
+                        properties: {
+                          rateInrPerPoint: {
+                            type: "number",
+                            description:
+                              "INR value of one point when this withdrawal was requested",
+                          },
+                          roundingMode: {
+                            type: "string",
+                            enum: Object.values(WITHDRAWAL_POINT_ROUNDING_MODE),
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
         403: { description: "KYC approval is required" },
         409: {

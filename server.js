@@ -9,6 +9,10 @@ const { logger } = require("./src/config/pino.config");
 const {
   ensurePayoutAuditIndexes,
 } = require("./src/config/payout-audit-indexes");
+const { SYSTEM_ALERT_MESSAGE } = require("./src/constants/alerts");
+const {
+  isSystemManagerEmailConfigured,
+} = require("./src/modules/alerts/alerts.service");
 const {
   initializeRewardBatchDownloadQueue,
   ensureInlineRewardBatchDownloadIndexes,
@@ -67,6 +71,12 @@ const startServer = async () => {
   try {
     await db.connectDb();
     await ensurePayoutAuditIndexes();
+    if (
+      ["prod", "production"].includes(process.env.NODE_ENV?.toLowerCase()) &&
+      !isSystemManagerEmailConfigured()
+    ) {
+      console.warn(SYSTEM_ALERT_MESSAGE.MANAGER_EMAIL_MISSING);
+    }
     await ensureInlineRewardBatchDownloadIndexes();
     if (process.env.NODE_ENV === "production" && !process.env.REDIS_URL) {
       console.warn(

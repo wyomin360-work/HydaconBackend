@@ -8,6 +8,8 @@ const {
   PAYOUT_SOURCE,
   PAYOUT_CONFIG,
   PAYOUT_MESSAGE,
+  PAYOUT_ALERT_TYPE,
+  PAYOUT_ALERT_SEVERITY,
   PAYOUT_RESULT,
   PAYOUT_TERMINAL_WITHDRAWAL_STATUSES,
   PAYOUT_FAILURE_TERMINAL_STATUSES,
@@ -19,11 +21,13 @@ const {
   POINTS_TRANSACTION_REASON,
 } = require("../../constants/points");
 const Withdrawal = require("../../schemas/withdrawal.schema");
+const { syncPayoutRecord } = require("./payout-record.service");
 const PayoutEvent = require("../../schemas/payout-event.schema");
 const User = require("../../schemas/user.schema");
 const LedgerEntry = require("../../schemas/ledger-entry.schema");
 const PointsLedger = require("../../schemas/points-ledger.schema");
 const logger = require("../../config/pino.config");
+const { reportPayoutAlert } = require("./payout-alerts");
 const { safeText } = require("./payout-utils");
 const {
   APP_NOTIFICATIONS,
@@ -98,10 +102,34 @@ async function validateTransfer(withdrawal, provider, normalized, eventDoc) {
       expectedMinor,
       actualMinor: normalized.amountMinor,
     });
+    reportPayoutAlert({
+      type: PAYOUT_ALERT_TYPE.RECONCILIATION_MISMATCH,
+      severity: PAYOUT_ALERT_SEVERITY.CRITICAL,
+      summary: PAYOUT_MESSAGE.AMOUNT_MISMATCH,
+      error: new Error(PAYOUT_MESSAGE.AMOUNT_MISMATCH),
+      provider,
+      withdrawalId: String(withdrawal._id),
+      details: {
+        providerTransferId: normalized.providerTransferId || null,
+        mismatchType: "amount",
+      },
+    });
     return ignoreEvent(eventDoc, PAYOUT_MESSAGE.AMOUNT_MISMATCH);
   }
 
   if (normalized.currency && normalized.currency !== PAYOUT_CURRENCY.INR) {
+    reportPayoutAlert({
+      type: PAYOUT_ALERT_TYPE.RECONCILIATION_MISMATCH,
+      severity: PAYOUT_ALERT_SEVERITY.CRITICAL,
+      summary: PAYOUT_MESSAGE.CURRENCY_MISMATCH,
+      error: new Error(PAYOUT_MESSAGE.CURRENCY_MISMATCH),
+      provider,
+      withdrawalId: String(withdrawal._id),
+      details: {
+        providerTransferId: normalized.providerTransferId || null,
+        mismatchType: "currency",
+      },
+    });
     return ignoreEvent(eventDoc, PAYOUT_MESSAGE.CURRENCY_MISMATCH);
   }
   return null;
@@ -152,6 +180,7 @@ async function updateWithdrawalStatus({
   if (!result.modifiedCount && !alreadyProcessing) {
     throw new Error(PAYOUT_MESSAGE.STATE_CHANGED_CONCURRENTLY);
   }
+  await syncPayoutRecord(current._id, update, session);
 }
 
 async function markEventStale(eventDoc, currentStatus, targetStatus, session) {
