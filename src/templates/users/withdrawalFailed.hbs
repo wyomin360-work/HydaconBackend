@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Withdrawal could not be completed</title>
+    <style>
+      body { margin: 0; padding: 24px; background: #f6f7fb; color: #263238; font-family: Arial, sans-serif; }
+      .container { max-width: 600px; margin: 0 auto; padding: 32px; background: #fff; border-radius: 12px; }
+      h1 { color: #b42318; font-size: 24px; }
+      p { line-height: 1.6; }
+      .details { margin: 24px 0; padding: 16px; background: #fff5f4; border-radius: 8px; }
+      .footer { margin-top: 32px; color: #687780; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <h1>Withdrawal could not be completed</h1>
+      <p>Hello {{userName}},</p>
+      <p>The payout provider reported that your withdrawal could not be completed. The points used for this withdrawal have been returned to your balance.</p>
+      <section class="details">
+        <p><strong>Amount:</strong> ₹{{amount}}</p>
+        <p><strong>Withdrawal ID:</strong> {{withdrawalId}}</p>
+        <p><strong>Reason:</strong> {{failureReason}}</p>
+      </section>
+      <p>Please review your bank details. If you need help, contact Hydacon Support and include the withdrawal ID above.</p>
+      <p class="footer">Thank you,<br />Hydacon Support Team</p>
+    </main>
+  </body>
+</html>

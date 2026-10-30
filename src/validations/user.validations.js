@@ -111,11 +111,27 @@ const userBankDetailsRequestType = {
   },
 };
 
+const updateAutoPayoutRequestType = {
+  type: "object",
+  properties: {
+    enableAutoPayout: { type: "boolean" },
+  },
+  required: ["enableAutoPayout"],
+  additionalProperties: false,
+  errorMessage: {
+    required: {
+      enableAutoPayout: "enableAutoPayout is required",
+    },
+    additionalProperties: "No extra properties are allowed",
+  },
+};
+
 module.exports = {
   userOtpLoginRequestType,
   userLoginRequestType,
   userRegisterRequestType,
   userBankDetailsRequestType,
+  updateAutoPayoutRequestType,
   userProfileUpdateRequestType,
   userFcmRequestType,
   verifyOldNumberRequestType,

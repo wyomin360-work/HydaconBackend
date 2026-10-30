@@ -45,10 +45,7 @@ Attach an IAM role to the EC2 instance; do not store IAM access keys on the inst
     "Statement": [
       {
         "Effect": "Allow",
-        "Action": [
-          "logs:CreateLogStream",
-          "logs:PutLogEvents"
-        ],
+        "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
         "Resource": "arn:aws:logs:ap-south-1:743422351562:log-group:/hydacon/production:*"
       }
     ]
@@ -146,13 +143,13 @@ OIDC lets GitHub Actions assume a short-lived AWS role. Do not store static AWS 
 - [x] The workflow requests `id-token: write` and assumes this role.
 - [ ] In GitHub **Settings → Secrets and variables → Actions**, verify these repository secrets (values shown here are known for this setup):
 
-  | Secret | Hydacon value / source |
-  | --- | --- |
-  | `AWS_REGION` | `ap-south-1` |
-  | `AWS_ALLOWED_ACCOUNT_IDS` | `743422351562` |
-  | `ECR_REGISTRY` | `743422351562.dkr.ecr.ap-south-1.amazonaws.com` (registry only, no `/production`) |
-  | `EC2_INSTANCE_ID` | `i-03c47e62940dbdaa0` |
-  | `AWS_ROLE_TO_ASSUME` | Copy the full role ARN for `HydaconGitHubActionsProductionRole` from IAM → Roles. |
+  | Secret                    | Hydacon value / source                                                            |
+  | ------------------------- | --------------------------------------------------------------------------------- |
+  | `AWS_REGION`              | `ap-south-1`                                                                      |
+  | `AWS_ALLOWED_ACCOUNT_IDS` | `743422351562`                                                                    |
+  | `ECR_REGISTRY`            | `743422351562.dkr.ecr.ap-south-1.amazonaws.com` (registry only, no `/production`) |
+  | `EC2_INSTANCE_ID`         | `i-03c47e62940dbdaa0`                                                             |
+  | `AWS_ROLE_TO_ASSUME`      | Copy the full role ARN for `HydaconGitHubActionsProductionRole` from IAM → Roles. |
 
   `ECR_REPOSITORY` is set to `production` in the workflow, so it is not a secret.
 

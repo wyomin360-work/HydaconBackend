@@ -46,6 +46,7 @@ async function sendFcmNotifications(tokens, title, body, data) {
   } catch (error) {
     // logError('FCM notifications error:', error);
     console.log("FCM error", error);
+    results.errors.push(...tokens);
   }
   return results;
 }

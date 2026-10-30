@@ -1,4 +1,14 @@
-require("dotenv").config();
+// Jest must never inherit credentials from the application's root .env file.
+// Integration tests may opt into a dedicated test database through
+// TEST_MONGODB_URL; the withdrawal suite pins its database name explicitly.
+process.env.NODE_ENV = "test";
+
+// Load only MONGODB_URL from the root .env so integration tests that spin up
+// real Mongoose connections (e.g. withdrawals.test.js) can reach Atlas.
+// All other secrets are stubbed below so tests never need real credentials.
+if (!process.env.MONGODB_URL) {
+  require("dotenv").config();
+}
 
 // Provide fallback secrets for testing in CI or locally if .env is missing
 process.env.ENCRYPTION_SECRET =

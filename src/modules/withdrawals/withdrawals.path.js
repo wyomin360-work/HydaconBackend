@@ -9,5 +9,6 @@ module.exports = {
   adminDetails: "/admin/details/:id",
   adminSummary: "/admin/summary",
   adminApprove: "/admin/approve/:id",
+  adminApproveBatch: "/admin/approve-batch",
   adminCancel: "/admin/cancel/:id",
 };

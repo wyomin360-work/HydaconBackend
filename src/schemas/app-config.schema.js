@@ -1,4 +1,5 @@
 const { default: mongoose } = require("mongoose");
+const { PAYOUT_METHOD, PAYOUT_METHOD_VALUES } = require("../constants/payouts");
 
 const platformVersionSchema = new mongoose.Schema(
   {
@@ -66,6 +67,17 @@ const scratchCardSettingsSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const payoutSettingsSchema = new mongoose.Schema(
+  {
+    defaultPayoutMethod: {
+      type: String,
+      enum: PAYOUT_METHOD_VALUES,
+      default: PAYOUT_METHOD.PROVIDER,
+    },
+  },
+  { _id: false },
+);
+
 const appConfigSchema = new mongoose.Schema({
   name: { type: String, required: true },
   currentVersion: { type: String, required: true, default: "1.0.0" },
@@ -91,6 +103,10 @@ const appConfigSchema = new mongoose.Schema({
   },
   scratchCardSettings: {
     type: scratchCardSettingsSchema,
+    default: () => ({}),
+  },
+  payoutSettings: {
+    type: payoutSettingsSchema,
     default: () => ({}),
   },
   securitySettings: {

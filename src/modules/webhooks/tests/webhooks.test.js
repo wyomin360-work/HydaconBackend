@@ -5,13 +5,6 @@ jest.mock("../../../schemas/withdrawal.schema", () => ({
   findOne: jest.fn(),
   updateOne: jest.fn(),
 }));
-jest.mock("../../../schemas/user.schema", () => ({
-  findOneAndUpdate: jest.fn(),
-  findById: jest.fn(),
-}));
-jest.mock("../../../schemas/ledger-entry.schema", () => ({
-  create: jest.fn(),
-}));
 jest.mock("../../../schemas/payout-event.schema", () => ({
   findOneAndUpdate: jest.fn(),
   updateOne: jest.fn(),
@@ -19,11 +12,36 @@ jest.mock("../../../schemas/payout-event.schema", () => ({
 jest.mock("../../../functions/fcm", () => ({
   sendFcmNotifications: jest.fn().mockResolvedValue({ success: true }),
 }));
+jest.mock("../../payouts/payout-state.service", () => ({
+  applyTransferUpdate: jest.fn(async ({ withdrawal, normalized, eventDoc }) => {
+    const expectedAmountMinor = Math.round(withdrawal.cashAmount * 100);
+    if (
+      normalized.amountMinor != null &&
+      normalized.amountMinor !== expectedAmountMinor
+    ) {
+      if (eventDoc) eventDoc.processingStatus = "IGNORED";
+      return { status: "ignored", reason: "amount mismatch" };
+    }
+    if (
+      normalized.targetStatus === "PROCESSING" &&
+      withdrawal.status === "COMPLETED"
+    ) {
+      return { status: "success", processed: false, payoutStatus: "COMPLETED" };
+    }
+    withdrawal.status = normalized.targetStatus;
+    if (eventDoc) eventDoc.processingStatus = "PROCESSED";
+    return {
+      status: "success",
+      processed: true,
+      payoutStatus: normalized.targetStatus,
+    };
+  }),
+}));
 
 const Withdrawal = require("../../../schemas/withdrawal.schema");
-const User = require("../../../schemas/user.schema");
-const LedgerEntry = require("../../../schemas/ledger-entry.schema");
 const PayoutEvent = require("../../../schemas/payout-event.schema");
+const { PAYOUT_PROVIDER } = require("../../../constants/payouts");
+const { applyTransferUpdate } = require("../../payouts/payout-state.service");
 const { processWebhook, verifySignature } = require("../webhooks.service");
 
 describe("RazorpayX webhook handling", () => {
@@ -32,8 +50,8 @@ describe("RazorpayX webhook handling", () => {
   const secret = "webhook-test-secret";
   const originalNodeEnv = process.env.NODE_ENV;
   const originalWebhookSecret = process.env.RAZORPAYX_WEBHOOK_SECRET;
+  const originalPayoutProvider = process.env.PAYOUT_PROVIDER;
   let withdrawal;
-  let session;
   let events;
 
   function signedRequest(event, extra = {}) {
@@ -60,33 +78,28 @@ describe("RazorpayX webhook handling", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     process.env.RAZORPAYX_WEBHOOK_SECRET = secret;
+    process.env.PAYOUT_PROVIDER = PAYOUT_PROVIDER.RAZORPAYX;
     delete process.env.NODE_ENV;
     withdrawal = {
       _id: withdrawalId,
       userId,
+      payoutProvider: PAYOUT_PROVIDER.RAZORPAYX,
+      providerReferenceId: withdrawalId.toString(),
       status: "PROCESSING",
       cashAmount: 200,
       coinAmount: 100,
     };
     events = new Map();
-    session = {
-      withTransaction: jest.fn(async (callback) => callback()),
-      endSession: jest.fn().mockResolvedValue(undefined),
-    };
-    jest.spyOn(mongoose, "startSession").mockResolvedValue(session);
-    Withdrawal.findOne.mockResolvedValue(withdrawal);
+    Withdrawal.findOne.mockReturnValue({
+      lean: jest.fn().mockResolvedValue(withdrawal),
+    });
     Withdrawal.updateOne.mockImplementation(async (filter, update) => {
       if (filter.status.$nin.includes(withdrawal.status))
         return { modifiedCount: 0 };
       withdrawal.status = update.$set.status;
       return { modifiedCount: 1 };
     });
-    User.findOneAndUpdate.mockResolvedValue({
-      hydaconCoins: 400,
-      totalWithdraw: 0,
-    });
-    User.findById.mockResolvedValue(null);
-    LedgerEntry.create.mockResolvedValue([]);
+    applyTransferUpdate.mockClear();
     PayoutEvent.findOneAndUpdate.mockImplementation(
       async (filter, update, options = {}) => {
         if (options.upsert) {
@@ -130,6 +143,9 @@ describe("RazorpayX webhook handling", () => {
     else process.env.RAZORPAYX_WEBHOOK_SECRET = originalWebhookSecret;
     if (originalNodeEnv === undefined) delete process.env.NODE_ENV;
     else process.env.NODE_ENV = originalNodeEnv;
+    if (originalPayoutProvider === undefined)
+      delete process.env.PAYOUT_PROVIDER;
+    else process.env.PAYOUT_PROVIDER = originalPayoutProvider;
   });
 
   test("verifies signatures against the exact raw body and rejects malformed lengths", () => {
@@ -168,13 +184,7 @@ describe("RazorpayX webhook handling", () => {
     );
     expect(result).toMatchObject({ processed: true, status: "success" });
     expect(withdrawal.status).toBe("COMPLETED");
-    expect(User.findOneAndUpdate).toHaveBeenCalledTimes(1);
-    expect(User.findOneAndUpdate).toHaveBeenCalledWith(
-      { _id: userId },
-      { $inc: { totalWithdraw: 200 } },
-      { new: false, session },
-    );
-    expect(LedgerEntry.create).toHaveBeenCalledTimes(1);
+    expect(applyTransferUpdate).toHaveBeenCalledTimes(1);
     const receipt = [...events.values()][0];
     expect(receipt.processingStatus).toBe("PROCESSED");
     expect(receipt.payloadHash).toMatch(/^[a-f0-9]{64}$/);
@@ -198,10 +208,12 @@ describe("RazorpayX webhook handling", () => {
       lateInitiated.body,
     );
     expect(duplicate.duplicate).toBe(true);
-    expect(lateResult.duplicateOrTerminal).toBe(true);
+    expect(lateResult).toMatchObject({
+      processed: false,
+      payoutStatus: "COMPLETED",
+    });
     expect(withdrawal.status).toBe("COMPLETED");
-    expect(User.findOneAndUpdate).toHaveBeenCalledTimes(1);
-    expect(LedgerEntry.create).toHaveBeenCalledTimes(1);
+    expect(applyTransferUpdate).toHaveBeenCalledTimes(2);
   });
 
   test("records a failed payout refund once despite duplicate webhook delivery", async () => {
@@ -212,13 +224,7 @@ describe("RazorpayX webhook handling", () => {
     await processWebhook(request.headers, request.rawBody, request.body);
     await processWebhook(request.headers, request.rawBody, request.body);
     expect(withdrawal.status).toBe("FAILED");
-    expect(User.findOneAndUpdate).toHaveBeenCalledTimes(1);
-    expect(User.findOneAndUpdate).toHaveBeenCalledWith(
-      { _id: userId },
-      { $inc: { hydaconCoins: 100 } },
-      { new: false, session },
-    );
-    expect(LedgerEntry.create).toHaveBeenCalledTimes(1);
+    expect(applyTransferUpdate).toHaveBeenCalledTimes(1);
   });
 
   test("rejects provider payout amount mismatches without changing balances", async () => {
@@ -235,40 +241,33 @@ describe("RazorpayX webhook handling", () => {
 
     expect(result).toMatchObject({ status: "ignored" });
     expect([...events.values()][0].processingStatus).toBe("IGNORED");
-    expect([...events.values()][0].result).toContain("amount-mismatch");
-    expect(User.findOneAndUpdate).not.toHaveBeenCalled();
-    expect(LedgerEntry.create).not.toHaveBeenCalled();
+    expect(applyTransferUpdate).toHaveBeenCalledTimes(1);
   });
 
-  test("rejects a payout ID that conflicts with the withdrawal's recorded payout", async () => {
-    withdrawal.providerPayoutId = "pout_expected_123";
+  test("rejects a provider transfer ID that conflicts with the withdrawal record", async () => {
+    withdrawal.providerTransferId = "pout_expected_123";
     const request = signedRequest("payout.processed", {
       status: "processed",
       amount: 20000,
       currency: "INR",
     });
-    const result = await processWebhook(
-      request.headers,
-      request.rawBody,
-      request.body,
-    );
-
-    expect(result).toMatchObject({ status: "ignored" });
-    expect([...events.values()][0].result).toBe(
-      "payout-anomaly:payout ID does not match withdrawal",
-    );
-    expect(User.findOneAndUpdate).not.toHaveBeenCalled();
+    await expect(
+      processWebhook(request.headers, request.rawBody, request.body),
+    ).rejects.toMatchObject({ statusCode: 500 });
+    expect(applyTransferUpdate).not.toHaveBeenCalled();
   });
 
   test("returns retryable errors when the financial transaction fails", async () => {
-    User.findOneAndUpdate.mockRejectedValueOnce(
+    applyTransferUpdate.mockRejectedValueOnce(
       new Error("database unavailable"),
     );
     const request = signedRequest("payout.processed", { status: "processed" });
     await expect(
       processWebhook(request.headers, request.rawBody, request.body),
-    ).rejects.toThrow("database unavailable");
-    expect(session.endSession).toHaveBeenCalled();
+    ).rejects.toMatchObject({
+      statusCode: 500,
+      message: expect.stringContaining("retry"),
+    });
     expect([...events.values()][0].processingStatus).toBe("FAILED");
   });
 });

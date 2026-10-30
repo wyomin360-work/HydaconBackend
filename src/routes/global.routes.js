@@ -40,6 +40,8 @@ const transactionsPath = require("../modules/transactions/transactions.path");
 // -- Withdrawals --
 const withdrawalRoutes = require("../modules/withdrawals/withdrawals.routes");
 const withdrawalsPath = require("../modules/withdrawals/withdrawals.path");
+const payoutsRoutes = require("../modules/payouts/payouts.routes");
+const payoutsPath = require("../modules/payouts/payouts.path");
 
 // -- Loyalty & Campaigns --
 const loyaltyRoutes = require("../modules/loyalty/loyalty.routes");
@@ -106,6 +108,7 @@ globalRoutes.use(transactionsPath.root, transactionRoutes);
 
 // Withdrawals
 globalRoutes.use(withdrawalsPath.root, withdrawalRoutes);
+globalRoutes.use(payoutsPath.root, payoutsRoutes);
 
 // Loyalty & Campaigns
 globalRoutes.use(loyaltyPaths.root, loyaltyRoutes);
