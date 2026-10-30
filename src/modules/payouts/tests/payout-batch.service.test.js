@@ -1,8 +1,12 @@
 jest.mock("../../../schemas/withdrawal.schema", () => ({
   find: jest.fn(),
   updateMany: jest.fn(),
+  bulkWrite: jest.fn(),
 }));
 jest.mock("../../../schemas/payout-outbox.schema", () => ({
+  bulkWrite: jest.fn(),
+}));
+jest.mock("../../../schemas/payout.schema", () => ({
   bulkWrite: jest.fn(),
 }));
 jest.mock("../../../schemas/payout-batch.schema", () => {
@@ -31,6 +35,7 @@ const Withdrawal = require("../../../schemas/withdrawal.schema");
 const PayoutOutbox = require("../../../schemas/payout-outbox.schema");
 const PayoutBatch = require("../../../schemas/payout-batch.schema");
 const { enqueueApprovedWithdrawalBatch } = require("../payout-batch.service");
+const { KYC_STATUS } = require("../../../constants/user");
 
 describe("Cashfree batch approval", () => {
   const withdrawalIds = ["withdrawal-1", "withdrawal-2"];
@@ -46,7 +51,7 @@ describe("Cashfree batch approval", () => {
       _id: id,
       status: "PENDING",
       cashAmount: 25.5,
-      userId: { _id: `user-${id}` },
+      userId: { _id: `user-${id}`, kycStatus: KYC_STATUS.APPROVED },
       bankAccountId: { userId: `user-${id}`, isActive: true },
     }));
 

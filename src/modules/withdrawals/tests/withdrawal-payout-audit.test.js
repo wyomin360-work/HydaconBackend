@@ -21,6 +21,7 @@ const {
   enqueueApprovedWithdrawal,
   wakePayoutOutboxWorker,
 } = require("../../payouts/payout-execution.service");
+const { PAYOUT_APPROVAL_SOURCE } = require("../../../constants/payouts");
 const service = require("../withdrawals.service");
 
 describe("withdrawal payout approval queue", () => {
@@ -33,6 +34,7 @@ describe("withdrawal payout approval queue", () => {
       id: withdrawalId,
       status: "PROCESSING",
       payoutProvider: "razorpayx",
+      shouldWakeWorker: true,
     });
 
     const query = {
@@ -52,6 +54,8 @@ describe("withdrawal payout approval queue", () => {
     expect(enqueueApprovedWithdrawal).toHaveBeenCalledWith(
       adminId,
       withdrawalId,
+      PAYOUT_APPROVAL_SOURCE.ADMIN,
+      null,
     );
     expect(wakePayoutOutboxWorker).toHaveBeenCalledTimes(1);
     expect(result.data).toMatchObject({

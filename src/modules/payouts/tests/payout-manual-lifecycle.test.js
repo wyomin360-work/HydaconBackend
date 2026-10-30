@@ -47,7 +47,10 @@ const {
   createOrUpdatePayoutRecord,
   syncPayoutRecord,
 } = require("../payout-record.service");
-const { getProvider, currentProviderName } = require("../../../functions/payouts");
+const {
+  getProvider,
+  currentProviderName,
+} = require("../../../functions/payouts");
 const { loadPendingManualPayout } = require("../payout-state.service");
 const {
   enqueueApprovedWithdrawal,
@@ -121,51 +124,120 @@ describe("manual payout lifecycle", () => {
   test.each([
     ["explicit manual selection", PAYOUT_METHOD.PROVIDER, PAYOUT_METHOD.MANUAL],
     ["manual system default", PAYOUT_METHOD.MANUAL, null],
-  ])("creates a pending manual payout for %s without provider execution", async (_label, defaultMethod, requestedMethod) => {
-    configuredMethod = defaultMethod;
+  ])(
+    "creates a pending manual payout for %s without provider execution",
+    async (_label, defaultMethod, requestedMethod) => {
+      configuredMethod = defaultMethod;
+
+      const result = await enqueueApprovedWithdrawal(
+        adminId,
+        withdrawalId,
+        PAYOUT_APPROVAL_SOURCE.ADMIN,
+        requestedMethod,
+      );
+
+      expect(result).toMatchObject({
+        status: WITHDRAWAL_STATUS.PROCESSING,
+        payoutProvider: PAYOUT_PROVIDER.MANUAL,
+        payoutMethod: PAYOUT_METHOD.MANUAL,
+        isManualPayout: true,
+        shouldWakeWorker: false,
+      });
+      expect(withdrawal).toMatchObject({
+        payoutProvider: PAYOUT_PROVIDER.MANUAL,
+        payoutMethod: PAYOUT_METHOD.MANUAL,
+        isManualPayout: true,
+        createdByAdminId: adminId,
+        approvedBy: adminId,
+        approvalSource: PAYOUT_APPROVAL_SOURCE.ADMIN,
+      });
+      expect(createOrUpdatePayoutRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          approval: expect.objectContaining({
+            status: WITHDRAWAL_STATUS.PENDING,
+            provider: PAYOUT_PROVIDER.MANUAL,
+            payoutMethod: PAYOUT_METHOD.MANUAL,
+            isManualPayout: true,
+            createdByAdminId: adminId,
+          }),
+          session,
+        }),
+      );
+      expect(PayoutOutbox.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(getProvider).not.toHaveBeenCalled();
+    },
+  );
+
+  test("routes automatic approval to manual when manual is the configured default", async () => {
+    configuredMethod = PAYOUT_METHOD.MANUAL;
+    User.findById.mockReturnValue({
+      session: jest.fn().mockResolvedValue({
+        kycStatus: KYC_STATUS.APPROVED,
+        enableAutoPayout: true,
+      }),
+    });
 
     const result = await enqueueApprovedWithdrawal(
-      adminId,
+      null,
       withdrawalId,
-      PAYOUT_APPROVAL_SOURCE.ADMIN,
-      requestedMethod,
+      PAYOUT_APPROVAL_SOURCE.AUTO,
     );
 
     expect(result).toMatchObject({
-      status: WITHDRAWAL_STATUS.PROCESSING,
       payoutProvider: PAYOUT_PROVIDER.MANUAL,
       payoutMethod: PAYOUT_METHOD.MANUAL,
       isManualPayout: true,
       shouldWakeWorker: false,
     });
-    expect(withdrawal).toMatchObject({
-      payoutProvider: PAYOUT_PROVIDER.MANUAL,
-      payoutMethod: PAYOUT_METHOD.MANUAL,
-      isManualPayout: true,
-      createdByAdminId: adminId,
-      approvedBy: adminId,
-      approvalSource: PAYOUT_APPROVAL_SOURCE.ADMIN,
-    });
     expect(createOrUpdatePayoutRecord).toHaveBeenCalledWith(
       expect.objectContaining({
         approval: expect.objectContaining({
+          approvalSource: PAYOUT_APPROVAL_SOURCE.AUTO,
           status: WITHDRAWAL_STATUS.PENDING,
-          provider: PAYOUT_PROVIDER.MANUAL,
-          payoutMethod: PAYOUT_METHOD.MANUAL,
           isManualPayout: true,
-          createdByAdminId: adminId,
         }),
-        session,
       }),
     );
     expect(PayoutOutbox.findOneAndUpdate).not.toHaveBeenCalled();
-    expect(getProvider).not.toHaveBeenCalled();
+  });
+
+  test("queues provider approval through the outbox", async () => {
+    const providerAdapter = { validateConfig: jest.fn() };
+    getProvider.mockReturnValue(providerAdapter);
+
+    const result = await enqueueApprovedWithdrawal(
+      adminId,
+      withdrawalId,
+      PAYOUT_APPROVAL_SOURCE.ADMIN,
+      PAYOUT_METHOD.PROVIDER,
+    );
+
+    expect(result).toMatchObject({
+      payoutProvider: PAYOUT_PROVIDER.CASHFREE,
+      payoutMethod: PAYOUT_METHOD.PROVIDER,
+      isManualPayout: false,
+      shouldWakeWorker: true,
+    });
+    expect(providerAdapter.validateConfig).toHaveBeenCalledTimes(1);
+    expect(PayoutOutbox.findOneAndUpdate).toHaveBeenCalledWith(
+      { withdrawalId },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          provider: PAYOUT_PROVIDER.CASHFREE,
+          status: PAYOUT_OUTBOX_STATUS.PENDING,
+        }),
+      }),
+      expect.objectContaining({ upsert: true, session }),
+    );
   });
 
   test("converts only a pending manual payout and queues it with the configured provider", async () => {
     const providerAdapter = { validateConfig: jest.fn() };
     currentProviderName.mockReturnValue(PAYOUT_PROVIDER.CASHFREE);
     getProvider.mockReturnValue(providerAdapter);
+    PayoutOutbox.findOneAndUpdate
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce(null);
 
     const result = await convertManualPayoutToProvider(adminId, withdrawalId);
 
@@ -218,7 +290,9 @@ describe("manual payout lifecycle", () => {
   });
 
   test("rejects conversion when the manual payout is not eligible", async () => {
-    const error = new Error("This action is only available for a pending manual payout");
+    const error = new Error(
+      "This action is only available for a pending manual payout",
+    );
     loadPendingManualPayout.mockRejectedValueOnce(error);
 
     await expect(

@@ -13,6 +13,9 @@ jest.mock("../../../schemas/payout-recon.schema", () => ({
 jest.mock("../payout-state.service", () => ({
   applyTransferUpdate: jest.fn(),
 }));
+jest.mock("../payout-alerts", () => ({
+  reportPayoutAlert: jest.fn(),
+}));
 
 const mongoose = require("mongoose");
 const Withdrawal = require("../../../schemas/withdrawal.schema");
