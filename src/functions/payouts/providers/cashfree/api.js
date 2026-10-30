@@ -6,7 +6,6 @@ const {
   PAYOUT_MESSAGE,
   PAYOUT_HTTP_STATUS,
   PAYOUT_CONFIG,
-  PAYOUT_PROVIDER_ENVIRONMENT,
 } = require("../../../../constants/payouts");
 
 const API_VERSION =
@@ -18,10 +17,9 @@ const TIMEOUT_MS = Number(
 );
 
 function getBaseUrl() {
-  return process.env.CASHFREE_PAYOUT_ENV ===
-    PAYOUT_PROVIDER_ENVIRONMENT.PRODUCTION
-    ? PAYOUT_CONFIG.CASHFREE_PRODUCTION_BASE_URL
-    : PAYOUT_CONFIG.CASHFREE_SANDBOX_BASE_URL;
+  return String(process.env.CASHFREE_PAYOUT_BASE_URL || "")
+    .trim()
+    .replace(/\/+$/, "");
 }
 
 function validateConfig() {
@@ -29,15 +27,35 @@ function validateConfig() {
     !process.env.CASHFREE_PAYOUT_CLIENT_ID ||
     !process.env.CASHFREE_PAYOUT_CLIENT_SECRET
   ) {
-    throw new Error(
+    throw providerConfigError(
       PAYOUT_MESSAGE.PROVIDER_CREDENTIALS_MISSING("Cashfree Payouts"),
     );
   }
-  const environment =
-    process.env.CASHFREE_PAYOUT_ENV || PAYOUT_PROVIDER_ENVIRONMENT.SANDBOX;
-  if (!Object.values(PAYOUT_PROVIDER_ENVIRONMENT).includes(environment)) {
-    throw new Error(PAYOUT_MESSAGE.PROVIDER_ENV_INVALID);
+  const baseUrl = getBaseUrl();
+  if (!baseUrl) {
+    throw providerConfigError(PAYOUT_MESSAGE.CASHFREE_BASE_URL_MISSING);
   }
+  try {
+    const parsedUrl = new URL(baseUrl);
+    if (
+      parsedUrl.protocol !== "https:" ||
+      parsedUrl.username ||
+      parsedUrl.password ||
+      parsedUrl.search ||
+      parsedUrl.hash
+    ) {
+      throw providerConfigError(PAYOUT_MESSAGE.CASHFREE_BASE_URL_INVALID);
+    }
+  } catch (_error) {
+    throw providerConfigError(PAYOUT_MESSAGE.CASHFREE_BASE_URL_INVALID);
+  }
+}
+
+function providerConfigError(message) {
+  const error = new Error(message);
+  error.definitive = true;
+  error.ambiguous = false;
+  return error;
 }
 
 function publicKey() {
@@ -117,6 +135,7 @@ function wrapError(error, fallback) {
 }
 
 async function call(method, path, { data, params, requestId } = {}) {
+  validateConfig();
   try {
     return await axios({
       method,
@@ -210,6 +229,7 @@ async function fetchBatchTransferByReference(batchReferenceId) {
 
 module.exports = {
   validateConfig,
+  getBaseUrl,
   getBeneficiary,
   createBeneficiary,
   createTransfer,

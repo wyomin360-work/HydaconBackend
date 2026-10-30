@@ -2,7 +2,9 @@ jest.mock("../../../schemas/user.schema", () => ({
   findById: jest.fn(),
 }));
 jest.mock("../../../functions/fcm", () => ({
-  sendFcmNotifications: jest.fn().mockResolvedValue({ success: [] }),
+  sendFcmNotifications: jest
+    .fn()
+    .mockResolvedValue({ success: [], errors: [] }),
 }));
 jest.mock("../../../functions/nodemailer", () => ({
   sendTemplateEmail: jest.fn().mockResolvedValue(true),
@@ -13,6 +15,7 @@ const { sendFcmNotifications } = require("../../../functions/fcm");
 const { sendTemplateEmail } = require("../../../functions/nodemailer");
 const { WITHDRAWAL_STATUS } = require("../../../constants/withdrawals");
 const {
+  PAYOUT_CONFIG,
   PAYOUT_EMAIL_TEMPLATE,
   PAYOUT_EMAIL_SUBJECT,
 } = require("../../../constants/payouts");
@@ -38,6 +41,10 @@ describe("payout outcome notifications", () => {
       select: jest.fn().mockReturnThis(),
       lean: jest.fn().mockResolvedValue(user),
     });
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   test("sends FCM and a success email after payout completion", async () => {
@@ -84,6 +91,35 @@ describe("payout outcome notifications", () => {
       expect.objectContaining({
         failureReason: "Invalid bank account",
       }),
+    );
+  });
+
+  test("retries failed FCM recipients once without retrying successful recipients", async () => {
+    jest.useFakeTimers();
+    sendFcmNotifications
+      .mockResolvedValueOnce({ success: ["good-token"], errors: ["bad-token"] })
+      .mockResolvedValueOnce({ success: ["bad-token"], errors: [] });
+
+    await notifyUserOfPayoutOutcome({
+      withdrawal,
+      targetStatus: WITHDRAWAL_STATUS.COMPLETED,
+      normalized: {},
+    });
+    await jest.advanceTimersByTimeAsync(
+      PAYOUT_CONFIG.PAYOUT_NOTIFICATION_RETRY_DELAY_MS,
+    );
+
+    expect(sendFcmNotifications).toHaveBeenNthCalledWith(
+      1,
+      user.fcmTokens,
+      expect.any(String),
+      expect.stringContaining("₹500"),
+    );
+    expect(sendFcmNotifications).toHaveBeenNthCalledWith(
+      2,
+      ["bad-token"],
+      expect.any(String),
+      expect.stringContaining("₹500"),
     );
   });
 

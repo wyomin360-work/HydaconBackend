@@ -594,7 +594,7 @@ async function loadAdminWithdrawalAudit(withdrawal) {
       .lean(),
     PayoutOutbox.findOne({ withdrawalId: withdrawal._id })
       .select(
-        "status attempts availableAt lastError retryExhaustedAt manualReviewRequired lastProviderStatus lastProviderStatusCode lastReconciliationOutcome",
+        "status attempts availableAt lastError retryExhaustedAt manualReviewRequired manualReviewResolvedAt manualReviewResolvedByAdminId manualReviewResolution manualReviewResolutionNotes lastProviderStatus lastProviderStatusCode lastReconciliationOutcome",
       )
       .lean(),
     withdrawal.payoutBatchId
@@ -654,8 +654,9 @@ function getPayoutExecutionDetails(payoutOutbox, payoutBatch) {
     retryExhaustedAt:
       payoutBatch?.retryExhaustedAt || payoutOutbox.retryExhaustedAt,
     manualReviewRequired:
-      payoutOutbox.manualReviewRequired ||
-      payoutBatch?.status === PAYOUT_BATCH_STATUS.MANUAL_REVIEW,
+      !payoutOutbox.manualReviewResolvedAt &&
+      (payoutOutbox.manualReviewRequired ||
+        payoutBatch?.status === PAYOUT_BATCH_STATUS.MANUAL_REVIEW),
     batchStatus: payoutBatch?.status || null,
     maxAttempts: PAYOUT_CONFIG.OUTBOX_MAX_ATTEMPTS,
   };

@@ -5,6 +5,7 @@ const {
   PAYOUT_OUTBOX_STATUS_VALUES,
   PAYOUT_RECON_OUTCOME_VALUES,
   PAYOUT_CONFIG,
+  PAYOUT_MANUAL_REVIEW_RESOLUTION,
 } = require("../constants/payouts");
 
 const payoutOutboxSchema = new mongoose.Schema(
@@ -45,6 +46,18 @@ const payoutOutboxSchema = new mongoose.Schema(
     lastError: { type: String, default: null },
     retryExhaustedAt: { type: Date, default: null },
     manualReviewRequired: { type: Boolean, default: false, index: true },
+    manualReviewResolvedAt: { type: Date, default: null },
+    manualReviewResolvedByAdminId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+      default: null,
+    },
+    manualReviewResolution: {
+      type: String,
+      enum: [...Object.values(PAYOUT_MANUAL_REVIEW_RESOLUTION), null],
+      default: null,
+    },
+    manualReviewResolutionNotes: { type: String, default: null },
     lastProviderStatus: { type: String, default: null },
     lastProviderStatusCode: { type: String, default: null },
     lastReconciliationOutcome: {

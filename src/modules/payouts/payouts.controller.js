@@ -19,9 +19,41 @@ exports.getPayoutDetails = async (req, res) => {
   return sendResponse(res, result);
 };
 
+/** Sends the completed payout statement as an attached PDF document. */
+exports.downloadPayoutStatement = async (req, res) => {
+  const statement = await service.getPayoutStatement(req.params.id);
+  res.set({
+    "Content-Type": "application/pdf",
+    "Content-Disposition": `attachment; filename="${statement.fileName}"`,
+    "Content-Length": String(statement.buffer.length),
+    "Cache-Control": "private, no-store",
+  });
+  return res.status(200).send(statement.buffer);
+};
+
 /** Marks a pending manual payout paid and records its settlement details. */
 exports.completeManualPayout = async (req, res) => {
   const result = await payoutStateService.completeManualPayout(
+    req.userId,
+    req.params.id,
+    req.body,
+  );
+  return sendResponse(res, result);
+};
+
+/** Records an admin-settled payout after the provider retry limit needs review. */
+exports.resolveManualReviewPayout = async (req, res) => {
+  const result = await payoutStateService.completeManualReviewPayout(
+    req.userId,
+    req.params.id,
+    req.body,
+  );
+  return sendResponse(res, result);
+};
+
+/** Confirms a provider failure before refunding a payout held for review. */
+exports.failManualReviewPayout = async (req, res) => {
+  const result = await payoutStateService.failManualReviewPayout(
     req.userId,
     req.params.id,
     req.body,

@@ -4,7 +4,7 @@ const {
   CASHFREE_PAYOUT_EVENT,
   CASHFREE_PAYOUT_STATUS,
   CASHFREE_PAYOUT_STATUS_CODE,
-  PAYOUT_PROVIDER_ENVIRONMENT,
+  PAYOUT_CONFIG,
   PAYOUT_TRANSFER_MODE,
 } = require("../../constants/payouts");
 const { WITHDRAWAL_STATUS } = require("../../constants/withdrawals");
@@ -12,7 +12,7 @@ const { WITHDRAWAL_STATUS } = require("../../constants/withdrawals");
 const originalEnv = {
   clientId: process.env.CASHFREE_PAYOUT_CLIENT_ID,
   clientSecret: process.env.CASHFREE_PAYOUT_CLIENT_SECRET,
-  environment: process.env.CASHFREE_PAYOUT_ENV,
+  baseUrl: process.env.CASHFREE_PAYOUT_BASE_URL,
 };
 
 describe("Cashfree payout provider", () => {
@@ -24,7 +24,8 @@ describe("Cashfree payout provider", () => {
     jest.resetModules();
     process.env.CASHFREE_PAYOUT_CLIENT_ID = "cashfree_test_client";
     process.env.CASHFREE_PAYOUT_CLIENT_SECRET = "cashfree_test_secret";
-    process.env.CASHFREE_PAYOUT_ENV = PAYOUT_PROVIDER_ENVIRONMENT.SANDBOX;
+    process.env.CASHFREE_PAYOUT_BASE_URL =
+      PAYOUT_CONFIG.CASHFREE_SANDBOX_BASE_URL;
     axios = require("axios");
     axios.mockReset();
     provider = require("../payouts/providers/cashfree");
@@ -38,9 +39,9 @@ describe("Cashfree payout provider", () => {
     if (originalEnv.clientSecret === undefined)
       delete process.env.CASHFREE_PAYOUT_CLIENT_SECRET;
     else process.env.CASHFREE_PAYOUT_CLIENT_SECRET = originalEnv.clientSecret;
-    if (originalEnv.environment === undefined)
-      delete process.env.CASHFREE_PAYOUT_ENV;
-    else process.env.CASHFREE_PAYOUT_ENV = originalEnv.environment;
+    if (originalEnv.baseUrl === undefined)
+      delete process.env.CASHFREE_PAYOUT_BASE_URL;
+    else process.env.CASHFREE_PAYOUT_BASE_URL = originalEnv.baseUrl;
   });
 
   test("sends transfers to Cashfree sandbox with stable request identity", async () => {
@@ -238,6 +239,30 @@ describe("Cashfree payout provider", () => {
         data: { status: CASHFREE_PAYOUT_STATUS.PENDING },
       }).targetStatus,
     ).toBe(WITHDRAWAL_STATUS.PROCESSING);
+  });
+
+  test("maps manually rejected transfers to failed", () => {
+    expect(
+      mapping.normalizeTransfer({
+        transfer_id: "withdrawal-manually-rejected",
+        status: CASHFREE_PAYOUT_STATUS.MANUALLY_REJECTED,
+      }).targetStatus,
+    ).toBe(WITHDRAWAL_STATUS.FAILED);
+  });
+
+  test("requires an explicit secure Cashfree base URL", () => {
+    const api = require("../payouts/providers/cashfree/api");
+    expect(() => api.validateConfig()).not.toThrow();
+    delete process.env.CASHFREE_PAYOUT_BASE_URL;
+    expect(() => api.validateConfig()).toThrow(/not configured/);
+    process.env.CASHFREE_PAYOUT_BASE_URL = "http://cashfree.internal";
+    expect(() => api.validateConfig()).toThrow(/HTTPS URL/);
+  });
+
+  test("uses the configured Cashfree base URL verbatim after trimming its slash", () => {
+    process.env.CASHFREE_PAYOUT_BASE_URL = "https://cashfree.example/payout/";
+    const api = require("../payouts/providers/cashfree/api");
+    expect(api.getBaseUrl()).toBe("https://cashfree.example/payout");
   });
 
   test("verifies webhook signatures against the exact timestamp and raw body", () => {

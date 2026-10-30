@@ -5,9 +5,11 @@ const { WITHDRAWAL_STATUS } = require("../../constants/withdrawals");
 const {
   PAYOUT_HTTP_STATUS,
   PAYOUT_MESSAGE,
+  PAYOUT_STATEMENT,
 } = require("../../constants/payouts");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 const { getWithdrawalDetails } = require("../withdrawals/withdrawals.service");
+const { generatePayoutStatement } = require("./payout-statement.generator");
 
 const SUMMARY_STATUSES = Object.values(WITHDRAWAL_STATUS);
 
@@ -155,8 +157,27 @@ async function getPayoutDetails(payoutId) {
   };
 }
 
+/** Generates a downloadable statement only for a completed payout. */
+async function getPayoutStatement(payoutId) {
+  const payout = await getPayoutDetails(payoutId);
+  if (payout.status !== WITHDRAWAL_STATUS.COMPLETED) {
+    sendFailResponse(
+      PAYOUT_MESSAGE.PAYOUT_STATEMENT_COMPLETED_ONLY,
+      PAYOUT_HTTP_STATUS.CONFLICT,
+    );
+  }
+
+  const statementBuffer = await generatePayoutStatement(payout);
+  const safePayoutId = String(payout.payoutId).replace(/[^a-zA-Z0-9_-]/g, "");
+  return {
+    buffer: statementBuffer,
+    fileName: `${PAYOUT_STATEMENT.FILE_NAME_PREFIX}-${safePayoutId}.pdf`,
+  };
+}
+
 module.exports = {
   listPayouts,
   getPayoutSummary,
   getPayoutDetails,
+  getPayoutStatement,
 };

@@ -6,7 +6,6 @@ const {
   PAYOUT_PROVIDER,
   PAYOUT_APPROVAL_SOURCE,
   PAYOUT_BENEFICIARY_STATUS,
-  PAYOUT_PROVIDER_ENVIRONMENT,
   CASHFREE_PAYOUT_STATUS,
   PAYOUT_OUTBOX_STATUS: OUTBOX,
   PAYOUT_BATCH_STATUS: BATCH,
@@ -52,8 +51,10 @@ function batchValidationError(
 }
 
 function maxBatchSize() {
-  return process.env.CASHFREE_PAYOUT_ENV ===
-    PAYOUT_PROVIDER_ENVIRONMENT.PRODUCTION
+  const configuredBaseUrl = String(process.env.CASHFREE_PAYOUT_BASE_URL || "")
+    .trim()
+    .replace(/\/+$/, "");
+  return configuredBaseUrl === PAYOUT_CONFIG.CASHFREE_PRODUCTION_BASE_URL
     ? PAYOUT_CONFIG.CASHFREE_BATCH_PRODUCTION_MAX_SIZE
     : PAYOUT_CONFIG.CASHFREE_BATCH_SANDBOX_MAX_SIZE;
 }
@@ -720,9 +721,15 @@ async function markBatchAmbiguous(batch, error, affectedItems = null) {
       );
 
       if (retryLimitReached) {
-        const unresolvedOutboxIds = auditItems
+        const unresolvedItems = auditItems
           .filter(({ outbox, withdrawal }) => outbox && withdrawal)
-          .map(({ outbox }) => outbox._id);
+          .map(({ outbox, withdrawal }) => ({ outbox, withdrawal }));
+        const unresolvedOutboxIds = unresolvedItems.map(
+          ({ outbox }) => outbox._id,
+        );
+        const unresolvedWithdrawalIds = unresolvedItems.map(
+          ({ withdrawal }) => withdrawal._id,
+        );
         await PayoutOutbox.updateMany(
           { _id: { $in: unresolvedOutboxIds } },
           {
@@ -734,6 +741,32 @@ async function markBatchAmbiguous(batch, error, affectedItems = null) {
               availableAt: null,
               leaseExpiresAt: null,
               processedAt: now,
+            },
+          },
+          { session },
+        );
+        await Withdrawal.updateMany(
+          {
+            _id: { $in: unresolvedWithdrawalIds },
+            status: WITHDRAWAL_STATUS.PROCESSING,
+          },
+          {
+            $set: {
+              status: WITHDRAWAL_STATUS.REQUIRES_REVIEW,
+              failureReason: PAYOUT_MESSAGE.PAYOUT_MANUAL_REVIEW_REQUIRED,
+            },
+          },
+          { session },
+        );
+        await Payout.updateMany(
+          {
+            withdrawalId: { $in: unresolvedWithdrawalIds },
+            status: WITHDRAWAL_STATUS.PROCESSING,
+          },
+          {
+            $set: {
+              status: WITHDRAWAL_STATUS.REQUIRES_REVIEW,
+              failureReason: PAYOUT_MESSAGE.PAYOUT_MANUAL_REVIEW_REQUIRED,
             },
           },
           { session },

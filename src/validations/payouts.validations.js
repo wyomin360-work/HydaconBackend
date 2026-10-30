@@ -1,4 +1,7 @@
-const { CASHFREE_PAYOUT_EVENT, PAYOUT_CONFIG } = require("../constants/payouts");
+const {
+  CASHFREE_PAYOUT_EVENT,
+  PAYOUT_CONFIG,
+} = require("../constants/payouts");
 const { WITHDRAWAL_STATUS } = require("../constants/withdrawals");
 
 const razorpayPayoutEntity = {
@@ -150,6 +153,39 @@ const completeManualPayoutRequestType = {
   additionalProperties: false,
 };
 
+const resolveManualReviewPayoutRequestType = {
+  type: "object",
+  properties: {
+    confirmation: { type: "boolean", const: true },
+    paymentReference: {
+      type: "string",
+      minLength: PAYOUT_CONFIG.MANUAL_PAYMENT_REFERENCE_MIN_LENGTH,
+      maxLength: PAYOUT_CONFIG.MANUAL_PAYMENT_REFERENCE_MAX_LENGTH,
+    },
+    utr: { type: "string", maxLength: PAYOUT_CONFIG.MANUAL_UTR_MAX_LENGTH },
+    notes: {
+      type: "string",
+      maxLength: PAYOUT_CONFIG.MANUAL_COMPLETION_NOTES_MAX_LENGTH,
+    },
+  },
+  required: ["confirmation", "paymentReference"],
+  additionalProperties: false,
+};
+
+const failManualReviewPayoutRequestType = {
+  type: "object",
+  properties: {
+    confirmation: { type: "boolean", const: true },
+    reason: {
+      type: "string",
+      minLength: PAYOUT_CONFIG.CANCELLATION_REASON_MIN_LENGTH,
+      maxLength: PAYOUT_CONFIG.MANUAL_COMPLETION_NOTES_MAX_LENGTH,
+    },
+  },
+  required: ["confirmation", "reason"],
+  additionalProperties: false,
+};
+
 const cancelManualPayoutRequestType = {
   type: "object",
   properties: {
@@ -176,6 +212,8 @@ module.exports = {
   cashfreePayoutWebhookRequestType,
   listPayoutsRequestType,
   completeManualPayoutRequestType,
+  resolveManualReviewPayoutRequestType,
+  failManualReviewPayoutRequestType,
   cancelManualPayoutRequestType,
   convertManualPayoutRequestType,
   razorpayxPayoutWebhookRequestType,

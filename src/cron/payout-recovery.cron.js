@@ -33,7 +33,11 @@ async function processPayoutReconciliationBatch() {
   );
   const staleWithdrawals = await Withdrawal.find({
     status: {
-      $in: [WITHDRAWAL_STATUS.PROCESSING, WITHDRAWAL_STATUS.COMPLETED],
+      $in: [
+        WITHDRAWAL_STATUS.PROCESSING,
+        WITHDRAWAL_STATUS.REQUIRES_REVIEW,
+        WITHDRAWAL_STATUS.COMPLETED,
+      ],
     },
     payoutProvider: { $in: PAYOUT_PROVIDER_VALUES },
     payoutBatchId: null,
@@ -62,7 +66,11 @@ async function claimWithdrawal(withdrawal, retryBefore, requestedAt) {
     {
       _id: withdrawal._id,
       status: {
-        $in: [WITHDRAWAL_STATUS.PROCESSING, WITHDRAWAL_STATUS.COMPLETED],
+        $in: [
+          WITHDRAWAL_STATUS.PROCESSING,
+          WITHDRAWAL_STATUS.REQUIRES_REVIEW,
+          WITHDRAWAL_STATUS.COMPLETED,
+        ],
       },
       payoutBatchId: null,
       $or: [

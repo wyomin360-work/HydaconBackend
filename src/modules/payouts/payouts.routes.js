@@ -6,6 +6,8 @@ const validateRequest = require("../../middlewares/validator");
 const {
   listPayoutsRequestType,
   completeManualPayoutRequestType,
+  resolveManualReviewPayoutRequestType,
+  failManualReviewPayoutRequestType,
   cancelManualPayoutRequestType,
   convertManualPayoutRequestType,
 } = require("../../validations/payouts.validations");
@@ -34,6 +36,20 @@ router.post(
 );
 
 router.post(
+  paths.adminResolveManualReview,
+  verification.verifyAdmin,
+  validateRequest(resolveManualReviewPayoutRequestType),
+  handleError(controller.resolveManualReviewPayout),
+);
+
+router.post(
+  paths.adminFailManualReview,
+  verification.verifyAdmin,
+  validateRequest(failManualReviewPayoutRequestType),
+  handleError(controller.failManualReviewPayout),
+);
+
+router.post(
   paths.adminCancelManual,
   verification.verifyAdmin,
   validateRequest(cancelManualPayoutRequestType),
@@ -45,6 +61,12 @@ router.post(
   verification.verifyAdmin,
   validateRequest(convertManualPayoutRequestType),
   handleError(controller.convertManualPayoutToProvider),
+);
+
+router.get(
+  paths.adminStatement,
+  verification.verifyAdmin,
+  handleError(controller.downloadPayoutStatement),
 );
 
 router.get(

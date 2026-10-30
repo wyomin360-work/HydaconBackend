@@ -89,6 +89,33 @@ module.exports = {
       },
     },
   },
+  "/payouts/admin/details/{id}/statement": {
+    get: {
+      summary: "Download a completed payout statement",
+      description:
+        "Generates an administrative PDF statement from the saved payout and withdrawal snapshot. Statements are available only for completed payouts; beneficiary account numbers are masked.",
+      tags: ["Payouts"],
+      security: [{ bearerAuth: [] }],
+      parameters: [
+        {
+          name: "id",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+        },
+      ],
+      responses: {
+        200: {
+          description: "Completed payout statement PDF",
+          content: {
+            "application/pdf": { schema: { type: "string", format: "binary" } },
+          },
+        },
+        404: { description: "Payout record not found" },
+        409: { description: "Payout is not completed" },
+      },
+    },
+  },
   "/payouts/admin/{id}/complete-manual": {
     post: {
       summary: "Complete a manual payout",
@@ -123,6 +150,79 @@ module.exports = {
         200: { description: "Manual payout completed" },
         409: {
           description: "Payout is no longer eligible for manual completion",
+        },
+      },
+    },
+  },
+  "/payouts/admin/{id}/resolve-manual-review": {
+    post: {
+      summary: "Record a manual payout after provider review",
+      description:
+        "Completes an exhausted payout in REQUIRES_REVIEW only after an admin confirms the provider did not complete it and records the settled bank payment. The transaction records the admin, payment reference, and ledger completion without refunding the reserved withdrawal balance.",
+      tags: ["Payouts"],
+      security: [{ bearerAuth: [] }],
+      parameters: [
+        { in: "path", name: "id", required: true, schema: { type: "string" } },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["confirmation", "paymentReference"],
+              properties: {
+                confirmation: { type: "boolean", const: true },
+                paymentReference: {
+                  type: "string",
+                  minLength: 3,
+                  maxLength: 128,
+                },
+                utr: { type: "string", maxLength: 64 },
+                notes: { type: "string", maxLength: 500 },
+              },
+              additionalProperties: false,
+            },
+          },
+        },
+      },
+      responses: {
+        200: { description: "Manual settlement recorded" },
+        409: { description: "Payout no longer requires manual review" },
+      },
+    },
+  },
+  "/payouts/admin/{id}/fail-manual-review": {
+    post: {
+      summary: "Fail and refund a payout after provider confirmation",
+      description:
+        "Looks up the persisted provider transfer and only marks the withdrawal failed and refunds its reserved balance when the provider returns a matching transfer with a final failed status. Missing, pending, mismatched, or unavailable provider status leaves the payout under review. The admin confirmation and reason are retained in the payout audit.",
+      tags: ["Payouts"],
+      security: [{ bearerAuth: [] }],
+      parameters: [
+        { in: "path", name: "id", required: true, schema: { type: "string" } },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["confirmation", "reason"],
+              properties: {
+                confirmation: { type: "boolean", const: true },
+                reason: { type: "string", minLength: 5, maxLength: 500 },
+              },
+              additionalProperties: false,
+            },
+          },
+        },
+      },
+      responses: {
+        200: { description: "Confirmed provider failure and refund recorded" },
+        409: {
+          description:
+            "Provider status is missing, pending, mismatched, or payout no longer requires review",
         },
       },
     },

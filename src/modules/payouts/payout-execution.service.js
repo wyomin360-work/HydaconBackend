@@ -916,6 +916,8 @@ async function scheduleOutboxRetry(outbox, error) {
     withdrawal?.status === WITHDRAWAL_STATUS.PROCESSING
   ) {
     await markWithdrawalFailedWhenTransferWasNeverSubmitted(outbox, withdrawal);
+  } else if (hasPossibleProviderTransfer) {
+    await markWithdrawalRequiresReview(withdrawal);
   }
 
   logger.error(PAYOUT_MESSAGE.OUTBOX_RETRIES_EXHAUSTED, {
@@ -955,6 +957,40 @@ async function scheduleOutboxRetry(outbox, error) {
           error.payoutOperation || PAYOUT_OPERATION.OUTBOX_PROCESSING,
       },
     });
+  }
+}
+
+/** Moves ambiguous, exhausted transfers to review without refunding user funds. */
+async function markWithdrawalRequiresReview(withdrawal) {
+  if (!withdrawal) return;
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const changed = await Withdrawal.updateOne(
+        {
+          _id: withdrawal._id,
+          status: WITHDRAWAL_STATUS.PROCESSING,
+        },
+        {
+          $set: {
+            status: WITHDRAWAL_STATUS.REQUIRES_REVIEW,
+            failureReason: PAYOUT_MESSAGE.PAYOUT_MANUAL_REVIEW_REQUIRED,
+          },
+        },
+        { session },
+      );
+      if (!changed.modifiedCount) return;
+      await syncPayoutRecord(
+        withdrawal._id,
+        {
+          status: WITHDRAWAL_STATUS.REQUIRES_REVIEW,
+          failureReason: PAYOUT_MESSAGE.PAYOUT_MANUAL_REVIEW_REQUIRED,
+        },
+        session,
+      );
+    });
+  } finally {
+    await session.endSession();
   }
 }
 

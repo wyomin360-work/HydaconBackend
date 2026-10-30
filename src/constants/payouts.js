@@ -11,16 +11,18 @@ const PAYOUT_METHOD = Object.freeze({
   MANUAL: "MANUAL",
   PROVIDER: "PROVIDER",
 });
-const PAYOUT_METHOD_VALUES = Object.freeze(Object.values(PAYOUT_METHOD));
-const PAYOUT_PROVIDER_ENVIRONMENT = Object.freeze({
-  SANDBOX: "sandbox",
-  PRODUCTION: "production",
+const PAYOUT_MANUAL_REVIEW_RESOLUTION = Object.freeze({
+  MANUAL_SETTLEMENT: "MANUAL_SETTLEMENT",
+  PROVIDER_CONFIRMED: "PROVIDER_CONFIRMED",
+  ADMIN_CONFIRMED_FAILURE: "ADMIN_CONFIRMED_FAILURE",
 });
+const PAYOUT_METHOD_VALUES = Object.freeze(Object.values(PAYOUT_METHOD));
 
 const CASHFREE_PAYOUT_STATUS = Object.freeze({
   SUCCESS: "SUCCESS",
   FAILED: "FAILED",
   REJECTED: "REJECTED",
+  MANUALLY_REJECTED: "MANUALLY_REJECTED",
   REVERSED: "REVERSED",
   APPROVAL_PENDING: "APPROVAL_PENDING",
   RECEIVED: "RECEIVED",
@@ -144,6 +146,7 @@ const PAYOUT_BATCH_STATUS = Object.freeze({
   RECONCILIATION_REQUIRED: "RECONCILIATION_REQUIRED",
   RECONCILED: "RECONCILED",
   MANUAL_REVIEW: "MANUAL_REVIEW",
+  RESOLVED: "RESOLVED",
   FAILED: "FAILED",
 });
 
@@ -221,6 +224,61 @@ const PAYOUT_HTTP_STATUS = Object.freeze({
   SERVICE_UNAVAILABLE: 503,
   INTERNAL_SERVER_ERROR: 500,
 });
+const PAYOUT_STATEMENT = Object.freeze({
+  TITLE: "PAYOUT STATEMENT",
+  BRAND: "HYDACON",
+  DOCUMENT_SUBTITLE: "Completed payout record",
+  FILE_NAME_PREFIX: "payout-statement",
+  GENERATED_AT_LABEL: "Generated at",
+  TIME_ZONE: "Asia/Kolkata",
+  TIME_ZONE_LABEL: "IST",
+  AMOUNT_PAID: "Amount paid",
+  PAYOUT_STATUS: "Payout status",
+  REFERENCE_IDS: "Reference IDs",
+  COMPANY_CONTACT: "Company contact",
+  COMPANY_EMAIL_LABEL: "Email",
+  COMPANY_PHONE_LABEL: "Phone",
+  COMPANY_ADDRESS_LABEL: "Address",
+  SUPPORT_PROMPT: "For payout questions, contact Hydacon support.",
+  PAYOUT_DETAILS: "Payout details",
+  COMPANY_DETAILS: "Company details",
+  COMPANY_NAME: "Company name",
+  CUSTOMER_DETAILS: "Customer details",
+  CUSTOMER_PHONE: "Phone",
+  AMOUNT_BREAKDOWN: "Amount breakdown",
+  TOTAL_PAID: "Total paid",
+  BENEFICIARY_DETAILS: "Beneficiary account",
+  SETTLEMENT_DETAILS: "Settlement details",
+  PAYOUT_ID: "Payout ID",
+  WITHDRAWAL_ID: "Withdrawal ID",
+  STATUS: "Status",
+  REQUESTED_AT: "Requested at",
+  APPROVED_AT: "Approved at",
+  COMPLETED_AT: "Completed at",
+  CUSTOMER_NAME: "Customer name",
+  CUSTOMER_EMAIL: "Email",
+  CUSTOMER_PHONE: "Phone",
+  NOTES: "Notes",
+  BENEFICIARY_NAME: "Account holder",
+  BANK_NAME: "Bank",
+  BANK_BRANCH: "Branch",
+  BANK_ACCOUNT: "Account number",
+  BANK_IFSC: "IFSC code",
+  CASH_AMOUNT: "Amount paid",
+  REWARD_POINTS: "Reward points debited",
+  HYDACON_COINS: "Hydacon coins debited",
+  POINT_CONVERSION: "Point conversion at request",
+  PROVIDER: "Payout method",
+  PROVIDER_REFERENCE: "Provider reference",
+  TRANSFER_ID: "Transfer ID",
+  BANK_REFERENCE: "Bank reference / UTR",
+  MANUAL_PAYMENT_REFERENCE: "Manual payment reference",
+  SETTLED_BY: "Recorded by admin",
+  SETTLEMENT_NOTES: "Settlement notes",
+  FOOTER_NOTE:
+    "This statement is generated from the payout record stored by Hydacon.",
+  MASKED_ACCOUNT: "****",
+});
 const PAYOUT_TERMINAL_WITHDRAWAL_STATUSES = Object.freeze([
   WITHDRAWAL_STATUS.COMPLETED,
   WITHDRAWAL_STATUS.FAILED,
@@ -294,6 +352,7 @@ const PAYOUT_CONFIG = Object.freeze({
   CASHFREE_TRANSFER_REMARKS_DEFAULT: "Hydacon Payout",
   CASHFREE_DEFAULT_API_VERSION: "2024-01-01",
   CASHFREE_DEFAULT_TIMEOUT_MS: 15 * 1000,
+  PAYOUT_NOTIFICATION_RETRY_DELAY_MS: 1000,
   CASHFREE_REQUEST_ID_MAX_LENGTH: 50,
   CASHFREE_SANDBOX_BASE_URL: "https://sandbox.cashfree.com/payout",
   CASHFREE_PRODUCTION_BASE_URL: "https://api.cashfree.com/payout",
@@ -337,7 +396,9 @@ const PAYOUT_MESSAGE = Object.freeze({
   PROVIDER_CREDENTIALS_MISSING: (provider) =>
     `${provider} payout credentials are not configured`,
   PROVIDER_ACCOUNT_MISSING: "RazorpayX payout account number is not configured",
-  PROVIDER_ENV_INVALID: "CASHFREE_PAYOUT_ENV must be sandbox or production",
+  CASHFREE_BASE_URL_MISSING: "CASHFREE_PAYOUT_BASE_URL is not configured",
+  CASHFREE_BASE_URL_INVALID:
+    "CASHFREE_PAYOUT_BASE_URL must be a valid HTTPS URL",
   BENEFICIARY_ID_MISSING: "Cashfree did not return a beneficiary ID",
   WITHDRAWAL_USER_MISSING: "Withdrawal user not found",
   WITHDRAWAL_NO_LONGER_PROCESSING: "Withdrawal is no longer processing",
@@ -438,6 +499,23 @@ const PAYOUT_MESSAGE = Object.freeze({
   NARRATION_PREFIX: "Payout of",
   MANUAL_PAYOUT_ONLY:
     "This action is only available for a pending manual payout",
+  MANUAL_REVIEW_PAYOUT_ONLY:
+    "This action is only available for a payout that requires manual review",
+  MANUAL_REVIEW_CONFIRMATION_REQUIRED:
+    "Confirm that you verified the provider did not complete this payout and the bank transfer has settled",
+  MANUAL_REVIEW_PAYOUT_COMPLETED:
+    "Payout manually settled after provider review",
+  MANUAL_REVIEW_PAYOUT_FAILED:
+    "Provider confirmed payout failure and withdrawal balance refunded",
+  MANUAL_REVIEW_FAILURE_CONFIRMATION_REQUIRED:
+    "Confirm the provider has definitively failed this payout before refunding the user",
+  MANUAL_REVIEW_PROVIDER_STATUS_REQUIRED:
+    "The provider has not confirmed a final failed status; the payout remains under review",
+  MANUAL_REVIEW_PROVIDER_NOT_FAILED: (status) =>
+    `Provider status is ${status}; only a final FAILED status can be refunded. The payout remains under review.`,
+  PROVIDER_STATUS_UNKNOWN: "UNKNOWN",
+  PAYOUT_STATEMENT_COMPLETED_ONLY:
+    "A payout statement is available only after the payout is completed",
   MANUAL_PAYOUT_REFERENCE_REQUIRED:
     "A payment reference is required to complete a manual payout",
   MANUAL_PAYOUT_CANCELLED:
@@ -454,8 +532,8 @@ const PAYOUT_MESSAGE = Object.freeze({
 module.exports = {
   PAYOUT_PROVIDER,
   PAYOUT_METHOD,
+  PAYOUT_MANUAL_REVIEW_RESOLUTION,
   PAYOUT_METHOD_VALUES,
-  PAYOUT_PROVIDER_ENVIRONMENT,
   CASHFREE_PAYOUT_STATUS,
   CASHFREE_PAYOUT_STATUS_CODE,
   CASHFREE_PAYOUT_EVENT,
@@ -490,6 +568,7 @@ module.exports = {
   PAYOUT_ASSET_VALUES,
   PAYOUT_RESULT,
   PAYOUT_HTTP_STATUS,
+  PAYOUT_STATEMENT,
   PAYOUT_TERMINAL_WITHDRAWAL_STATUSES,
   PAYOUT_FAILURE_TERMINAL_STATUSES,
   PAYOUT_LEDGER_MOVEMENT,

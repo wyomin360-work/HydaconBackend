@@ -1,5 +1,6 @@
 jest.mock("../../../schemas/withdrawal.schema", () => ({
   findById: jest.fn(),
+  updateOne: jest.fn(),
 }));
 jest.mock("../../../schemas/payout-attempt.schema", () => ({
   findOne: jest.fn(),
@@ -13,6 +14,9 @@ jest.mock("../../../schemas/payout-recon.schema", () => ({
 jest.mock("../payout-state.service", () => ({
   applyTransferUpdate: jest.fn(),
 }));
+jest.mock("../payout-record.service", () => ({
+  syncPayoutRecord: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+}));
 jest.mock("../payout-alerts", () => ({
   reportPayoutAlert: jest.fn(),
 }));
@@ -23,6 +27,7 @@ const PayoutAttempt = require("../../../schemas/payout-attempt.schema");
 const PayoutOutbox = require("../../../schemas/payout-outbox.schema");
 const PayoutRecon = require("../../../schemas/payout-recon.schema");
 const { applyTransferUpdate } = require("../payout-state.service");
+const { syncPayoutRecord } = require("../payout-record.service");
 const { scheduleOutboxRetry } = require("../payout-execution.service");
 const {
   PAYOUT_CONFIG,
@@ -60,6 +65,7 @@ describe("payout outbox retry policy", () => {
       lean: jest.fn().mockResolvedValue(withdrawal),
     };
     Withdrawal.findById.mockReturnValue(query);
+    Withdrawal.updateOne.mockResolvedValue({ modifiedCount: 1 });
     PayoutAttempt.findOne.mockReturnValue({
       select: jest.fn().mockReturnThis(),
       lean: jest.fn().mockResolvedValue(null),
@@ -168,5 +174,20 @@ describe("payout outbox retry policy", () => {
       { session },
     );
     expect(applyTransferUpdate).not.toHaveBeenCalled();
+    expect(Withdrawal.updateOne).toHaveBeenCalledWith(
+      { _id: withdrawalId, status: WITHDRAWAL_STATUS.PROCESSING },
+      {
+        $set: {
+          status: WITHDRAWAL_STATUS.REQUIRES_REVIEW,
+          failureReason: expect.any(String),
+        },
+      },
+      { session },
+    );
+    expect(syncPayoutRecord).toHaveBeenCalledWith(
+      withdrawalId,
+      expect.objectContaining({ status: WITHDRAWAL_STATUS.REQUIRES_REVIEW }),
+      session,
+    );
   });
 });

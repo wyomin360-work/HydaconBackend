@@ -71,9 +71,11 @@ function targetStatus(type, data = {}) {
       CASHFREE_PAYOUT_EVENT.TRANSFER_FAILED,
       CASHFREE_PAYOUT_EVENT.TRANSFER_REJECTED,
     ].includes(type) ||
-    [CASHFREE_PAYOUT_STATUS.FAILED, CASHFREE_PAYOUT_STATUS.REJECTED].includes(
-      data.status,
-    )
+    [
+      CASHFREE_PAYOUT_STATUS.FAILED,
+      CASHFREE_PAYOUT_STATUS.REJECTED,
+      CASHFREE_PAYOUT_STATUS.MANUALLY_REJECTED,
+    ].includes(data.status)
   )
     return WITHDRAWAL_STATUS.FAILED;
   if (data.status === CASHFREE_PAYOUT_STATUS.APPROVAL_PENDING)

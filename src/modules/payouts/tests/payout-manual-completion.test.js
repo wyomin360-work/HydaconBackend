@@ -9,6 +9,10 @@ jest.mock("../../../schemas/payout.schema", () => ({
 jest.mock("../../../schemas/payout-attempt.schema", () => ({
   countDocuments: jest.fn(),
 }));
+jest.mock("../../../schemas/payout-outbox.schema", () => ({
+  findOne: jest.fn(),
+  updateOne: jest.fn(),
+}));
 jest.mock("../../../schemas/payout-event.schema", () => ({
   updateOne: jest.fn(),
 }));
@@ -38,16 +42,22 @@ const mongoose = require("mongoose");
 const Withdrawal = require("../../../schemas/withdrawal.schema");
 const Payout = require("../../../schemas/payout.schema");
 const PayoutAttempt = require("../../../schemas/payout-attempt.schema");
+const PayoutOutbox = require("../../../schemas/payout-outbox.schema");
 const User = require("../../../schemas/user.schema");
 const LedgerEntry = require("../../../schemas/ledger-entry.schema");
 const { syncPayoutRecord } = require("../payout-record.service");
-const { completeManualPayout } = require("../payout-state.service");
+const {
+  completeManualPayout,
+  completeManualReviewPayout,
+} = require("../payout-state.service");
 const {
   PAYOUT_ASSET,
   PAYOUT_LEDGER_MOVEMENT,
   PAYOUT_LEDGER_SOURCE,
   PAYOUT_METHOD,
   PAYOUT_PROVIDER,
+  PAYOUT_OUTBOX_STATUS,
+  PAYOUT_MANUAL_REVIEW_RESOLUTION,
 } = require("../../../constants/payouts");
 const { WITHDRAWAL_STATUS } = require("../../../constants/withdrawals");
 
@@ -91,6 +101,7 @@ describe("manual payout completion", () => {
     });
     Withdrawal.updateOne.mockResolvedValue({ modifiedCount: 1 });
     Payout.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    PayoutOutbox.updateOne.mockResolvedValue({ modifiedCount: 1 });
     User.findOneAndUpdate.mockResolvedValue({ totalWithdraw: 0 });
     User.findById.mockReturnValue({
       select: jest.fn().mockReturnThis(),
@@ -170,6 +181,85 @@ describe("manual payout completion", () => {
 
     expect(mongoose.startSession).not.toHaveBeenCalled();
     expect(Withdrawal.updateOne).not.toHaveBeenCalled();
+    expect(LedgerEntry.create).not.toHaveBeenCalled();
+  });
+
+  test("completes an exhausted provider payout from review with admin audit", async () => {
+    withdrawal.status = WITHDRAWAL_STATUS.REQUIRES_REVIEW;
+    withdrawal.isManualPayout = false;
+    Payout.findOne.mockReturnValueOnce({
+      lean: jest.fn().mockReturnThis(),
+      session: jest
+        .fn()
+        .mockResolvedValue({ status: WITHDRAWAL_STATUS.REQUIRES_REVIEW }),
+    });
+    Withdrawal.findOne.mockReturnValueOnce({
+      lean: jest.fn().mockReturnThis(),
+      session: jest.fn().mockResolvedValue(withdrawal),
+    });
+    PayoutOutbox.findOne.mockReturnValueOnce({
+      lean: jest.fn().mockReturnThis(),
+      session: jest.fn().mockResolvedValue({
+        _id: "outbox-123",
+        status: PAYOUT_OUTBOX_STATUS.FAILED,
+        manualReviewRequired: true,
+      }),
+    });
+
+    const result = await completeManualReviewPayout(adminId, withdrawalId, {
+      confirmation: true,
+      paymentReference: "BANK-SETTLEMENT-REVIEW-42",
+      utr: "UTR-REVIEW-42",
+      notes: "Provider checked; settled manually",
+    });
+
+    expect(result.manualReviewPayoutCompleted).toBe(true);
+    expect(Withdrawal.updateOne).toHaveBeenCalledWith(
+      { _id: withdrawalId, status: WITHDRAWAL_STATUS.REQUIRES_REVIEW },
+      {
+        $set: expect.objectContaining({
+          status: WITHDRAWAL_STATUS.COMPLETED,
+          payoutMethod: PAYOUT_METHOD.MANUAL,
+          manualPaymentReference: "BANK-SETTLEMENT-REVIEW-42",
+          manualCompletedByAdminId: adminId,
+        }),
+      },
+      { session },
+    );
+    expect(PayoutOutbox.updateOne).toHaveBeenCalledWith(
+      {
+        _id: "outbox-123",
+        status: PAYOUT_OUTBOX_STATUS.FAILED,
+        manualReviewRequired: true,
+      },
+      {
+        $set: expect.objectContaining({
+          manualReviewRequired: false,
+          manualReviewResolvedByAdminId: adminId,
+          manualReviewResolution:
+            PAYOUT_MANUAL_REVIEW_RESOLUTION.MANUAL_SETTLEMENT,
+        }),
+      },
+      { session },
+    );
+    expect(LedgerEntry.create).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          movement: PAYOUT_LEDGER_MOVEMENT.PAYOUT_COMPLETED,
+        }),
+      ],
+      { session },
+    );
+  });
+
+  test("requires an explicit provider and settlement confirmation", async () => {
+    await expect(
+      completeManualReviewPayout(adminId, withdrawalId, {
+        paymentReference: "BANK-SETTLEMENT-REVIEW-42",
+      }),
+    ).rejects.toThrow(/confirm/i);
+
+    expect(mongoose.startSession).not.toHaveBeenCalled();
     expect(LedgerEntry.create).not.toHaveBeenCalled();
   });
 
