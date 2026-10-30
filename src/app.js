@@ -23,6 +23,17 @@ const { PAYOUT_CONFIG } = require("./constants/payouts");
 
 const app = express();
 app.disable("etag"); // Always return 200 with body instead of 304 Not Modified
+const isProduction = process.env.NODE_ENV === "production";
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+if (isProduction && allowedOrigins.length === 0) {
+  logger.warn(
+    "ALLOWED_ORIGINS is empty; browser requests will not receive CORS access in production.",
+  );
+}
 
 if (process.env.NODE_ENV !== "test") {
   cleanupRewardBatchArchives().catch((error) =>
@@ -59,24 +70,12 @@ app.use((req, res, next) => {
   next();
 });
 
-// const allowedOrigins = process.env.ALLOWED_ORIGINS.split(',');
-
-// app.use(cors({
-//   origin: function (origin, callback) {
-//     if (!origin) return callback(null, true);
-//     if (allowedOrigins.includes(origin)) {
-//       return callback(null, true);
-//     } else {
-//       return callback(new Error('Not allowed by CORS'));
-//     }
-//   },
-//   credentials: true,
-// }));
-
-// For development, allow all origins. In production, restrict this appropriately using function above.
 app.use(
   cors({
-    origin: true,
+    origin: (origin, callback) => {
+      if (!origin || !isProduction) return callback(null, true);
+      return callback(null, allowedOrigins.includes(origin));
+    },
     credentials: true,
   }),
 );

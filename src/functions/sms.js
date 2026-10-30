@@ -54,13 +54,7 @@ async function sendTwilioSms(phoneNumber, message) {
     const detail = error.code
       ? `${error.message} (${error.code})`
       : error.message;
-    console.log(
-      " 🔴 [SMS] Twilio error:",
-      detail,
-      accountSid,
-      authToken,
-      twilioPhoneNumber,
-    );
+    console.log(" 🔴 [SMS] Twilio error:", detail);
     return { success: false, error: detail };
   }
 }

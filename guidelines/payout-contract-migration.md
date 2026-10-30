@@ -42,12 +42,14 @@ provider switch.
    delivery have been verified. Existing withdrawal records continue to use
    their persisted provider.
 
-Cashfree settings are `CASHFREE_PAYOUT_ENV` (`sandbox` or `production`),
-`CASHFREE_PAYOUT_CLIENT_ID`, `CASHFREE_PAYOUT_CLIENT_SECRET`, and optional
-`CASHFREE_PAYOUT_API_VERSION` (defaults to `2024-01-01`),
-`CASHFREE_PAYOUT_TIMEOUT_MS`, and public key settings when API request signing is
-required. Keep `PAYOUT_FINGERPRINT_SECRET` stable across deployments; if omitted,
-the service derives beneficiary fingerprints from `ENCRYPTION_SECRET`.
+Cashfree settings are `CASHFREE_PAYOUT_BASE_URL`, `CASHFREE_PAYOUT_CLIENT_ID`,
+and `CASHFREE_PAYOUT_CLIENT_SECRET`. Use
+`https://sandbox.cashfree.com/payout` for sandbox and
+`https://api.cashfree.com/payout` for production. The API version defaults to
+`2024-01-01`; `CASHFREE_PAYOUT_TIMEOUT_MS` and public-key settings are optional
+unless Cashfree request signing is enabled. Keep `PAYOUT_FINGERPRINT_SECRET`
+stable across deployments; if omitted, the service derives beneficiary
+fingerprints from `ENCRYPTION_SECRET`.
 
 The migration is idempotent and aborts if old and new collections coexist or a
 record contains conflicting old and new field values. Resolve collisions from a
