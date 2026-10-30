@@ -9,9 +9,20 @@ const AppConfig = require("../../../schemas/app-config.schema");
 const LedgerEntry = require("../../../schemas/ledger-entry.schema");
 const PayoutAttempt = require("../../../schemas/payout-attempt.schema");
 const PayoutOutbox = require("../../../schemas/payout-outbox.schema");
-const Role = require("../../../schemas/role.schema");
+const Payout = require("../../../schemas/payout.schema");
+const PayoutEvent = require("../../../schemas/payout-event.schema");
+const PayoutRecon = require("../../../schemas/payout-recon.schema");
+const PayoutBatch = require("../../../schemas/payout-batch.schema");
+const PointsLedger = require("../../../schemas/points-ledger.schema");
+require("../../../schemas/role.schema");
 const { decrypt } = require("../../../utils/encryption");
 const crypto = require("crypto");
+const { KYC_STATUS } = require("../../../constants/user");
+const {
+  PAYOUT_LEDGER_MOVEMENT,
+  PAYOUT_PROVIDER,
+} = require("../../../constants/payouts");
+const { WITHDRAWAL_STATUS } = require("../../../constants/withdrawals");
 
 async function processSignedWebhook(payload) {
   const rawBody = Buffer.from(JSON.stringify(payload));
@@ -27,26 +38,43 @@ async function processSignedWebhook(payload) {
   return webhookService.processWebhook(headers, rawBody, payload);
 }
 
-// Mock the external Razorpay functions
+// Pin the provider to RazorpayX for this suite so that mocks, withdrawal
+// records and webhook payloads are all consistent, regardless of which
+// PAYOUT_PROVIDER is set in the environment.
+jest.mock("../../../functions/payouts", () => {
+  const razorpayx = jest.requireActual(
+    "../../../functions/payouts/providers/razorpayx",
+  );
+  return {
+    getProvider: jest.fn().mockReturnValue(razorpayx),
+    currentProviderName: jest.fn().mockReturnValue("razorpayx"),
+    normalizeProviderName: jest.fn().mockReturnValue("razorpayx"),
+  };
+});
+
+// Mock the API used by the provider adapter, without reaching Razorpay.
 jest.mock("../../../functions/razorPay", () => ({
   validateIFSC: jest
     .fn()
     .mockResolvedValue({ BANK: "HDFC Bank", BRANCH: "MUMBAI" }),
 }));
 
-jest.mock("../../../functions/razorpayx", () => ({
-  createPayoutContact: jest.fn().mockResolvedValue({ id: "cont_test123" }),
-  createPayoutFundAccount: jest.fn().mockResolvedValue({ id: "fa_test123" }),
-  createPayout: jest.fn().mockResolvedValue({ id: "pout_test123" }),
+jest.mock("../../../functions/payouts/providers/razorpayx/api", () => ({
+  createContact: jest.fn().mockResolvedValue({ id: "cont_test123" }),
+  createFundAccount: jest.fn().mockResolvedValue({ id: "fa_test123" }),
+  createTransfer: jest.fn().mockResolvedValue({ id: "pout_test123" }),
+  fetchTransferByReference: jest.fn(),
   createIdempotencyKey: jest.fn().mockReturnValue("idempotency-test-key"),
-  verifyPayoutWebhook: jest.fn(),
-  getPayoutWebhookDeliveryId: jest.fn(
-    (headers) => headers["x-razorpay-event-id"] || null,
-  ),
+  validateConfig: jest.fn(),
 }));
 
 jest.mock("../../../functions/fcm", () => ({
   sendFcmNotifications: jest.fn().mockResolvedValue({ success: true }),
+}));
+
+jest.mock("../../../functions/nodemailer", () => ({
+  sendMail: jest.fn().mockResolvedValue(true),
+  sendTemplateEmail: jest.fn().mockResolvedValue(true),
 }));
 
 jest.mock("../../../modules/payouts/payout-execution.service", () => {
@@ -59,31 +87,43 @@ jest.mock("../../../modules/payouts/payout-execution.service", () => {
 describe("Withdrawals Service & Webhooks Test Suite", () => {
   let userId;
   let adminId;
+  let originalPayoutProvider;
+  let originalWebhookSecret;
 
   jest.setTimeout(30000);
 
   beforeAll(async () => {
+    originalPayoutProvider = process.env.PAYOUT_PROVIDER;
+    originalWebhookSecret = process.env.RAZORPAYX_WEBHOOK_SECRET;
+    process.env.PAYOUT_PROVIDER = PAYOUT_PROVIDER.RAZORPAYX;
+    process.env.RAZORPAYX_WEBHOOK_SECRET = "withdrawal-test-webhook-secret";
+
     userId = new mongoose.Types.ObjectId();
     adminId = new mongoose.Types.ObjectId();
 
-    const dbUrl =
-      process.env.MONGODB_URL || "mongodb://localhost:27017/hydacon_test";
-    let testDbUrl = dbUrl;
-    if (dbUrl.includes("?")) {
-      const parts = dbUrl.split("?");
-      if (parts[0].endsWith("/")) {
-        testDbUrl = parts[0] + "hydacon_test?" + parts[1];
-      } else {
-        testDbUrl = parts[0] + "/hydacon_test?" + parts[1];
-      }
-    } else {
-      testDbUrl = dbUrl + "/hydacon_test";
-    }
-    await mongoose.connect(testDbUrl);
+    // Prefer an explicit test URL, then the app's Atlas URL, then local fallback.
+    const testDbUrl =
+      process.env.TEST_MONGODB_URL ||
+      process.env.MONGODB_URL ||
+      "mongodb://127.0.0.1:27017/hydacon_test";
+    await mongoose.connect(testDbUrl, {
+      dbName: "hydacon_test",
+      serverSelectionTimeoutMS: 10000,
+    });
   });
 
   afterAll(async () => {
     await mongoose.connection.close();
+    if (originalPayoutProvider === undefined) {
+      delete process.env.PAYOUT_PROVIDER;
+    } else {
+      process.env.PAYOUT_PROVIDER = originalPayoutProvider;
+    }
+    if (originalWebhookSecret === undefined) {
+      delete process.env.RAZORPAYX_WEBHOOK_SECRET;
+    } else {
+      process.env.RAZORPAYX_WEBHOOK_SECRET = originalWebhookSecret;
+    }
   });
 
   beforeEach(async () => {
@@ -92,6 +132,12 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
     await Withdrawal.deleteMany({});
     await LedgerEntry.deleteMany({});
     await PayoutAttempt.deleteMany({});
+    await PayoutOutbox.deleteMany({});
+    await Payout.deleteMany({});
+    await PayoutEvent.deleteMany({});
+    await PayoutRecon.deleteMany({});
+    await PayoutBatch.deleteMany({});
+    await PointsLedger.deleteMany({});
     await AppConfig.deleteMany({});
 
     // Setup default app config
@@ -100,7 +146,7 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
       currentVersion: "1.0.0",
       latestVersion: "1.0.0",
       coinSettings: {
-        coinValue: 2, // 1 coin = 2 rupees
+        coinValue: 2, // 1 reward point = ₹2
         minWithdrawAmount: 100,
         maxWithdrawAmount: 1000,
         referralBonus: 50,
@@ -108,13 +154,14 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
       },
     });
 
-    // Create user with coins
+    // Create an eligible user with a reward points balance.
     await User.create({
       _id: userId,
       name: "John Doe",
       email: "john@example.com",
       password: "password123",
-      hydaconCoins: 500, // worth 1000 rupees
+      totalPoints: 500,
+      kycStatus: KYC_STATUS.APPROVED,
     });
   });
 
@@ -143,7 +190,7 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
     expect(decryptedAccount).toBe("1234567890");
   });
 
-  test("2. Create Withdrawal - PENDING status & Coin Deduction", async () => {
+  test("2. Create Withdrawal - PENDING status & points deduction", async () => {
     // Configure bank account first
     await userService.addUserBankDetails(
       {
@@ -154,19 +201,19 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
       userId,
     );
 
-    // Request withdrawal of 100 coins (worth 200 rupees)
+    // Request withdrawal of 100 points (worth ₹200).
     const withdrawalRes = await service.createWithdrawal(userId, {
       cashAmount: 200,
     });
     expect(withdrawalRes.data.status).toBe("PENDING");
     expect(withdrawalRes.data.cashAmount).toBe(200);
 
-    // Verify user coins deducted
+    // Verify reward points were debited and recorded in the ledger.
     const user = await User.findById(userId);
-    expect(user.hydaconCoins).toBe(400); // 500 - 100
+    expect(user.totalPoints).toBe(400);
     const debit = await LedgerEntry.findOne({
       withdrawalId: withdrawalRes.data.id,
-      movement: "WITHDRAWAL_COIN_DEBIT",
+      movement: PAYOUT_LEDGER_MOVEMENT.WITHDRAWAL_POINTS_DEBIT,
     });
     expect(debit).toMatchObject({
       amount: 100,
@@ -192,13 +239,13 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
 
     // Approve the withdrawal
     const approveRes = await service.approveWithdrawal(adminId, withdrawalId);
-    expect(approveRes.data.status).toBe("PROCESSING");
+    expect(approveRes.data.status).toBe(WITHDRAWAL_STATUS.PROCESSING);
     expect(approveRes.message).toMatch(/queued/i);
 
     // Verify Withdrawal is in PROCESSING state
     const withdrawal = await Withdrawal.findById(withdrawalId);
-    expect(withdrawal.status).toBe("PROCESSING");
-    expect(withdrawal.payoutProvider).toBeDefined();
+    expect(withdrawal.status).toBe(WITHDRAWAL_STATUS.PROCESSING);
+    expect(withdrawal.payoutProvider).toBe(PAYOUT_PROVIDER.RAZORPAYX);
     const outbox = await PayoutOutbox.findOne({ withdrawalId });
     expect(outbox).toMatchObject({
       provider: withdrawal.payoutProvider,
@@ -207,7 +254,7 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
     });
   });
 
-  test("4. Cancel Withdrawal - Refund Coins & CANCELLED status", async () => {
+  test("4. Cancel Withdrawal - Refund points & CANCELLED status", async () => {
     await userService.addUserBankDetails(
       {
         userName: "John Doe",
@@ -226,15 +273,15 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
     const cancelRes = await service.cancelWithdrawal(adminId, withdrawalId, {
       remarks: "User requested cancel",
     });
-    expect(cancelRes.data.status).toBe("CANCELLED");
-    expect(cancelRes.data.refundedCoins).toBe(100);
+    expect(cancelRes.data.status).toBe(WITHDRAWAL_STATUS.CANCELLED);
+    expect(cancelRes.data.refundedPoints).toBe(100);
 
-    // Verify User coins credited back
+    // Verify reward points were restored.
     const user = await User.findById(userId);
-    expect(user.hydaconCoins).toBe(500); // restored back to 500
+    expect(user.totalPoints).toBe(500);
     const refund = await LedgerEntry.findOne({
       withdrawalId,
-      movement: "WITHDRAWAL_COIN_REFUND",
+      movement: PAYOUT_LEDGER_MOVEMENT.WITHDRAWAL_POINTS_REFUND,
     });
     expect(refund).toMatchObject({
       amount: 100,
@@ -258,10 +305,12 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
     });
     const withdrawalId = withdrawalRes.data.id;
 
-    // Set payout ID
+    // Simulate a transfer that has already been submitted to the provider.
     await Withdrawal.findByIdAndUpdate(withdrawalId, {
-      status: "PROCESSING",
-      providerPayoutId: "pout_processed_123",
+      status: WITHDRAWAL_STATUS.PROCESSING,
+      payoutProvider: PAYOUT_PROVIDER.RAZORPAYX,
+      providerReferenceId: withdrawalId.toString(),
+      providerTransferId: "pout_processed_123",
     });
 
     // Mock Webhook request
@@ -274,6 +323,8 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
             reference_id: withdrawalId.toString(),
             utr: "UTR123456",
             status: "processed",
+            amount: 20000,
+            currency: "INR",
           },
         },
       },
@@ -284,7 +335,7 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
 
     // Verify Withdrawal is COMPLETED
     const withdrawal = await Withdrawal.findById(withdrawalId);
-    expect(withdrawal.status).toBe("COMPLETED");
+    expect(withdrawal.status).toBe(WITHDRAWAL_STATUS.COMPLETED);
     expect(withdrawal.utr).toBe("UTR123456");
 
     // Verify User totalWithdraw updated
@@ -294,14 +345,15 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
       withdrawalId,
       movement: "PAYOUT_COMPLETED",
     });
-    expect(payoutLedger).toMatchObject({
+    expect(payoutLedger).toBeDefined();
+    expect(payoutLedger.toObject()).toMatchObject({
       amount: 200,
       asset: "INR",
-      payoutId: "pout_processed_123",
+      providerTransferId: "pout_processed_123",
     });
   });
 
-  test("6. Webhook - payout.failed/reversed refunds coins", async () => {
+  test("6. Webhook - payout.failed refunds points", async () => {
     await userService.addUserBankDetails(
       {
         userName: "John Doe",
@@ -316,10 +368,12 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
     });
     const withdrawalId = withdrawalRes.data.id;
 
-    // Set payout ID
+    // Simulate a transfer that has already been submitted to the provider.
     await Withdrawal.findByIdAndUpdate(withdrawalId, {
-      status: "PROCESSING",
-      providerPayoutId: "pout_failed_123",
+      status: WITHDRAWAL_STATUS.PROCESSING,
+      payoutProvider: PAYOUT_PROVIDER.RAZORPAYX,
+      providerReferenceId: withdrawalId.toString(),
+      providerTransferId: "pout_failed_123",
     });
 
     // Mock Failed Webhook request
@@ -332,6 +386,8 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
             reference_id: withdrawalId.toString(),
             status: "failed",
             failure_reason: "Insufficient balance in master account",
+            amount: 20000,
+            currency: "INR",
           },
         },
       },
@@ -342,17 +398,17 @@ describe("Withdrawals Service & Webhooks Test Suite", () => {
 
     // Verify Withdrawal is FAILED
     const withdrawal = await Withdrawal.findById(withdrawalId);
-    expect(withdrawal.status).toBe("FAILED");
+    expect(withdrawal.status).toBe(WITHDRAWAL_STATUS.FAILED);
     expect(withdrawal.failureReason).toBe(
       "Insufficient balance in master account",
     );
 
-    // Verify coins refunded to user
+    // Verify reward points were refunded to the user.
     const user = await User.findById(userId);
-    expect(user.hydaconCoins).toBe(500); // 400 + 100
+    expect(user.totalPoints).toBe(500);
     const refund = await LedgerEntry.findOne({
       withdrawalId,
-      movement: "WITHDRAWAL_COIN_REFUND",
+      movement: PAYOUT_LEDGER_MOVEMENT.WITHDRAWAL_POINTS_REFUND,
     });
     expect(refund).toMatchObject({
       amount: 100,
