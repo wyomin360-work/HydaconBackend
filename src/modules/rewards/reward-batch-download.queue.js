@@ -62,13 +62,23 @@ function retainFinishedJobSnapshot(jobId, snapshot) {
   snapshot.cleanupTimeout = timeout;
 }
 
-function getInlineJobRequestKey(batchId, rewardIds, exportAs = "jpeg") {
+function getInlineJobRequestKey(
+  batchId,
+  rewardIds,
+  exportAs = "jpeg",
+  requestId = randomUUID(),
+) {
   const normalizedRewardIds = Array.isArray(rewardIds)
     ? [...rewardIds].sort()
     : null;
   return createHash("sha256")
     .update(
-      JSON.stringify([`${exportAs}-v1`, String(batchId), normalizedRewardIds]),
+      JSON.stringify([
+        `${exportAs}-v1`,
+        String(batchId),
+        normalizedRewardIds,
+        requestId,
+      ]),
     )
     .digest("hex");
 }
@@ -161,8 +171,10 @@ async function startInlineRewardBatchDownload(
   batchId,
   rewardIds = null,
   exportAs = "jpeg",
+  requestKeyOverride = null,
 ) {
-  const requestKey = getInlineJobRequestKey(batchId, rewardIds, exportAs);
+  const requestKey =
+    requestKeyOverride || getInlineJobRequestKey(batchId, rewardIds, exportAs);
   const now = new Date();
   const leaseOwner = randomUUID();
   let existing = await RewardBatchDownloadJob.findOne({ requestKey });
@@ -435,6 +447,7 @@ async function getRewardBatchDownloadJob(jobId) {
       inlineJob.batchId,
       inlineJob.rewardIds?.length ? inlineJob.rewardIds.map(String) : null,
       inlineJob.exportAs || "jpeg",
+      inlineJob.requestKey,
     ).catch((error) =>
       console.error("Unable to resume abandoned reward ZIP job:", error),
     );

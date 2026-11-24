@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const rewardService = require("./rewards.service");
 const rewardBatchDownloadQueue = require("./reward-batch-download.queue");
 const rewardBatchDownloadService = require("./reward-batch-download.service");
-const { createHash } = require("crypto");
+const { randomUUID } = require("crypto");
 const { sendFailResponse } = require("../../utils/responseHandlers");
 
 const archiveDownloadUrl = (req, archive) => {
@@ -19,44 +19,9 @@ const archiveDownloadUrl = (req, archive) => {
 };
 
 async function enqueueRewardBatchZip(queue, batchId, rewardIds, exportAs) {
-  const normalizedRewardIds = Array.isArray(rewardIds)
-    ? [...rewardIds].sort()
-    : null;
-  const jobId = `batchzip-${createHash("sha256")
-    .update(
-      JSON.stringify([`${exportAs}-v1`, String(batchId), normalizedRewardIds]),
-    )
-    .digest("hex")}`;
-  const existing = await queue.getJob(jobId);
-  if (existing) {
-    const state = await existing.getState();
-    if (state === "failed") {
-      await existing.remove();
-    } else if (state === "completed") {
-      const completedAt = existing.finishedOn || existing.timestamp;
-      if (completedAt && Date.now() - completedAt < 50 * 60 * 1000) {
-        const archiveAvailable = Boolean(
-          existing.returnvalue &&
-          (await rewardBatchDownloadService.isRewardBatchArchiveAvailable(
-            existing.returnvalue,
-          )),
-        );
-        if (archiveAvailable) return existing;
-        if (existing.returnvalue?.cancelled) {
-          const redisClient = await queue.client;
-          await redisClient.del(`reward-batch-downloads:cancel:${jobId}`);
-        }
-        console.warn("Cached reward ZIP is missing from S3; regenerating it", {
-          jobId,
-          s3Key: existing.returnvalue?.s3Key,
-        });
-      }
-      await existing.remove();
-    } else {
-      return existing;
-    }
-  }
-
+  // Each download request gets its own job ID. This keeps users on separate
+  // devices from sharing cancellation state, even when their ZIP inputs match.
+  const jobId = `batchzip-${randomUUID()}`;
   try {
     return await queue.add(
       "generate-reward-batch-zip",
@@ -71,7 +36,7 @@ async function enqueueRewardBatchZip(queue, batchId, rewardIds, exportAs) {
     );
   } catch (error) {
     // A Redis timeout can happen after Redis accepted the add command. Recheck
-    // the deterministic ID before using the inline fallback to avoid duplicate work.
+    // this request's unique ID before falling back to inline work.
     const acceptedJob = await queue.getJob(jobId).catch(() => null);
     if (acceptedJob) return acceptedJob;
     throw error;
